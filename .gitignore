@@ -1,0 +1,21 @@
+# MPLAB X build output
+firmware.X/build/
+firmware.X/dist/
+firmware.X/debug/
+firmware.X/disassembly/
+firmware.X/.generated_files/
+
+# MPLAB X per-user / generated files (regenerated when the project is opened
+# in MPLAB X, or by prjMakefilesGenerator). Only the source-of-truth project
+# files (nbproject/configurations.xml, nbproject/project.xml) and the top-level
+# Makefile dispatcher are tracked.
+firmware.X/nbproject/private/
+firmware.X/nbproject/Makefile-*.mk
+firmware.X/nbproject/Makefile-genesis.properties
+firmware.X/nbproject/Makefile-variables.mk
+
+# Toolchain intermediates
+*.o
+*.d
+*.elf
+*.map
