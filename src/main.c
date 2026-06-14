@@ -17,6 +17,7 @@
 
 #include "dspic33ak_clock.h"
 #include "dspic33ak_uart.h"
+#include "sst26_min.h"
 #include "board.h"
 
 /* ---- Device configuration words ----
@@ -63,6 +64,22 @@ int main(void)
     printf(" device : dsPIC33AK512MPS512\n");
     printf(" sysclk : %lu Hz (FRC -> PLL1)\n", (unsigned long)DSPIC33AK_CLOCK_SYS_HZ);
     printf(" uart   : UART1 @ 230400 8N1\n");
+    printf("==============================================\n");
+
+    /* ---- SPI external flash (SST26 on SPI4) ---- */
+    if (sst26_min_init()) {
+        uint8_t mfr = 0, typ = 0, dev = 0;
+        bool id_ok = sst26_min_read_jedec(&mfr, &typ, &dev);
+        printf(" SST26 JEDEC: MFR=0x%02X TYPE=0x%02X DEV=0x%02X (%s)\n",
+               mfr, typ, dev, id_ok ? "good" : "unexpected");
+
+        if (id_ok) {
+            bool verify_ok = sst26_min_selftest(0x000000u);
+            printf(" SST26 sector verify @0x000000: %s\n", verify_ok ? "OK" : "FAILED");
+        }
+    } else {
+        printf(" SST26: SPI init failed\n");
+    }
     printf("==============================================\n");
 
     uint32_t beat = 0u;

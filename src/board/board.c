@@ -40,3 +40,38 @@ void board_uart1_pins_init(void)
     _U1RXR              = BOARD_UART1_RX_PPS_SRC;
     BOARD_UART1_TX_RPnR = BOARD_UART1_TX_PPS_FUNC;
 }
+
+void board_spi4_sst26_pins_init(void)
+{
+    /* Per-pin GPIO attributes (the SPI HAL drives only the SPI registers).
+     *   SDO4 / SCK4 : digital output, idle low
+     *   SDI4        : digital input
+     *   CS / WP     : active-low controls, idle high (deasserted / WP released)
+     *   RST         : active-low, asserted low here; the SST26 driver releases it
+     *                 after the reset-pulse delay.
+     */
+    static const dspic33ak_gpio_config_t out_low  = {
+        .dir = DSPIC33AK_GPIO_DIR_OUTPUT, .pull = DSPIC33AK_GPIO_PULL_NONE,
+        .analog = false, .open_drain = false, .initial_high = false,
+    };
+    static const dspic33ak_gpio_config_t in_cfg   = {
+        .dir = DSPIC33AK_GPIO_DIR_INPUT,  .pull = DSPIC33AK_GPIO_PULL_NONE,
+        .analog = false, .open_drain = false, .initial_high = false,
+    };
+    static const dspic33ak_gpio_config_t out_high = {
+        .dir = DSPIC33AK_GPIO_DIR_OUTPUT, .pull = DSPIC33AK_GPIO_PULL_NONE,
+        .analog = false, .open_drain = false, .initial_high = true,
+    };
+
+    (void)dspic33ak_gpio_config(BOARD_SST26_PIN_SDO, &out_low);
+    (void)dspic33ak_gpio_config(BOARD_SST26_PIN_SCK, &out_low);
+    (void)dspic33ak_gpio_config(BOARD_SST26_PIN_SDI, &in_cfg);
+    (void)dspic33ak_gpio_config(BOARD_SST26_PIN_CS,  &out_high);
+    (void)dspic33ak_gpio_config(BOARD_SST26_PIN_WP,  &out_high);
+    (void)dspic33ak_gpio_config(BOARD_SST26_PIN_RST, &out_low);
+
+    /* PPS: SDI4 input from its source RP; SDO4 / SCK4 outputs onto their RP pins. */
+    _SDI4R                = BOARD_SST26_SDI4_PPS_SRC;
+    BOARD_SST26_SDO4_RPnR = BOARD_SST26_SDO4_PPS_FUNC;
+    BOARD_SST26_SCK4_RPnR = BOARD_SST26_SCK4_PPS_FUNC;
+}

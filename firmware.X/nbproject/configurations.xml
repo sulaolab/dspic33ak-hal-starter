@@ -29,6 +29,8 @@
         <itemPath>../src/hal/dspic33ak_uart_device.c</itemPath>
         <itemPath>../src/hal/dspic33ak_uart_rx_isr_ring.c</itemPath>
         <itemPath>../src/hal/uart_stdio.c</itemPath>
+        <itemPath>../src/hal/dspic33ak_spi.c</itemPath>
+        <itemPath>../src/hal/sst26_min.c</itemPath>
       </logicalFolder>
       <itemPath>../src/main.c</itemPath>
     </logicalFolder>

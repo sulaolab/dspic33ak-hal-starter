@@ -17,6 +17,12 @@ extern "C" {
  * digital input, plus PPS routing (U1TX -> RP pin, U1RX <- RP source). */
 void board_uart1_pins_init(void);
 
+/* Configure the SST26 SPI4 pins: SDO/SCK digital outputs (idle low), SDI digital
+ * input, CS/WP idle high (deasserted), RST asserted low; plus PPS routing
+ * (SDI4 input, SDO4/SCK4 outputs). RST is left asserted; the SST26 driver
+ * completes the reset pulse. */
+void board_spi4_sst26_pins_init(void);
+
 #ifdef __cplusplus
 }
 #endif
