@@ -20,8 +20,16 @@ into `src/hal/` here so the project builds without any external dependency.
 
 ## Target hardware
 
-* **Board:** Microchip Curiosity Platform Development Board + a
-  **dsPIC33AK512MPS512** DIM, in its standard (unmodified) configuration.
+This project runs on the combination of these two Microchip boards, in their
+standard (unmodified) configuration:
+
+* **[EV74H48A](https://www.microchip.com/en-us/development-tool/EV74H48A)** —
+  Curiosity Platform Development Board (the motherboard).
+* **[EV80L65A](https://www.microchip.com/en-us/development-tool/EV80L65A)** —
+  dsPIC33AK512MPS512 DIM (the plug-in processor module).
+
+Details:
+
 * **Programmer/debugger:** on-board PKOB4.
 * The SST26 SPI flash, the RGB LED, and the potentiometer are on the Curiosity
   motherboard. The I2C scan needs no specific device — it simply lists whatever
