@@ -16,8 +16,11 @@
 #include <stdint.h>
 
 #include "dspic33ak_clock.h"
+#include "systick.h"
 #include "dspic33ak_uart.h"
+#include "dspic33ak_i2c.h"
 #include "sst26_min.h"
+#include "i2c_scan.h"
 #include "board.h"
 
 /* ---- Device configuration words ----
@@ -55,8 +58,10 @@ static void console_uart_init(void)
 
 int main(void)
 {
-    (void)dspic33ak_clock_init();   /* FRC -> PLL1 200 MHz; route CLKGEN1/5/6/8/9 */
-    console_uart_init();            /* UART1 pins + 230400 8N1, printf retargeted */
+    (void)dspic33ak_clock_init();      /* FRC -> PLL1 200 MHz; route CLKGEN1/5/6/8/9 */
+    board_ports_digital_default();     /* all pins digital (needed for I2C SDA/SCL) */
+    systick_init();                    /* 1 ms time base (heartbeat + I2C timeout)  */
+    console_uart_init();               /* UART1 pins + 230400 8N1, printf retargeted */
 
     printf("\n\n");
     printf("==============================================\n");
@@ -79,6 +84,23 @@ int main(void)
         }
     } else {
         printf(" SST26: SPI init failed\n");
+    }
+    printf("==============================================\n");
+
+    /* ---- I2C bus scan (MikroBUS-A = I2C2, alternate pins) ---- */
+    {
+        const dspic33ak_i2c_config_t i2c_cfg = {
+            .fcy_hz             = DSPIC33AK_CLOCK_SYS_HZ / 2u,   /* fcy = sysclk/2  */
+            .bus_hz             = 400000u,                       /* 400 kHz         */
+            .timeout_ms         = 5u,                            /* never hang      */
+            .get_ms             = systick_ms,
+            .pending_timeout_ms = 50u,
+        };
+        if (dspic33ak_i2c_init(DSPIC33AK_I2C_INST_2, &i2c_cfg) == DSPIC33AK_I2C_OK) {
+            i2c_scan_run(DSPIC33AK_I2C_INST_2);
+        } else {
+            printf(" I2C: init failed\n");
+        }
     }
     printf("==============================================\n");
 

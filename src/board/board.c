@@ -13,6 +13,17 @@
 #include "board_pins.h"
 #include "board.h"
 
+void board_ports_digital_default(void)
+{
+    /* 0 = digital, 1 = analog. Make every analog-capable pin digital at boot so
+     * module-owned pins (I2C SDA/SCL) work; analog inputs set their ANSEL bit
+     * again when configured. */
+    ANSELA = 0;
+    ANSELB = 0;
+    ANSELC = 0;
+    ANSELD = 0;
+}
+
 void board_uart1_pins_init(void)
 {
     /* U1TX: digital push-pull output, idle high (UART idle line is high).
