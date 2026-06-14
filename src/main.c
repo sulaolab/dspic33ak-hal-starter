@@ -27,7 +27,7 @@
 /* ---- Device configuration words ----
  * Most config bits use device defaults (the device boots on the FRC, which we
  * then feed into PLL1). Alternate-I2C2 pin mapping is selected for this board. */
-#pragma config FDEVOPT_ALTI2C2 = ON   /* MikroBUS-B I2C2 on the alternate pins */
+#pragma config FDEVOPT_ALTI2C2 = ON   /* I2C2 on its alternate (board) pins */
 
 static void console_uart_init(void)
 {
