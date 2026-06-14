@@ -19,6 +19,7 @@
                    projectFiles="true">
       <logicalFolder name="f4" displayName="app" projectFiles="true">
         <itemPath>../src/app/i2c_scan.c</itemPath>
+        <itemPath>../src/app/rgb_pot.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f2" displayName="board" projectFiles="true">
         <itemPath>../src/board/board.c</itemPath>

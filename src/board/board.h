@@ -30,6 +30,14 @@ void board_uart1_pins_init(void);
  * completes the reset pulse. */
 void board_spi4_sst26_pins_init(void);
 
+/* Configure the RGB LED pins (digital outputs) and route the PWM generator
+ * outputs onto them via PPS:
+ *   Blue  = PWM1H on RP51 (RD2)
+ *   Green = PWM2H on RP49 (RD0)
+ *   Red   = PWM3H on RP58 (RD9)
+ * The PWM module itself is set up by the rgb_pot sample. */
+void board_rgb_pins_init(void);
+
 #ifdef __cplusplus
 }
 #endif

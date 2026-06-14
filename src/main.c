@@ -21,21 +21,13 @@
 #include "dspic33ak_i2c.h"
 #include "sst26_min.h"
 #include "i2c_scan.h"
+#include "rgb_pot.h"
 #include "board.h"
 
 /* ---- Device configuration words ----
  * Most config bits use device defaults (the device boots on the FRC, which we
  * then feed into PLL1). Alternate-I2C2 pin mapping is selected for this board. */
 #pragma config FDEVOPT_ALTI2C2 = ON   /* MikroBUS-B I2C2 on the alternate pins */
-
-/* Rough busy-wait used only for a visible heartbeat in this minimal starter.
- * (A proper time base is introduced in a later phase.) */
-static void crude_delay(void)
-{
-    for (volatile uint32_t i = 0u; i < 8000000u; i++) {
-        /* spin */
-    }
-}
 
 static void console_uart_init(void)
 {
@@ -104,11 +96,24 @@ int main(void)
     }
     printf("==============================================\n");
 
-    uint32_t beat = 0u;
+    /* ---- Potentiometer (ADC5) -> RGB LED (PWM1/2/3) ---- */
+    rgb_pot_init();
+    printf(" RGB LED follows the potentiometer; heartbeat below.\n");
+    printf("==============================================\n");
+
+    /* Main loop: update the LED color from the pot continuously, and print a
+     * 1 Hz heartbeat using the systick time base (non-blocking). */
+    uint32_t beat      = 0u;
+    uint32_t last_beat = systick_ms();
     while (1)
     {
-        printf(" heartbeat %lu\n", (unsigned long)beat++);
-        crude_delay();
+        rgb_pot_update();
+
+        uint32_t now = systick_ms();
+        if ((uint32_t)(now - last_beat) >= 1000u) {
+            last_beat = now;
+            printf(" heartbeat %lu\n", (unsigned long)beat++);
+        }
     }
 
     return 0;

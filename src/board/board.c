@@ -86,3 +86,21 @@ void board_spi4_sst26_pins_init(void)
     BOARD_SST26_SDO4_RPnR = BOARD_SST26_SDO4_PPS_FUNC;
     BOARD_SST26_SCK4_RPnR = BOARD_SST26_SCK4_PPS_FUNC;
 }
+
+void board_rgb_pins_init(void)
+{
+    /* RGB LED pins are PWM-driven outputs (the PWM module drives them via PPS). */
+    static const dspic33ak_gpio_config_t out_low = {
+        .dir = DSPIC33AK_GPIO_DIR_OUTPUT, .pull = DSPIC33AK_GPIO_PULL_NONE,
+        .analog = false, .open_drain = false, .initial_high = false,
+    };
+
+    (void)dspic33ak_gpio_config(BOARD_RGB_PIN_BLUE,  &out_low);
+    (void)dspic33ak_gpio_config(BOARD_RGB_PIN_GREEN, &out_low);
+    (void)dspic33ak_gpio_config(BOARD_RGB_PIN_RED,   &out_low);
+
+    /* PPS: route PWM1H/PWM2H/PWM3H outputs onto the LED pins. */
+    BOARD_RGB_BLUE_RPnR  = _RPOUT_PWM1H;
+    BOARD_RGB_GREEN_RPnR = _RPOUT_PWM2H;
+    BOARD_RGB_RED_RPnR   = _RPOUT_PWM3H;
+}

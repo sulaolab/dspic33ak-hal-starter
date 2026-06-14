@@ -45,4 +45,20 @@
 #define BOARD_SST26_SCK4_RPnR     _RP66R   /* SCK4 output pin select (RP66)  */
 #define BOARD_SST26_SCK4_PPS_FUNC (35u)    /* SCK4 output function code      */
 
+/* ---- RGB LED (PWM1/2/3 -> RP51/49/58) on the Curiosity motherboard ----
+ *   Blue  = PWM1H on RP51 (RD2)
+ *   Green = PWM2H on RP49 (RD0)
+ *   Red   = PWM3H on RP58 (RD9)
+ */
+#define BOARD_RGB_PIN_BLUE        DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_D, 2)
+#define BOARD_RGB_PIN_GREEN       DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_D, 0)
+#define BOARD_RGB_PIN_RED         DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_D, 9)
+#define BOARD_RGB_BLUE_RPnR       _RP51R   /* PWM1H output pin select (RD2) */
+#define BOARD_RGB_GREEN_RPnR      _RP49R   /* PWM2H output pin select (RD0) */
+#define BOARD_RGB_RED_RPnR        _RP58R   /* PWM3H output pin select (RD9) */
+
+/* ---- Potentiometer -> ADC5 channel 0 (AD5AN0 on RA7) ---- */
+#define BOARD_POT_ANSEL_PORT      ANSELA
+#define BOARD_POT_ANSEL_BIT       (7u)     /* RA7 = AD5AN0 (analog input) */
+
 #endif /* BOARD_PINS_H */
