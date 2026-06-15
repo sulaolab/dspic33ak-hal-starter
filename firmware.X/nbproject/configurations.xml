@@ -39,6 +39,7 @@
         <itemPath>../src/hal/sst26_min.c</itemPath>
         <itemPath>../src/hal/dspic33ak_i2c_common.c</itemPath>
         <itemPath>../src/hal/dspic33ak_i2c_master.c</itemPath>
+        <itemPath>../src/hal/dspic33ak_i2c_slave.c</itemPath>
         <itemPath>../src/hal/dspic33ak_i2c_device.c</itemPath>
       </logicalFolder>
       <itemPath>../src/main.c</itemPath>
