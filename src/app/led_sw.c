@@ -14,16 +14,17 @@
 #include "dspic33ak_gpio.h"
 #include "systick.h"
 
-/* LED1..LED8 -> RC8..RC15, lit when driven high. */
+/* LED0..LED7 -> RC8..RC15, lit when driven high. LEDs are 0-indexed to match
+ * the board silkscreen (LED0..LED7); the switches below are 1-indexed (SW1..3). */
 static const dspic33ak_gpio_pin_t LED_PINS[LED_SW_LED_COUNT] = {
-    DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C,  8),   /* LED1 */
-    DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C,  9),   /* LED2 */
-    DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C, 10),   /* LED3 */
-    DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C, 11),   /* LED4 */
-    DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C, 12),   /* LED5 */
-    DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C, 13),   /* LED6 */
-    DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C, 14),   /* LED7 */
-    DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C, 15),   /* LED8 */
+    DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C,  8),   /* LED0 */
+    DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C,  9),   /* LED1 */
+    DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C, 10),   /* LED2 */
+    DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C, 11),   /* LED3 */
+    DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C, 12),   /* LED4 */
+    DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C, 13),   /* LED5 */
+    DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C, 14),   /* LED6 */
+    DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C, 15),   /* LED7 */
 };
 
 /* SW1..SW3, active-low (reads 0 while pressed). */
@@ -52,8 +53,8 @@ void led_sw_init(void)
 
 void led_sw_set(uint8_t led, bool on)
 {
-    if (led >= 1u && led <= LED_SW_LED_COUNT) {
-        dspic33ak_gpio_write(LED_PINS[led - 1u], on);
+    if (led < LED_SW_LED_COUNT) {
+        dspic33ak_gpio_write(LED_PINS[led], on);
     }
 }
 
@@ -90,9 +91,11 @@ void led_sw_boot_test(uint32_t hold_ms)
 
 void led_sw_update(void)
 {
+    /* SW1->LED7, SW2->LED6, SW3->LED5, each lit only while its switch is held. */
+    static const uint8_t SW_TO_LED[LED_SW_SW_COUNT] = { 7u, 6u, 5u };
     uint8_t sw;
-    /* SW1->LED1, SW2->LED2, SW3->LED3, lit only while held. */
+
     for (sw = 1u; sw <= LED_SW_SW_COUNT; sw++) {
-        led_sw_set(sw, led_sw_pressed(sw));
+        led_sw_set(SW_TO_LED[sw - 1u], led_sw_pressed(sw));
     }
 }

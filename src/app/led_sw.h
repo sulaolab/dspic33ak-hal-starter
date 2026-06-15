@@ -9,8 +9,11 @@
  * a HAL.
  *
  * Board wiring (EV74H48A + EV80L65A, dsPIC33AK512MPS512 DIM):
- *   LED1..LED8  = RC8..RC15  (active-high: drive high to light)
+ *   LED0..LED7  = RC8..RC15  (active-high: drive high to light)
  *   SW1 = RF3, SW2 = RF0, SW3 = RB2  (active-low: reads 0 while pressed)
+ *
+ * Note the indexing trap: LEDs are 0-based (LED0..LED7, matching the board
+ * silkscreen) while switches are 1-based (SW1..SW3).
  *
  * Note RF0 is also an analog input (AD3AN4), so this sample clears ANSEL on
  * every pin it owns; it does not rely on board_ports_digital_default(), which
@@ -31,7 +34,8 @@ extern "C" {
  * inputs with pull-ups. Call once after the clock is up. */
 void led_sw_init(void);
 
-/* Drive one LED. led is 1..LED_SW_LED_COUNT; out-of-range calls are ignored. */
+/* Drive one LED. led is 0..LED_SW_LED_COUNT-1 (LED0..LED7); out-of-range
+ * calls are ignored. */
 void led_sw_set(uint8_t led, bool on);
 
 /* Drive all 8 LEDs at once. */
@@ -44,7 +48,7 @@ bool led_sw_pressed(uint8_t sw);
  * Blocking; uses the systick millisecond time base. */
 void led_sw_boot_test(uint32_t hold_ms);
 
-/* Map the switches to LEDs: SW1->LED1, SW2->LED2, SW3->LED3, each lit only
+/* Map the switches to LEDs: SW1->LED7, SW2->LED6, SW3->LED5, each lit only
  * while its switch is held. Call repeatedly from the main loop. */
 void led_sw_update(void);
 

@@ -67,10 +67,10 @@ int main(void)
 
     /* ---- User LEDs + switches (GPIO) ----
      * Power-on indicator: light all 8 LEDs for 1 s, then clear. Afterwards the
-     * main loop lights LED1/LED2/LED3 while SW1/SW2/SW3 are held. */
+     * main loop lights LED7/LED6/LED5 while SW1/SW2/SW3 are held. */
     led_sw_init();
     led_sw_boot_test(1000u);
-    printf(" LEDs: power-on test done; SW1..3 now drive LED1..3.\n");
+    printf(" LEDs: power-on test done; SW1/SW2/SW3 now drive LED7/LED6/LED5.\n");
     printf("==============================================\n");
 
     /* ---- SPI external flash (SST26 on SPI4) ---- */
