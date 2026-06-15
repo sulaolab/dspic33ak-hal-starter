@@ -19,6 +19,19 @@
  * readable I2C driver.
  */
 
+/*
+ * One interrupt source (event / RX / TX). The dsPIC33A I2C peripheral has three
+ * separate interrupts. The flag (IFSx) and enable (IECx) bits share the same
+ * bit position, so a single mask covers both registers. The register pointers
+ * are kept per-source because an instance's three flags can span two IFS/IEC
+ * words (e.g. I2C3: event/RX in IFS2 but TX in IFS3).
+ */
+typedef struct {
+    volatile uint32_t *ifs;    /* interrupt flag register   (IFSx) */
+    volatile uint32_t *iec;    /* interrupt enable register (IECx) */
+    uint32_t           mask;   /* bit position, shared by IFS/IEC  */
+} dspic33ak_i2c_irq_t;
+
 typedef struct {
     volatile uint32_t *CON1;
     volatile uint32_t *CON2;
@@ -29,6 +42,11 @@ typedef struct {
     volatile uint32_t *HBRG;
     volatile uint32_t *TRN;
     volatile uint32_t *RCV;
+    volatile uint32_t *ADD;    /* slave own-address (I2CxADD) */
+    volatile uint32_t *MSK;    /* slave address mask (I2CxMSK) */
+    dspic33ak_i2c_irq_t irq_event;
+    dspic33ak_i2c_irq_t irq_rx;
+    dspic33ak_i2c_irq_t irq_tx;
 } dspic33ak_i2c_regs_t;
 
 /* I2CxCON1 bits */
@@ -38,6 +56,11 @@ typedef struct {
 #define DSPIC33AK_I2C_CON1_RCEN     (1UL << 3)   /* I2CxCON1bits.RCEN */
 #define DSPIC33AK_I2C_CON1_ACKEN    (1UL << 4)   /* I2CxCON1bits.ACKEN */
 #define DSPIC33AK_I2C_CON1_ACKDT    (1UL << 5)   /* I2CxCON1bits.ACKDT */
+#define DSPIC33AK_I2C_CON1_STREN    (1UL << 6)   /* I2CxCON1bits.STREN  (slave clock stretch) */
+#define DSPIC33AK_I2C_CON1_GCEN     (1UL << 7)   /* I2CxCON1bits.GCEN   (general-call enable) */
+#define DSPIC33AK_I2C_CON1_A10M     (1UL << 10)  /* I2CxCON1bits.A10M   (10-bit own address) */
+#define DSPIC33AK_I2C_CON1_STRICT   (1UL << 11)  /* I2CxCON1bits.STRICT */
+#define DSPIC33AK_I2C_CON1_SCLREL   (1UL << 12)  /* I2CxCON1bits.SCLREL (release clock) */
 #define DSPIC33AK_I2C_CON1_ON       (1UL << 15)  /* I2CxCON1bits.ON */
 
 /* I2CxCON2 bits */
@@ -46,8 +69,12 @@ typedef struct {
 /* I2CxSTAT1 bits */
 #define DSPIC33AK_I2C_STAT1_TBF     (1UL << 0)   /* I2CxSTAT1bits.TBF */
 #define DSPIC33AK_I2C_STAT1_RBF     (1UL << 1)   /* I2CxSTAT1bits.RBF */
-#define DSPIC33AK_I2C_STAT1_S       (1UL << 3)   /* I2CxSTAT1bits.S */
-#define DSPIC33AK_I2C_STAT1_D_A     (1UL << 5)   /* I2CxSTAT1bits.D_A */
+#define DSPIC33AK_I2C_STAT1_R_W     (1UL << 2)   /* I2CxSTAT1bits.R_W  (slave: last addr was read) */
+#define DSPIC33AK_I2C_STAT1_S       (1UL << 3)   /* I2CxSTAT1bits.S    (START detected) */
+#define DSPIC33AK_I2C_STAT1_P       (1UL << 4)   /* I2CxSTAT1bits.P    (STOP detected) */
+#define DSPIC33AK_I2C_STAT1_D_A     (1UL << 5)   /* I2CxSTAT1bits.D_A  (0=address, 1=data) */
+#define DSPIC33AK_I2C_STAT1_ADD10   (1UL << 8)   /* I2CxSTAT1bits.ADD10 */
+#define DSPIC33AK_I2C_STAT1_GCSTAT  (1UL << 9)   /* I2CxSTAT1bits.GCSTAT (general call) */
 #define DSPIC33AK_I2C_STAT1_I2COV   (1UL << 6)   /* I2CxSTAT1bits.I2COV */
 #define DSPIC33AK_I2C_STAT1_IWCOL   (1UL << 7)   /* I2CxSTAT1bits.IWCOL */
 #define DSPIC33AK_I2C_STAT1_BCL     (1UL << 10)  /* I2CxSTAT1bits.BCL */
@@ -90,6 +117,27 @@ static inline void dspic33ak_i2c_reg_write_field(
     uint32_t value)
 {
     *reg = (*reg & ~mask) | (value & mask);
+}
+
+/* Interrupt source helpers (event / RX / TX). */
+static inline void dspic33ak_i2c_reg_irq_enable(const dspic33ak_i2c_irq_t *irq)
+{
+    *irq->iec |= irq->mask;
+}
+
+static inline void dspic33ak_i2c_reg_irq_disable(const dspic33ak_i2c_irq_t *irq)
+{
+    *irq->iec &= ~irq->mask;
+}
+
+static inline void dspic33ak_i2c_reg_irq_clear(const dspic33ak_i2c_irq_t *irq)
+{
+    *irq->ifs &= ~irq->mask;
+}
+
+static inline bool dspic33ak_i2c_reg_irq_is_set(const dspic33ak_i2c_irq_t *irq)
+{
+    return ((*irq->ifs & irq->mask) != 0u);
 }
 
 #endif /* DSPIC33AK_I2C_REG_H */
