@@ -21,6 +21,7 @@
 #include "dspic33ak_i2c_master.h"
 #include "sst26_min.h"
 #include "i2c_scan.h"
+#include "i2c_loopback.h"
 #include "rgb_pot.h"
 #include "led_sw.h"
 #include "board.h"
@@ -108,6 +109,12 @@ int main(void)
             printf(" I2C: init failed\n");
         }
     }
+    printf("==============================================\n");
+
+    /* ---- I2C master<->slave loopback (I2C2 master -> I2C3 slave @0x55) ----
+     * Exercises the interrupt-driven slave HAL over the shared MikroBUS A/B
+     * bus. I2C2 is already initialized as master above. */
+    i2c_loopback_run(DSPIC33AK_I2C_INST_2);
     printf("==============================================\n");
 
     /* ---- Potentiometer (ADC5) -> RGB LED (PWM1/2/3) ---- */

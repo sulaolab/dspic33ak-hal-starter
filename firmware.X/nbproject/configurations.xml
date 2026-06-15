@@ -19,6 +19,7 @@
                    projectFiles="true">
       <logicalFolder name="f4" displayName="app" projectFiles="true">
         <itemPath>../src/app/i2c_scan.c</itemPath>
+        <itemPath>../src/app/i2c_loopback.c</itemPath>
         <itemPath>../src/app/rgb_pot.c</itemPath>
         <itemPath>../src/app/led_sw.c</itemPath>
       </logicalFolder>
