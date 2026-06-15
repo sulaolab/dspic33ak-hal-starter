@@ -57,14 +57,14 @@ dspic33ak_i2c_status_t dspic33ak_i2c_slave_init(
     *r->CON1 = DSPIC33AK_I2C_CON1_PCIE;
     *r->CON2 = 0x00000001u;        /* PSZ = 1: one byte per packet */
 
-    /* Route client conditions to the event interrupt: address-match (CADDRIE)
-     * and received-byte (CDRXIE) feed CLIIF, and CLTIE gates CLIIF -> I2CxIF.
-     * Without this the hardware sets RBF but raises no interrupt at all.
-     * TXIE additionally routes an empty TRN to the (on-demand) TX vector. */
-    *r->INTC = DSPIC33AK_I2C_INTC_CLTIE  |
+    /* Route every client condition to the event interrupt I2CxIF: address-match
+     * (CADDRIE), received byte (CDRXIE) and the "send next byte" request after a
+     * transmitted byte is ACKed (CDTXIE) all feed CLIIF, which CLTIE gates onto
+     * I2CxIF. Without this the hardware sets RBF/TBF but raises no interrupt. */
+    *r->INTC = DSPIC33AK_I2C_INTC_CLTIE   |
                DSPIC33AK_I2C_INTC_CADDRIE |
-               DSPIC33AK_I2C_INTC_CDRXIE |
-               DSPIC33AK_I2C_INTC_TXIE;
+               DSPIC33AK_I2C_INTC_CDRXIE  |
+               DSPIC33AK_I2C_INTC_CDTXIE;
 
     if (config->clock_stretch) {
         dspic33ak_i2c_reg_set(r->CON1, DSPIC33AK_I2C_CON1_STREN);
@@ -81,14 +81,11 @@ dspic33ak_i2c_status_t dspic33ak_i2c_slave_init(
     g_reading[inst] = false;
     g_active[inst]  = true;
 
-    /* Event is the real client interrupt; RX is enabled as a hedge in case this
-     * silicon routes received bytes there. TX is enabled on demand during a
-     * master-read so an empty TRN cannot storm us while idle. */
+    /* All client activity (address / RX / TX-continue / STOP) is aggregated
+     * into the single event interrupt via INTC above, so only that vector is
+     * enabled here. */
     dspic33ak_i2c_reg_irq_clear(&r->irq_event);
-    dspic33ak_i2c_reg_irq_clear(&r->irq_rx);
-    dspic33ak_i2c_reg_irq_clear(&r->irq_tx);
     dspic33ak_i2c_reg_irq_enable(&r->irq_event);
-    dspic33ak_i2c_reg_irq_enable(&r->irq_rx);
 
     /* Release SCL and turn the slave on. */
     dspic33ak_i2c_reg_set(r->CON1, DSPIC33AK_I2C_CON1_SCLREL);
@@ -151,7 +148,8 @@ static void slave_service(dspic33ak_i2c_instance_t inst,
         uint8_t b = (uint8_t)(*r->RCV & 0xFFu);     /* read clears RBF */
 
         if ((stat & DSPIC33AK_I2C_STAT1_D_A) == 0u) {
-            /* Address byte: latch direction and notify. */
+            /* Address byte: latch direction and notify. The hardware has
+             * stretched SCL after the address; release it below. */
             bool is_read = ((stat & DSPIC33AK_I2C_STAT1_R_W) != 0u);
             g_reading[inst] = is_read;
 
@@ -159,10 +157,8 @@ static void slave_service(dspic33ak_i2c_instance_t inst,
                 g_cfg[inst].on_addr_match(is_read);
             }
             if (is_read) {
-                /* Master-read: prime the first outgoing byte and arm TX. */
+                /* Master-read: load the first byte to transmit. */
                 *r->TRN = (uint32_t)next_tx_byte(inst);
-                dspic33ak_i2c_reg_irq_clear(&r->irq_tx);
-                dspic33ak_i2c_reg_irq_enable(&r->irq_tx);
             }
         } else if (!g_reading[inst]) {
             /* Master-write data byte. */
@@ -172,17 +168,23 @@ static void slave_service(dspic33ak_i2c_instance_t inst,
         }
 
         dspic33ak_i2c_reg_set(r->CON1, DSPIC33AK_I2C_CON1_SCLREL);
-    } else if (g_reading[inst] &&
-               (stat & DSPIC33AK_I2C_STAT1_TBF) == 0u) {
-        /* Master-read in progress and TRN is empty: supply the next byte. */
-        *r->TRN = (uint32_t)next_tx_byte(inst);
-        dspic33ak_i2c_reg_set(r->CON1, DSPIC33AK_I2C_CON1_SCLREL);
+    } else if (g_reading[inst]) {
+        /* Master-read in progress: this interrupt is the falling edge of the
+         * ACK/NACK after the byte we just transmitted. */
+        if ((stat & DSPIC33AK_I2C_STAT1_ACKSTAT) == 0u) {
+            /* ACK: the host wants more -> load the next byte and release. */
+            *r->TRN = (uint32_t)next_tx_byte(inst);
+            dspic33ak_i2c_reg_set(r->CON1, DSPIC33AK_I2C_CON1_SCLREL);
+        } else {
+            /* NACK: the read is finished. Do not write TRN again; the module
+             * stops stretching on its own and a STOP follows. */
+            g_reading[inst] = false;
+        }
     }
 
     if ((stat & DSPIC33AK_I2C_STAT1_P) != 0u) {
         /* STOP: end of transaction. */
         g_reading[inst] = false;
-        dspic33ak_i2c_reg_irq_disable(&r->irq_tx);
         if (g_cfg[inst].on_stop != 0) {
             g_cfg[inst].on_stop();
         }
