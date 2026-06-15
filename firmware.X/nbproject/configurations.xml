@@ -36,7 +36,8 @@
         <itemPath>../src/hal/uart_stdio.c</itemPath>
         <itemPath>../src/hal/dspic33ak_spi.c</itemPath>
         <itemPath>../src/hal/sst26_min.c</itemPath>
-        <itemPath>../src/hal/dspic33ak_i2c.c</itemPath>
+        <itemPath>../src/hal/dspic33ak_i2c_common.c</itemPath>
+        <itemPath>../src/hal/dspic33ak_i2c_master.c</itemPath>
         <itemPath>../src/hal/dspic33ak_i2c_device.c</itemPath>
       </logicalFolder>
       <itemPath>../src/main.c</itemPath>

@@ -9,7 +9,7 @@
 #include <stdio.h>
 #include <stdint.h>
 
-#include "dspic33ak_i2c.h"
+#include "dspic33ak_i2c_master.h"
 #include "i2c_scan.h"
 
 void i2c_scan_run(dspic33ak_i2c_instance_t inst)

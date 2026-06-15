@@ -18,7 +18,7 @@
 #include "dspic33ak_clock.h"
 #include "systick.h"
 #include "dspic33ak_uart.h"
-#include "dspic33ak_i2c.h"
+#include "dspic33ak_i2c_master.h"
 #include "sst26_min.h"
 #include "i2c_scan.h"
 #include "rgb_pot.h"
@@ -58,6 +58,7 @@ int main(void)
     printf("\n\n");
     printf("==============================================\n");
     printf(" dspic33ak-hal-starter\n");
+    printf(" build  : " __DATE__ " " __TIME__ "\n");
     printf(" device : dsPIC33AK512MPS512\n");
     printf(" sysclk : %lu Hz (FRC -> PLL1)\n", (unsigned long)DSPIC33AK_CLOCK_SYS_HZ);
     printf(" uart   : UART1 @ 230400 8N1\n");
