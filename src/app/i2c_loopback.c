@@ -1,9 +1,10 @@
 /*
  * i2c_loopback.c
  * --------------
- * See i2c_loopback.h. Master (I2C2) writes a known pattern to an I2C3 slave at
- * 0x55 over the shared MikroBUS A/B bus; the slave's callbacks capture what it
- * received and we compare.
+ * See i2c_loopback.h. The I2C3 slave at 0x55 behaves as a small 8-byte
+ * register file: a master Write stores the bytes, a master Read returns them.
+ * Each tick the master (I2C2) writes a moving pattern and reads it back over
+ * the shared MikroBUS A/B bus, logging both sides of both directions.
  */
 
 #include <xc.h>
@@ -18,31 +19,45 @@
 
 #define LB_SLAVE_INST   DSPIC33AK_I2C_INST_3   /* MikroBUS B */
 #define LB_SLAVE_ADDR   0x55u
-#define LB_BUF_LEN      16u
+#define LB_LEN          8u                     /* payload length per transfer */
 
-/* Captured by the slave callbacks (touched in ISR context -> volatile). */
-static volatile uint8_t  g_rx_buf[LB_BUF_LEN];
-static volatile uint8_t  g_rx_count;
-static volatile bool     g_got_stop;
-static volatile bool     g_addressed;
+/* The slave's register file plus capture of what it received/transmitted.
+ * These are touched in ISR context, so they are volatile. */
+static volatile uint8_t g_mem[LB_LEN];     /* written by master, read by master */
+static volatile uint8_t g_rx_idx;          /* slave receive cursor               */
+static volatile uint8_t g_tx_idx;          /* slave transmit cursor              */
+static volatile uint8_t g_tx_log[LB_LEN];  /* bytes the slave actually sent      */
+static volatile uint8_t g_tx_cnt;
 
+/* Slave callbacks --------------------------------------------------------- */
 static void slave_on_addr(bool is_read)
 {
-    (void)is_read;
-    g_addressed = true;
+    /* Reset the relevant cursor at the start of each addressed transaction. */
+    if (is_read) {
+        g_tx_idx = 0u;
+        g_tx_cnt = 0u;
+    } else {
+        g_rx_idx = 0u;
+    }
 }
 
 static void slave_on_rx(uint8_t b)
 {
-    if (g_rx_count < LB_BUF_LEN) {
-        g_rx_buf[g_rx_count] = b;
+    if (g_rx_idx < LB_LEN) {
+        g_mem[g_rx_idx] = b;
     }
-    g_rx_count++;
+    g_rx_idx++;
 }
 
-static void slave_on_stop(void)
+static uint8_t slave_on_tx(void)
 {
-    g_got_stop = true;
+    uint8_t b = (g_tx_idx < LB_LEN) ? g_mem[g_tx_idx] : 0xFFu;
+    if (g_tx_cnt < LB_LEN) {
+        g_tx_log[g_tx_cnt] = b;
+    }
+    g_tx_idx++;
+    g_tx_cnt++;
+    return b;
 }
 
 /* --- I2C3 interrupt vectors, delegated to the slave HAL --------------------
@@ -63,23 +78,19 @@ void __attribute__((__interrupt__, __no_auto_psv__)) _I2C3TXInterrupt(void)
     dspic33ak_i2c_slave_tx_irq(LB_SLAVE_INST);
 }
 
-void i2c_loopback_run(dspic33ak_i2c_instance_t master_inst)
+/* ------------------------------------------------------------------------- */
+
+bool i2c_loopback_init(void)
 {
-    static const uint8_t pattern[4] = { 0xDEu, 0xADu, 0xBEu, 0xEFu };
-    dspic33ak_i2c_slave_config_t scfg = {
+    static const dspic33ak_i2c_slave_config_t scfg = {
         .addr7         = (uint8_t)LB_SLAVE_ADDR,
         .addr_mask     = 0u,
         .clock_stretch = false,
         .on_addr_match = slave_on_addr,
         .on_rx_byte    = slave_on_rx,
-        .on_tx_byte    = 0,
-        .on_stop       = slave_on_stop,
+        .on_tx_byte    = slave_on_tx,
+        .on_stop       = 0,
     };
-    dspic33ak_i2c_status_t st;
-    uint8_t i;
-
-    printf(" I2C loopback: master (I2C%u) -> slave (I2C3 @ 0x%02X)\n",
-           (unsigned)master_inst + 1u, (unsigned)LB_SLAVE_ADDR);
 
     /* The slave HAL enables the interrupt sources; the application owns the
      * vectors and their priority (0 would leave them masked). */
@@ -87,44 +98,52 @@ void i2c_loopback_run(dspic33ak_i2c_instance_t master_inst)
     _I2C3RXIP = 4;
     _I2C3TXIP = 4;
 
-    g_rx_count  = 0u;
-    g_got_stop  = false;
-    g_addressed = false;
+    return (dspic33ak_i2c_slave_init(LB_SLAVE_INST, &scfg) == DSPIC33AK_I2C_OK);
+}
 
-    st = dspic33ak_i2c_slave_init(LB_SLAVE_INST, &scfg);
-    if (st != DSPIC33AK_I2C_OK) {
-        printf("   slave init failed (%d)\n", (int)st);
-        return;
-    }
+static void settle_ms(uint32_t ms)
+{
+    uint32_t t0 = systick_ms();
+    while ((uint32_t)(systick_ms() - t0) < ms) { }
+}
 
-    /* Master writes the known pattern to the slave address. */
-    st = dspic33ak_i2c_write(master_inst, (uint8_t)LB_SLAVE_ADDR, pattern,
-                             sizeof pattern);
-
-    /* Let the slave's STOP interrupt settle before reading the results. */
-    {
-        uint32_t t0 = systick_ms();
-        while ((uint32_t)(systick_ms() - t0) < 3u) { }
-    }
-
-    printf("   master write: %s; slave received %u byte(s):",
-           (st == DSPIC33AK_I2C_OK) ? "ACK" : "no-ACK/err",
-           (unsigned)g_rx_count);
-    for (i = 0u; i < g_rx_count && i < LB_BUF_LEN; i++) {
-        printf(" %02X", g_rx_buf[i]);
+static void log_bytes(char dir, unsigned inst_num, const char *op,
+                      const volatile uint8_t *buf, unsigned n)
+{
+    unsigned i;
+    printf(" %cI2C%u %s: size=%u ", dir, inst_num, op, n);
+    for (i = 0u; i < n && i < LB_LEN; i++) {
+        printf("%02X", buf[i]);
     }
     printf("\n");
+}
 
-    {
-        bool match = g_addressed && g_got_stop &&
-                     (g_rx_count == sizeof pattern);
-        for (i = 0u; match && i < sizeof pattern; i++) {
-            if (g_rx_buf[i] != pattern[i]) {
-                match = false;
-            }
-        }
-        printf("   loopback %s\n", match ? "MATCH" : "MISMATCH");
+void i2c_loopback_tick(dspic33ak_i2c_instance_t master_inst, uint32_t beat)
+{
+    uint8_t  tx[LB_LEN];
+    uint8_t  rx[LB_LEN];
+    unsigned m = (unsigned)master_inst + 1u;   /* master bus number for the log */
+    unsigned s = (unsigned)LB_SLAVE_INST + 1u;  /* slave  bus number (I2C3)      */
+    uint8_t  i;
+
+    /* A pattern that shifts by 0x11 each beat, e.g. 1122334455667788. */
+    for (i = 0u; i < LB_LEN; i++) {
+        tx[i] = (uint8_t)(0x11u * (uint8_t)(i + 1u + (uint8_t)beat));
     }
 
-    dspic33ak_i2c_slave_deinit(LB_SLAVE_INST);
+    /* ---- master Write -> slave receives ---- */
+    g_rx_idx = 0u;
+    log_bytes('>', m, "Tx", tx, LB_LEN);
+    (void)dspic33ak_i2c_write(master_inst, (uint8_t)LB_SLAVE_ADDR, tx, LB_LEN);
+    settle_ms(1u);
+    log_bytes('<', s, "Rx", g_mem, (g_rx_idx < LB_LEN) ? g_rx_idx : LB_LEN);
+
+    /* ---- master Read <- slave transmits (echoes the stored bytes) ---- */
+    for (i = 0u; i < LB_LEN; i++) {
+        rx[i] = 0u;
+    }
+    (void)dspic33ak_i2c_read(master_inst, (uint8_t)LB_SLAVE_ADDR, rx, LB_LEN);
+    settle_ms(1u);
+    log_bytes('>', m, "Rx", rx, LB_LEN);
+    log_bytes('<', s, "Tx", g_tx_log, (g_tx_cnt < LB_LEN) ? g_tx_cnt : LB_LEN);
 }

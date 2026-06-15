@@ -111,10 +111,12 @@ int main(void)
     }
     printf("==============================================\n");
 
-    /* ---- I2C master<->slave loopback (I2C2 master -> I2C3 slave @0x55) ----
-     * Exercises the interrupt-driven slave HAL over the shared MikroBUS A/B
-     * bus. I2C2 is already initialized as master above. */
-    i2c_loopback_run(DSPIC33AK_I2C_INST_2);
+    /* ---- I2C master<->slave loopback (I2C2 master <-> I2C3 slave @0x55) ----
+     * Bring up the I2C3 slave once; the main loop then runs one Write+Read
+     * round trip per heartbeat over the shared MikroBUS A/B bus. */
+    bool loopback_ok = i2c_loopback_init();
+    printf(" I2C loopback: I2C2 master <-> I2C3 slave @0x55 (%s); per beat below.\n",
+           loopback_ok ? "ready" : "slave init FAILED");
     printf("==============================================\n");
 
     /* ---- Potentiometer (ADC5) -> RGB LED (PWM1/2/3) ---- */
@@ -122,9 +124,9 @@ int main(void)
     printf(" RGB LED follows the potentiometer; LED0 blinks with the heartbeat.\n");
     printf("==============================================\n");
 
-    /* Main loop: update the LED color from the pot continuously, and print a
-     * 1 Hz heartbeat using the systick time base (non-blocking). LED0 toggles
-     * with each beat so the board's liveness is visible without a serial port. */
+    /* Main loop: update the LED color from the pot continuously, and once per
+     * second toggle LED0 (visible liveness without a serial port) and run one
+     * I2C Write+Read round trip, logging both directions. */
     uint32_t beat      = 0u;
     uint32_t last_beat = systick_ms();
     while (1)
@@ -136,7 +138,10 @@ int main(void)
         if ((uint32_t)(now - last_beat) >= 1000u) {
             last_beat = now;
             led_sw_toggle(0u);      /* LED0 = heartbeat indicator */
-            printf(" heartbeat %lu\n", (unsigned long)beat++);
+            if (loopback_ok) {
+                i2c_loopback_tick(DSPIC33AK_I2C_INST_2, beat);
+            }
+            beat++;
         }
     }
 
