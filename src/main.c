@@ -119,21 +119,23 @@ int main(void)
 
     /* ---- Potentiometer (ADC5) -> RGB LED (PWM1/2/3) ---- */
     rgb_pot_init();
-    printf(" RGB LED follows the potentiometer; heartbeat below.\n");
+    printf(" RGB LED follows the potentiometer; LED0 blinks with the heartbeat.\n");
     printf("==============================================\n");
 
     /* Main loop: update the LED color from the pot continuously, and print a
-     * 1 Hz heartbeat using the systick time base (non-blocking). */
+     * 1 Hz heartbeat using the systick time base (non-blocking). LED0 toggles
+     * with each beat so the board's liveness is visible without a serial port. */
     uint32_t beat      = 0u;
     uint32_t last_beat = systick_ms();
     while (1)
     {
         rgb_pot_update();
-        led_sw_update();      /* SW1/2/3 held -> LED1/2/3 lit */
+        led_sw_update();      /* SW1/2/3 held -> LED7/6/5 lit */
 
         uint32_t now = systick_ms();
         if ((uint32_t)(now - last_beat) >= 1000u) {
             last_beat = now;
+            led_sw_toggle(0u);      /* LED0 = heartbeat indicator */
             printf(" heartbeat %lu\n", (unsigned long)beat++);
         }
     }

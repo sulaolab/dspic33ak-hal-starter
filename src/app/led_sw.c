@@ -66,6 +66,13 @@ void led_sw_all(bool on)
     }
 }
 
+void led_sw_toggle(uint8_t led)
+{
+    if (led < LED_SW_LED_COUNT) {
+        dspic33ak_gpio_toggle(LED_PINS[led]);
+    }
+}
+
 bool led_sw_pressed(uint8_t sw)
 {
     if (sw >= 1u && sw <= LED_SW_SW_COUNT) {

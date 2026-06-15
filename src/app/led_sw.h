@@ -41,6 +41,10 @@ void led_sw_set(uint8_t led, bool on);
 /* Drive all 8 LEDs at once. */
 void led_sw_all(bool on);
 
+/* Toggle one LED. led is 0..LED_SW_LED_COUNT-1 (LED0..LED7); out-of-range
+ * calls are ignored. */
+void led_sw_toggle(uint8_t led);
+
 /* True while the given switch is pressed. sw is 1..LED_SW_SW_COUNT. */
 bool led_sw_pressed(uint8_t sw);
 
