@@ -131,12 +131,16 @@ void i2c_loopback_tick(dspic33ak_i2c_instance_t master_inst, uint32_t beat)
         tx[i] = (uint8_t)(0x11u * (uint8_t)(i + 1u + (uint8_t)beat));
     }
 
+    /* Arrow convention: '<' = Wr (data leaves the device), '>' = Rd (data
+     * enters the device). So a master Write and the slave Read of it carry
+     * opposite arrows, as do a master Read and the slave Write that feeds it. */
+
     /* ---- master Write -> slave receives ---- */
     g_rx_idx = 0u;
-    log_bytes('>', m, "Tx", tx, LB_LEN);
+    log_bytes('<', m, "Wr", tx, LB_LEN);
     (void)dspic33ak_i2c_write(master_inst, (uint8_t)LB_SLAVE_ADDR, tx, LB_LEN);
     settle_ms(1u);
-    log_bytes('<', s, "Rx", g_mem, (g_rx_idx < LB_LEN) ? g_rx_idx : LB_LEN);
+    log_bytes('>', s, "Rd", g_mem, (g_rx_idx < LB_LEN) ? g_rx_idx : LB_LEN);
 
     /* ---- master Read <- slave transmits (echoes the stored bytes) ---- */
     for (i = 0u; i < LB_LEN; i++) {
@@ -144,6 +148,8 @@ void i2c_loopback_tick(dspic33ak_i2c_instance_t master_inst, uint32_t beat)
     }
     (void)dspic33ak_i2c_read(master_inst, (uint8_t)LB_SLAVE_ADDR, rx, LB_LEN);
     settle_ms(1u);
-    log_bytes('>', m, "Rx", rx, LB_LEN);
-    log_bytes('<', s, "Tx", g_tx_log, (g_tx_cnt < LB_LEN) ? g_tx_cnt : LB_LEN);
+    log_bytes('>', m, "Rd", rx, LB_LEN);
+    log_bytes('<', s, "Wr", g_tx_log, (g_tx_cnt < LB_LEN) ? g_tx_cnt : LB_LEN);
+
+    printf("\n");   /* blank line between per-beat round trips */
 }
