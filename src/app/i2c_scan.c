@@ -12,9 +12,15 @@
 #include "dspic33ak_i2c_master.h"
 #include "i2c_scan.h"
 
-void i2c_scan_run(dspic33ak_i2c_instance_t inst)
+void i2c_scan_run(dspic33ak_i2c_instance_t inst, const char *label)
 {
-    printf(" I2C scan (I2C%u): probing 0x08..0x77 ...\n", (unsigned)inst + 1u);
+    if (label != NULL) {
+        printf(" I2C scan (%s, I2C%u): probing 0x08..0x77 ...\n",
+               label, (unsigned)inst + 1u);
+    } else {
+        printf(" I2C scan (I2C%u): probing 0x08..0x77 ...\n",
+               (unsigned)inst + 1u);
+    }
 
     int found = 0;
     for (uint8_t addr = 0x08u; addr <= 0x77u; addr++)

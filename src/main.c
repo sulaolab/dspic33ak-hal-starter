@@ -22,6 +22,7 @@
 #include "sst26_min.h"
 #include "i2c_scan.h"
 #include "rgb_pot.h"
+#include "led_sw.h"
 #include "board.h"
 
 /* ---- Device configuration words ----
@@ -64,6 +65,14 @@ int main(void)
     printf(" uart   : UART1 @ 230400 8N1\n");
     printf("==============================================\n");
 
+    /* ---- User LEDs + switches (GPIO) ----
+     * Power-on indicator: light all 8 LEDs for 1 s, then clear. Afterwards the
+     * main loop lights LED1/LED2/LED3 while SW1/SW2/SW3 are held. */
+    led_sw_init();
+    led_sw_boot_test(1000u);
+    printf(" LEDs: power-on test done; SW1..3 now drive LED1..3.\n");
+    printf("==============================================\n");
+
     /* ---- SPI external flash (SST26 on SPI4) ---- */
     if (sst26_min_init()) {
         uint8_t mfr = 0, typ = 0, dev = 0;
@@ -80,7 +89,11 @@ int main(void)
     }
     printf("==============================================\n");
 
-    /* ---- I2C bus scan (MikroBUS-A = I2C2, alternate pins) ---- */
+    /* ---- I2C bus scan ----
+     * We drive I2C2 (MikroBUS A, alternate pins). On this board MikroBUS A and
+     * B share one I2C bus through a shorting resistor, so a scan finds devices
+     * plugged into *either* the A or B socket; it cannot tell which side.
+     * Plug an I2C device into the MikroBUS A or B I2C header and it shows up. */
     {
         const dspic33ak_i2c_config_t i2c_cfg = {
             .fcy_hz             = DSPIC33AK_CLOCK_SYS_HZ / 2u,   /* fcy = sysclk/2  */
@@ -90,7 +103,7 @@ int main(void)
             .pending_timeout_ms = 50u,
         };
         if (dspic33ak_i2c_init(DSPIC33AK_I2C_INST_2, &i2c_cfg) == DSPIC33AK_I2C_OK) {
-            i2c_scan_run(DSPIC33AK_I2C_INST_2);
+            i2c_scan_run(DSPIC33AK_I2C_INST_2, "MikroBUS A/B");
         } else {
             printf(" I2C: init failed\n");
         }
@@ -109,6 +122,7 @@ int main(void)
     while (1)
     {
         rgb_pot_update();
+        led_sw_update();      /* SW1/2/3 held -> LED1/2/3 lit */
 
         uint32_t now = systick_ms();
         if ((uint32_t)(now - last_beat) >= 1000u) {
