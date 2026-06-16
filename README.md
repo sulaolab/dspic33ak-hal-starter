@@ -101,8 +101,8 @@ makefiles are git-ignored and recreated by MPLAB X.
  SST26 JEDEC: MFR=0xBF TYPE=0x26 DEV=0x12 (good)
  SST26 sector verify @0x000000: OK
 ==============================================
- I2C scan (I2C2): probing 0x08..0x77 ...
-   device ACK at 0x55
+ I2C scan (MikroBUS A/B, I2C2): probing 0x08..0x77 ...
+   device ACK at 0x1A
    1 device(s) found
 ==============================================
  I2C loopback: I2C2 master <-> I2C3 slave @0x55 (ready); per beat below.
@@ -117,9 +117,10 @@ makefiles are git-ignored and recreated by MPLAB X.
  ...
 ```
 
-(The I2C addresses found depend on what is attached; the loopback slave appears
-at `0x55` when the CMSIS-Driver I2C demo is enabled. Turning the potentiometer
-sweeps the RGB LED green -> blue -> white -> red.)
+(The I2C addresses found depend on what is attached. In the screenshot above,
+the scan finds a device at `0x1A`; the CMSIS-Driver I2C loopback slave itself
+runs at `0x55`. Turning the potentiometer sweeps the RGB LED green -> blue ->
+white -> red.)
 
 ## Layout
 

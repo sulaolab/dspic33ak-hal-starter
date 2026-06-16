@@ -1,55 +1,67 @@
-# Capacitive touch add-on (optional)
+# Capacitive touch add-on
 
-The Curiosity motherboard has capacitive-touch pads. This starter does **not**
-include touch, on purpose:
+This starter intentionally does **not** include the capacitive-touch library.
 
-* Touch on dsPIC33AK is driven by Microchip's **QTM** (QTouch Modular) libraries.
-  Those are **proprietary, pre-built `.a` libraries plus generated headers** —
-  they are governed by Microchip's license, **not MIT-0**, and cannot be shipped
-  in this repository.
-* The acquisition/tuning configuration is produced by a code-generation tool
-  (MPLAB Code Configurator / QTouch Configurator), which is exactly the kind of
-  tooling this minimal, hand-written starter avoids depending on.
+The Curiosity Platform Development Board has three on-board capacitive touch pads,
+but the touch implementation used by Microchip's demo is generated code plus
+prebuilt QTouch Modular Library objects. Those files are not part of this MIT-0
+starter.
 
-If you want touch, you generate the QTM pieces yourself and wire them into the
-running starter. The rest of this page is a pointer, not a drop-in.
+## Official reference source
 
-## What you need (generate yourself)
+For reference, Microchip provides an official **Out of Box Demo** repository for
+the dsPIC33A Curiosity Platform Development Board. In this page, **OOB** means
+**Out of Box Demo**.
 
-Using MPLAB Code Configurator / QTouch Configurator for the dsPIC33AK512MPS512 on
-this board, generate and add to your own copy of the project:
+- EV74H48A Curiosity Platform Development Board:
+  https://www.microchip.com/en-us/development-tool/EV74H48A
+- Microchip dsPIC33A Curiosity OOB demo repository:
+  https://github.com/microchip-pic-avr-examples/dspic33a-curiosity-oob
+- dsPIC33AK512MPS512 DIM OOB demo:
+  https://github.com/microchip-pic-avr-examples/dspic33a-curiosity-oob/tree/main/dspic33ak512mps512_dim
 
-* the QTM acquisition + library archives (`qtm_*.X.a`) and their API headers
-  (`qtm_acq_*`, `qtm_touch_key_*`, ...),
-* the generated node configuration (the per-pad `NODE_*_PARAMS`, channel count,
-  acquisition settings), tuned for this board's pads.
+In that OOB demo, the touch-related generated files are located under:
 
-Add the `.a` files to the project's linker library list and the generated `.c`/
-`.h` to the source tree. These files remain under Microchip's license.
+```text
+dspic33ak512mps512_dim/
+  dspic33ak512mps512_dim.X/
+    mcc_generated_files/
+      touch/
+```
 
-## Where it plugs into this starter
+The relevant files include:
 
-The clock side is already done: `dspic33ak_clock_init()` routes **CLKGEN6 -> ADC**
-(PLL1), which is the acquisition clock QTM uses. So you only need to:
+```text
+mcc_generated_files/touch/touch.h
+mcc_generated_files/touch/src/touch.c
+mcc_generated_files/touch/include/qtm_*.h
+mcc_generated_files/touch/datastreamer/...
+mcc_generated_files/touch/lib/qtm_*.X.a
+```
 
-1. Call the generated `touch_init()` once, after `dspic33ak_clock_init()` (and
-   after `board_ports_digital_default()` — note that touch pads must be left in
-   the analog/CVD state QTM expects, so do not force those pins digital).
-2. Drive the QTM acquisition/processing from the main loop, e.g. once per tick:
+## Why this starter does not include it
 
-   ```c
-   /* in the main while(1), alongside rgb_pot_update(): */
-   touch_process(systick_ms());      /* name/signature per your generated code */
-   if (touch_key_pressed(0)) {
-       printf(" touch: key 0 pressed\n");
-   }
-   ```
+The Microchip OOB demo notes that the touch library in
+`mcc_generated_files/touch` contains pre-release code intended solely for
+demonstration purposes and is not intended for production use.
 
-3. Map a touch event to something visible — e.g. nudge the RGB color or print a
-   line — so you can confirm it works.
+For that reason, this starter keeps capacitive touch as an optional add-on
+instead of vendoring the generated touch library and prebuilt QTouch objects
+directly.
 
-## License note
+Do not vendor or copy the touch library into this MIT-0 starter.
 
-Anything you generate from QTM / QTouch Configurator is licensed by Microchip.
-Keep it separate from this MIT-0 project and do not redistribute the QTM
-libraries under MIT-0.
+## How to experiment with touch
+
+If you want to experiment with the three on-board touch pads:
+
+1. Open the Microchip OOB demo for `dspic33ak512mps512_dim`.
+2. Inspect the generated touch files under `mcc_generated_files/touch/`.
+3. Use the OOB demo as the reference for touch pad setup, QTouch library linkage,
+   and optional Data Visualizer streaming.
+4. Keep the imported touch code clearly separated from this starter's MIT-0 HAL
+   examples.
+
+This starter focuses on small, readable HAL bring-up code. Capacitive touch is
+left as a documented integration path because the official demo depends on
+generated files and Microchip-provided QTouch library objects.
