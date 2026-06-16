@@ -4,7 +4,7 @@ A ready-to-run MPLAB X starter project for the **dsPIC33AK512MPS512**.
 
 Flash this project, open a serial terminal, and you should immediately see the
 board bring-up log: clock setup, UART `printf()`, SPI flash verification, I2C
-scan, CMSIS-Driver I2C loopback, RGB LED control, and heartbeat output.
+scan, I2C loopback, RGB LED control, and heartbeat output.
 
 <img src="docs/images/serial-console.png" alt="Serial console output from dspic33ak-hal-starter running on dsPIC33AK hardware" width="900">
 
@@ -27,8 +27,8 @@ The SST26 SPI flash, RGB LED, and potentiometer used by the demo are on the
 Curiosity motherboard. The I2C scan also runs on a bare bus; if an I2C device is
 connected, its ACK address is printed.
 
-For the CMSIS-Driver I2C master/slave loopback demo, I2C2 and I2C3 are used as a
-shared-bus loopback on the starter board setup.
+For the I2C master/slave loopback demo, I2C2 and I2C3 are used as a shared-bus
+loopback on the starter board setup.
 
 This starter is intentionally board- and device-specific (single device, no
 `__dsPIC33AK128MC106__` branches) to stay small and obvious.
@@ -51,7 +51,7 @@ The firmware demonstrates:
 4. **I2C bus scan**  
    Probes 7-bit I2C addresses and prints devices that ACK
 
-5. **CMSIS-Driver I2C loopback**  
+5. **I2C loopback**  
    Runs an I2C2 master <-> I2C3 slave round-trip test
 
 6. **GPIO / ADC / PWM demo**  
@@ -118,9 +118,9 @@ makefiles are git-ignored and recreated by MPLAB X.
 ```
 
 (The I2C addresses found depend on what is attached. In the screenshot above,
-the scan finds a device at `0x1A`; the CMSIS-Driver I2C loopback slave itself
-runs at `0x55`. Turning the potentiometer sweeps the RGB LED green -> blue ->
-white -> red.)
+the scan finds a device at `0x1A`; the I2C loopback slave itself runs at
+`0x55`. Turning the potentiometer sweeps the RGB LED green -> blue -> white ->
+red.)
 
 ## Layout
 
