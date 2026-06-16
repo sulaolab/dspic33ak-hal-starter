@@ -50,12 +50,26 @@ static void console_uart_init(void)
     (void)dspic33ak_uart_init(DSPIC33AK_UART_INST_1, &cfg);
 }
 
+static void term_init_safe(void)
+{
+    /*
+     * Recover the terminal from a possible VT100/ISO-2022 shifted state.
+     * If noise, binary data, or an interrupted ESC sequence reaches the UART,
+     * some terminal emulators may switch to an alternate character set or
+     * non-default text attributes. The copied text can still be correct while
+     * the on-screen glyphs look corrupted.
+     */
+    printf("\x1b(B\x0F");  /* Select US-ASCII as G0 and shift back to G0 */
+    printf("\x1b[0m");     /* Reset text attributes */
+}
+
 int main(void)
 {
     (void)dspic33ak_clock_init();      /* FRC -> PLL1 200 MHz; route CLKGEN1/5/6/8/9 */
     board_ports_digital_default();     /* all pins digital (needed for I2C SDA/SCL) */
     systick_init();                    /* 1 ms time base (heartbeat + I2C timeout)  */
     console_uart_init();               /* UART1 pins + 230400 8N1, printf retargeted */
+    term_init_safe();
 
     printf("\n\n");
     printf("==============================================\n");
