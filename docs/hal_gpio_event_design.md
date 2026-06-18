@@ -2,8 +2,7 @@
 
 This note describes the small GPIO Change Notification (CN) event layer used by
 the `gpio-event-sw3-validation` branch. It is an experiment for real hardware
-validation, not a production-grade GPIO driver and not a CMSIS Driver_GPIO
-implementation.
+validation, not a production-grade GPIO driver.
 
 ## File Split
 
@@ -35,7 +34,7 @@ void dspic33ak_gpio_event_process_isr(void);
 Phase 1 accepts `DSPIC33AK_GPIO_EVENT_EDGE_EITHER` for `attach()`. The enum also
 contains `FALLING` and `RISING` because callbacks report the detected edge, but
 single-edge attach policy is intentionally deferred until the dsPIC33AK
-`CNEN0x`/`CNEN1x` polarity mapping is finalized for the wrapper API.
+`CNEN0x`/`CNEN1x` polarity mapping is finalized.
 
 ## ISR Ownership
 
@@ -127,10 +126,9 @@ Expected serial banner line:
 - It does not check package-level pin availability.
 - It does not configure analog protection or PPS ownership.
 
-## Future CMSIS Driver_GPIO Mapping
+## Future Wrapper Mapping
 
-This layer is a useful stepping stone for a future CMSIS-Driver GPIO-like
-wrapper:
+This layer is a useful stepping stone for a future GPIO wrapper:
 
 - `dspic33ak_gpio_pin_t` can remain the low-level pin handle.
 - `dspic33ak_gpio_config()` maps naturally to pin initialization and direction.
@@ -141,7 +139,7 @@ wrapper:
 - `dspic33ak_gpio_event_attach()` can become the basis for event callbacks after
   edge policy, debounce, and ownership rules are defined.
 
-Open decisions for a later CMSIS-like layer:
+Open decisions for a later wrapper layer:
 
 - whether GPIO init should automatically force ANSEL to digital
 - how analog-capable pins should be protected from accidental digital use

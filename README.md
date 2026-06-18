@@ -138,7 +138,7 @@ docs/
   images/
     serial-console.png   live UART/PRINTF startup log screenshot
   hal_gpio_event_design.md
-                         GPIO CN event design notes and CMSIS mapping sketch
+                         GPIO CN event design notes
   touch-addon.md        optional capacitive-touch add-on (QTM; not bundled)
 ```
 
