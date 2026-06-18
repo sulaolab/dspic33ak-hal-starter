@@ -8,10 +8,12 @@
  *   SW1 = RF3, SW2 = RF0, SW3 = RB2  (active-low, pulled up)
  */
 
+#include <xc.h>
 #include <stdio.h>
 
 #include "led_sw.h"
 #include "dspic33ak_gpio.h"
+#include "dspic33ak_gpio_event.h"
 #include "systick.h"
 
 /* LED0..LED7 -> RC8..RC15, lit when driven high. LEDs are 0-indexed to match
@@ -34,6 +36,31 @@ static const dspic33ak_gpio_pin_t SW_PINS[LED_SW_SW_COUNT] = {
     DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_B, 2),    /* SW3 */
 };
 
+#define LED_SW_SW3_INDEX      2u
+#define LED_SW_SW3_NUMBER     3u
+#define LED_SW_SW3_EVENT_LED  5u
+
+static volatile bool s_sw3_pressed;
+
+static void led_sw_sw3_event_callback(dspic33ak_gpio_pin_t pin,
+                                      dspic33ak_gpio_event_edge_t edge,
+                                      void *user_data)
+{
+    (void)pin;
+    (void)user_data;
+
+    if (edge == DSPIC33AK_GPIO_EVENT_EDGE_FALLING) {
+        s_sw3_pressed = true;     /* active-low press */
+    } else if (edge == DSPIC33AK_GPIO_EVENT_EDGE_RISING) {
+        s_sw3_pressed = false;    /* active-low release */
+    }
+}
+
+void __attribute__((__interrupt__, __no_auto_psv__)) _CNBInterrupt(void)
+{
+    dspic33ak_gpio_event_process_isr();
+}
+
 void led_sw_init(void)
 {
     uint8_t i;
@@ -49,6 +76,16 @@ void led_sw_init(void)
         dspic33ak_gpio_set_direction(SW_PINS[i], DSPIC33AK_GPIO_DIR_INPUT);
         dspic33ak_gpio_set_pull(SW_PINS[i], DSPIC33AK_GPIO_PULL_UP);
     }
+
+    s_sw3_pressed = led_sw_pressed(LED_SW_SW3_NUMBER);
+    (void)dspic33ak_gpio_event_attach(SW_PINS[LED_SW_SW3_INDEX],
+                                      DSPIC33AK_GPIO_EVENT_EDGE_EITHER,
+                                      led_sw_sw3_event_callback,
+                                      0);
+
+    _CNBIP = 4u;
+    _CNBIF = 0u;
+    _CNBIE = 1u;
 }
 
 void led_sw_set(uint8_t led, bool on)
@@ -98,11 +135,7 @@ void led_sw_boot_test(uint32_t hold_ms)
 
 void led_sw_update(void)
 {
-    /* SW1->LED7, SW2->LED6, SW3->LED5, each lit only while its switch is held. */
-    static const uint8_t SW_TO_LED[LED_SW_SW_COUNT] = { 7u, 6u, 5u };
-    uint8_t sw;
-
-    for (sw = 1u; sw <= LED_SW_SW_COUNT; sw++) {
-        led_sw_set(SW_TO_LED[sw - 1u], led_sw_pressed(sw));
-    }
+    led_sw_set(7u, led_sw_pressed(1u));
+    led_sw_set(6u, led_sw_pressed(2u));
+    led_sw_set(LED_SW_SW3_EVENT_LED, s_sw3_pressed);
 }

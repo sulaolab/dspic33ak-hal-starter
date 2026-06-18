@@ -82,10 +82,11 @@ int main(void)
 
     /* ---- User LEDs + switches (GPIO) ----
      * Power-on indicator: light all 8 LEDs for 1 s, then clear. Afterwards the
-     * main loop lights LED7/LED6/LED5 while SW1/SW2/SW3 are held. */
+     * main loop polls SW1/SW2 for LED7/LED6 and mirrors the SW3 CN event state
+     * on LED5. */
     led_sw_init();
     led_sw_boot_test(1000u);
-    printf(" LEDs: power-on test done; SW1/SW2/SW3 now drive LED7/LED6/LED5.\n");
+    printf(" LEDs: SW1/SW2 poll LED7/LED6; SW3 CN event drives LED5.\n");
     printf("==============================================\n");
 
     /* ---- SPI external flash (SST26 on SPI4) ---- */
@@ -146,7 +147,7 @@ int main(void)
     while (1)
     {
         rgb_pot_update();
-        led_sw_update();      /* SW1/2/3 held -> LED7/6/5 lit */
+        led_sw_update();      /* SW1/2 polled; SW3 event state mirrored on LED5 */
 
         uint32_t now = systick_ms();
         if ((uint32_t)(now - last_beat) >= 1000u) {
