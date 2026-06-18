@@ -40,6 +40,7 @@ typedef struct
     dspic33ak_gpio_event_edge_t     trigger;
     dspic33ak_gpio_event_callback_t callback;
     void                           *user_data;
+    bool                            previous_high;
 } dspic33ak_gpio_event_slot_t;
 
 #define DSPIC33AK_GPIO_EVENT_PORT_ROW(L, IFS_REG, IFS_MASK) \
@@ -141,6 +142,7 @@ bool dspic33ak_gpio_event_attach(dspic33ak_gpio_pin_t pin,
     s_event_slots[port_index][bit_index].trigger   = trigger;
     s_event_slots[port_index][bit_index].callback  = callback;
     s_event_slots[port_index][bit_index].user_data = user_data;
+    s_event_slots[port_index][bit_index].previous_high = ((*regs->port & mask) != 0u);
     s_event_owned_masks[port_index] |= mask;
 
     *regs->cncon |= (DSPIC33AK_GPIO_EVENT_CNCON_CNSTYLE | DSPIC33AK_GPIO_EVENT_CNCON_ON);
@@ -172,6 +174,7 @@ bool dspic33ak_gpio_event_detach(dspic33ak_gpio_pin_t pin)
     s_event_slots[port_index][bit_index].trigger   = DSPIC33AK_GPIO_EVENT_EDGE_NONE;
     s_event_slots[port_index][bit_index].callback  = 0;
     s_event_slots[port_index][bit_index].user_data = 0;
+    s_event_slots[port_index][bit_index].previous_high = false;
     s_event_owned_masks[port_index] &= ~mask;
 
     return true;
@@ -211,6 +214,7 @@ void dspic33ak_gpio_event_process_isr(void)
             uint32_t bit_mask = (uint32_t)1u << bit_index;
             dspic33ak_gpio_event_slot_t *slot;
             dspic33ak_gpio_event_edge_t actual_edge;
+            bool current_high;
 
             if ((pending_mask & bit_mask) == 0u)
             {
@@ -218,9 +222,16 @@ void dspic33ak_gpio_event_process_isr(void)
             }
 
             slot = &s_event_slots[port_index][bit_index];
-            actual_edge = ((port_level & bit_mask) != 0u) ?
+            current_high = ((port_level & bit_mask) != 0u);
+            if (current_high == slot->previous_high)
+            {
+                continue;
+            }
+
+            actual_edge = current_high ?
                           DSPIC33AK_GPIO_EVENT_EDGE_RISING :
                           DSPIC33AK_GPIO_EVENT_EDGE_FALLING;
+            slot->previous_high = current_high;
 
             if ((slot->callback != 0) &&
                 dspic33ak_gpio_event_trigger_matches(slot->trigger, actual_edge))

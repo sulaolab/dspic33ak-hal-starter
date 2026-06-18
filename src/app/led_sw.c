@@ -42,6 +42,15 @@ static const dspic33ak_gpio_pin_t SW_PINS[LED_SW_SW_COUNT] = {
 
 static volatile bool s_sw3_pressed;
 
+static void led_sw_log_transition(uint8_t sw, bool pressed)
+{
+    if (sw == LED_SW_SW3_NUMBER) {
+        printf(" SW3 CN ISR event: %s\n", pressed ? "falling press" : "rising release");
+    } else {
+        printf(" SW%u %s\n", (unsigned)sw, pressed ? "press" : "release");
+    }
+}
+
 static void led_sw_sw3_event_callback(dspic33ak_gpio_pin_t pin,
                                       dspic33ak_gpio_event_edge_t edge,
                                       void *user_data)
@@ -58,6 +67,7 @@ static void led_sw_sw3_event_callback(dspic33ak_gpio_pin_t pin,
 
 void __attribute__((__interrupt__, __no_auto_psv__)) _CNBInterrupt(void)
 {
+    /* The event layer clears CNFB for owned pins and the CNB interrupt flag. */
     dspic33ak_gpio_event_process_isr();
 }
 
@@ -135,7 +145,34 @@ void led_sw_boot_test(uint32_t hold_ms)
 
 void led_sw_update(void)
 {
-    led_sw_set(7u, led_sw_pressed(1u));
-    led_sw_set(6u, led_sw_pressed(2u));
-    led_sw_set(LED_SW_SW3_EVENT_LED, s_sw3_pressed);
+    static bool initialized;
+    static bool previous_pressed[LED_SW_SW_COUNT];
+    bool sw1_pressed = led_sw_pressed(1u);
+    bool sw2_pressed = led_sw_pressed(2u);
+    bool sw3_pressed = s_sw3_pressed;
+
+    led_sw_set(7u, sw1_pressed);
+    led_sw_set(6u, sw2_pressed);
+    led_sw_set(LED_SW_SW3_EVENT_LED, sw3_pressed);
+
+    if (!initialized) {
+        previous_pressed[0] = sw1_pressed;
+        previous_pressed[1] = sw2_pressed;
+        previous_pressed[2] = sw3_pressed;
+        initialized = true;
+        return;
+    }
+
+    if (sw1_pressed != previous_pressed[0]) {
+        led_sw_log_transition(1u, sw1_pressed);
+        previous_pressed[0] = sw1_pressed;
+    }
+    if (sw2_pressed != previous_pressed[1]) {
+        led_sw_log_transition(2u, sw2_pressed);
+        previous_pressed[1] = sw2_pressed;
+    }
+    if (sw3_pressed != previous_pressed[2]) {
+        led_sw_log_transition(3u, sw3_pressed);
+        previous_pressed[2] = sw3_pressed;
+    }
 }
