@@ -69,7 +69,6 @@ int main(void)
     board_ports_digital_default();     /* all pins digital (needed for I2C SDA/SCL) */
     systick_init();                    /* 1 ms time base (heartbeat + I2C timeout)  */
     console_uart_init();               /* UART1 pins + 230400 8N1, printf retargeted */
-    term_init_safe();
 
     printf("\n\n");
     printf("==============================================\n");
@@ -82,10 +81,11 @@ int main(void)
 
     /* ---- User LEDs + switches (GPIO) ----
      * Power-on indicator: light all 8 LEDs for 1 s, then clear. Afterwards the
-     * main loop lights LED7/LED6/LED5 while SW1/SW2/SW3 are held. */
+     * main loop polls SW1/SW2 for LED7/LED6 and mirrors the SW3 CN event state
+     * on LED5. */
     led_sw_init();
     led_sw_boot_test(1000u);
-    printf(" LEDs: power-on test done; SW1/SW2/SW3 now drive LED7/LED6/LED5.\n");
+    printf(" LEDs: SW1/SW2 poll LED7/LED6; SW3 CN event drives LED5.\n");
     printf("==============================================\n");
 
     /* ---- SPI external flash (SST26 on SPI4) ---- */
@@ -143,12 +143,18 @@ int main(void)
      * I2C Write+Read round trip, logging both directions. */
     uint32_t beat      = 0u;
     uint32_t last_beat = systick_ms();
+    uint32_t last_term_reset = systick_ms();
     while (1)
     {
         rgb_pot_update();
-        led_sw_update();      /* SW1/2/3 held -> LED7/6/5 lit */
+        led_sw_update();      /* SW1/2 polled; SW3 event state mirrored on LED5 */
 
         uint32_t now = systick_ms();
+        if ((uint32_t)(now - last_term_reset) >= 3000u) {
+            last_term_reset = now;
+            term_init_safe();
+        }
+
         if ((uint32_t)(now - last_beat) >= 1000u) {
             last_beat = now;
             led_sw_toggle(0u);      /* LED0 = heartbeat indicator */

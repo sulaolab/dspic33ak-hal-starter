@@ -52,8 +52,9 @@ bool led_sw_pressed(uint8_t sw);
  * Blocking; uses the systick millisecond time base. */
 void led_sw_boot_test(uint32_t hold_ms);
 
-/* Map the switches to LEDs: SW1->LED7, SW2->LED6, SW3->LED5, each lit only
- * while its switch is held. Call repeatedly from the main loop. */
+/* Map the switches to LEDs. SW1 and SW2 are polled and drive LED7/LED6.
+ * SW3 is handled by a CN GPIO event and drives LED5. Call repeatedly from the
+ * main loop so ISR state is reflected on the LEDs outside the callback. */
 void led_sw_update(void);
 
 #ifdef __cplusplus

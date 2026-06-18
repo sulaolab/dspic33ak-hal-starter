@@ -96,7 +96,7 @@ makefiles are git-ignored and recreated by MPLAB X.
  sysclk : 200000000 Hz (FRC -> PLL1)
  uart   : UART1 @ 230400 8N1
 ==============================================
- LEDs: power-on test done; SW1/SW2/SW3 now drive LED7/LED6/LED5.
+ LEDs: SW1/SW2 poll LED7/LED6; SW3 CN event drives LED5.
 ==============================================
  SST26 JEDEC: MFR=0xBF TYPE=0x26 DEV=0x12 (good)
  SST26 sector verify @0x000000: OK
@@ -132,10 +132,13 @@ src/
   board/                board pin map + per-peripheral pin/PPS wiring
   hal/                  vendored HALs: dspic33ak_gpio / _uart / _spi / _i2c
                         (+ a tiny printf->UART retarget and a minimal SST26 driver)
+  hal_gpio/             GPIO CN event validation layer built above dspic33ak_gpio
   app/                  samples: i2c_scan, rgb_pot (ADC + PWM)
 docs/
   images/
     serial-console.png   live UART/PRINTF startup log screenshot
+  hal_gpio_event_design.md
+                         GPIO CN event design notes
   touch-addon.md        optional capacitive-touch add-on (QTM; not bundled)
 ```
 
