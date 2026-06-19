@@ -23,9 +23,24 @@
 #include "i2c_scan.h"
 #include "i2c_loopback.h"
 #include "can_loopback.h"
+#include "can_bus_test.h"
 #include "rgb_pot.h"
 #include "led_sw.h"
 #include "board.h"
+
+/* ---- CAN two-board bus test (optional) ----
+ * 0 = boot runs only the single-board internal-loopback self-test, then the
+ *     normal heartbeat loop.
+ * 1 = after that self-test, enter the two-board CAN FD bus test (never returns).
+ *     Build one board with CAN_BUS_TEST_ECHO=0 (originator, id 0x0A0) and the
+ *     other with CAN_BUS_TEST_ECHO=1 (echo, id 0x0B0). Needs J21<->J21 wiring
+ *     (CANH/CANL/GND) and 120 ohm termination (J22/J23) on both boards. */
+#ifndef CAN_BUS_TEST
+#define CAN_BUS_TEST       0
+#endif
+#ifndef CAN_BUS_TEST_ECHO
+#define CAN_BUS_TEST_ECHO  0
+#endif
 
 /* ---- Device configuration words ----
  * Most config bits use device defaults (the device boots on the FRC, which we
@@ -134,15 +149,21 @@ int main(void)
            loopback_ok ? "ready" : "slave init FAILED");
     printf("==============================================\n");
 
-    /* ---- CAN FD internal-loopback self-test (CAN1) ----
-     * Single board, no external wiring: route the 20 MHz CAN clock (CLKGEN10),
-     * configure the CAN1 pins (PPS + module enable), then round-trip one CAN FD
-     * frame through the controller's internal loopback path. */
+    /* ---- CAN FD (CAN1) ----
+     * Route the 20 MHz CAN clock (CLKGEN10) and configure the CAN1 pins (PPS +
+     * module enable), then run the single-board internal-loopback self-test
+     * (always, as a quick HAL check). With CAN_BUS_TEST=1 the firmware then
+     * enters the two-board bus test (CAN_BUS_TEST_ECHO selects originator vs
+     * echo; needs J21<->J21 wiring + termination on both boards) and does not
+     * return; otherwise it continues to the normal heartbeat loop. */
     dspic33ak_clock_can_init();
     board_can1_pins_init();
     printf(" CAN1 FD internal-loopback self-test: %s\n",
            can_loopback_selftest() ? "PASS" : "FAILED");
     printf("==============================================\n");
+#if CAN_BUS_TEST
+    can_bus_test_run(CAN_BUS_TEST_ECHO);   /* never returns */
+#endif
 
     /* ---- Potentiometer (ADC5) -> RGB LED (PWM1/2/3) ---- */
     rgb_pot_init();
