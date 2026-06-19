@@ -4,11 +4,18 @@ A ready-to-run MPLAB X starter project for the **dsPIC33AK512MPS512**.
 
 Flash this project, open a serial terminal, and you should immediately see the
 board bring-up log: clock setup, UART `printf()`, SPI flash verification, I2C
-scan, I2C loopback, RGB LED control, and heartbeat output.
+scan, and then an alternating I2C-loopback / CAN FD bus demo with RGB LED control
+and heartbeat output.
 
-<img src="docs/images/serial-console.png" alt="Serial console output from dspic33ak-hal-starter running on dsPIC33AK hardware" width="900">
+<img src="docs/images/serial-console.png" alt="Serial console from dspic33ak-hal-starter: a two-board CAN FD session with the I2C loopback and CAN FD frames interleaving" width="900">
 
-Captured from a live board session using Tera Term.
+Captured from a live **two-board** session using Tera Term. This board (A) runs
+the starter; a second board (B) flashed in echo config is wired to it over CAN
+(J21&harr;J21, CANH/CANL/GND + termination). So the CAN1 frames are ACKed and
+echoed back — the log shows the `<[CAN1 Tx] id=0x123` transmits and the
+`>[CAN1 Rx] id=0x0B0` echoes from board B, interleaved with the I2C loopback. On
+a single board with no CAN partner, the CAN1 controller instead goes
+`error-passive` and retransmits (a burst you can see on a scope/CAN analyzer).
 
 ## Required hardware
 
@@ -162,7 +169,7 @@ src/
                         can_bus_test (two-board), rgb_pot (ADC + PWM)
 docs/
   images/
-    serial-console.png   live UART/PRINTF startup log screenshot
+    serial-console.png   live two-board CAN FD + I2C session screenshot
   hal_gpio_event_design.md
                          GPIO CN event design notes
   touch-addon.md        optional capacitive-touch add-on (QTM; not bundled)
