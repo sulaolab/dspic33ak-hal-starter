@@ -113,7 +113,7 @@ makefiles are git-ignored and recreated by MPLAB X.
 ==============================================
  I2C loopback: I2C2 master <-> I2C3 slave @0x55 (ready); per beat below.
 ==============================================
- CAN1 FD internal-loopback self-test: PASS
+ CAN1 internal-loopback self-test: PASS
 ==============================================
  RGB LED follows the potentiometer; LED0 blinks with the heartbeat.
 ==============================================

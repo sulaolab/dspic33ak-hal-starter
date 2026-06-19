@@ -111,7 +111,7 @@ static void log_bytes(char dir, unsigned inst_num, const char *op,
                       const volatile uint8_t *buf, unsigned n)
 {
     unsigned i;
-    printf(" %cI2C%u %s: size=%u ", dir, inst_num, op, n);
+    printf(" %c[I2C%u %s] size=%u ", dir, inst_num, op, n);
     for (i = 0u; i < n && i < LB_LEN; i++) {
         printf("%02X", buf[i]);
     }

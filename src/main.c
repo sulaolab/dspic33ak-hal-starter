@@ -150,7 +150,7 @@ int main(void)
      * return; otherwise it continues to the normal heartbeat loop. */
     dspic33ak_clock_can_init();
     board_can1_pins_init();
-    printf(" CAN1 FD internal-loopback self-test: %s\n",
+    printf(" CAN1 internal-loopback self-test: %s\n",
            can_loopback_selftest() ? "PASS" : "FAILED");
     printf("==============================================\n");
 #if CAN_BUS_TEST
