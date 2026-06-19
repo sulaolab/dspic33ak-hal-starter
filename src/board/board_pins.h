@@ -61,4 +61,16 @@
 #define BOARD_POT_ANSEL_PORT      ANSELA
 #define BOARD_POT_ANSEL_BIT       (7u)     /* RA7 = AD5AN0 (analog input) */
 
+/* ---- CAN1 (CAN FD) -> on-board ATA6563 transceiver (bus on J21 CANH/CANL) ----
+ *   C1TX = RD13 (RP62)   C1RX = RD11 (RP60)   STBY = RD14 (GPIO, low = normal)
+ * The CAN RX input PPS MUST be assigned even for internal loopback, or the
+ * module never integrates and init times out.
+ */
+#define BOARD_CAN1_PIN_TX         DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_D, 13)
+#define BOARD_CAN1_PIN_RX         DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_D, 11)
+#define BOARD_CAN1_PIN_STBY       DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_D, 14)
+#define BOARD_CAN1_TX_RPnR        _RP62R          /* C1TX output pin select (RP62/RD13) */
+#define BOARD_CAN1_TX_PPS_FUNC    _RPOUT_CAN1TX   /* C1TX output function code           */
+#define BOARD_CAN1_RX_PPS_SRC     (60u)           /* C1RX input <- RP60 (RD11)           */
+
 #endif /* BOARD_PINS_H */

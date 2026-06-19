@@ -58,6 +58,13 @@ typedef enum
  */
 bool dspic33ak_clock_init(void);
 
+/*
+ * Route CLKGEN10 to PLL1 at divide-by-10 => 20 MHz FCAN for the CAN FD module.
+ * Call after dspic33ak_clock_init() and before bringing up the CAN HAL. The CAN
+ * domain is separate from CLKGEN1/5/6/8/9, so this does not affect other clocks.
+ */
+void dspic33ak_clock_can_init(void);
+
 #ifdef __cplusplus
 }
 #endif

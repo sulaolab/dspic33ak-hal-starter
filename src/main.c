@@ -22,6 +22,7 @@
 #include "sst26_min.h"
 #include "i2c_scan.h"
 #include "i2c_loopback.h"
+#include "can_loopback.h"
 #include "rgb_pot.h"
 #include "led_sw.h"
 #include "board.h"
@@ -131,6 +132,16 @@ int main(void)
     bool loopback_ok = i2c_loopback_init();
     printf(" I2C loopback: I2C2 master <-> I2C3 slave @0x55 (%s); per beat below.\n",
            loopback_ok ? "ready" : "slave init FAILED");
+    printf("==============================================\n");
+
+    /* ---- CAN FD internal-loopback self-test (CAN1) ----
+     * Single board, no external wiring: route the 20 MHz CAN clock (CLKGEN10),
+     * configure the CAN1 pins (PPS + module enable), then round-trip one CAN FD
+     * frame through the controller's internal loopback path. */
+    dspic33ak_clock_can_init();
+    board_can1_pins_init();
+    printf(" CAN1 FD internal-loopback self-test: %s\n",
+           can_loopback_selftest() ? "PASS" : "FAILED");
     printf("==============================================\n");
 
     /* ---- Potentiometer (ADC5) -> RGB LED (PWM1/2/3) ---- */

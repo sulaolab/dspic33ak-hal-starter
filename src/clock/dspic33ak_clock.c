@@ -36,6 +36,24 @@
     } while (0)
 
 /*
+ * Same as CLOCK_ROUTE_CLKGEN, but with a caller-chosen integer divider. The
+ * CLKGENn output ratio is 2*INTDIV (INTDIV=0 = bypass /1), so e.g. INTDIV=5
+ * gives divide-by-10.
+ */
+#define CLOCK_ROUTE_CLKGEN_DIV(n, src, intdiv)           \
+    do {                                                 \
+        CLK##n##CONbits.ON      = 0;                     \
+        CLK##n##CONbits.NOSC    = (uint8_t)(src);        \
+        CLK##n##CONbits.ON      = 1;                     \
+        CLK##n##CONbits.OE      = 1;                     \
+        CLK##n##DIVbits.INTDIV  = (uint16_t)(intdiv);    \
+        CLK##n##CONbits.DIVSWEN = 1;                     \
+        while (CLK##n##CONbits.DIVSWEN) { }              \
+        CLK##n##CONbits.OSWEN   = 1;                     \
+        while (CLK##n##CONbits.OSWEN) { }                \
+    } while (0)
+
+/*
  * Search PLL1 dividers (PRE / FBDIV / POST1 / POST2) for a setting that turns
  * in_hz into req_hz while respecting the device PLL constraints:
  *   FPLLI = Fin / PRE                 in [5 MHz, 64 MHz]
@@ -133,4 +151,16 @@ bool dspic33ak_clock_init(void)
     CLOCK_ROUTE_CLKGEN(9, DSPIC33AK_CLKSRC_PLL1);   /* SPI  (SST26 flash)        */
 
     return true;
+}
+
+void dspic33ak_clock_can_init(void)
+{
+    /*
+     * CLKGEN10 -> PLL1 with INTDIV=5 (ratio 2*INTDIV = 10) => 200 MHz / 10 =
+     * 20 MHz FCAN, the CAN FD module clock. The CAN FD module selects this block
+     * with CxCON.CLKSEL = 0 (done by the HAL init). 20 MHz is used because it is
+     * a clean integer divide of the 200 MHz PLL1 and matches the module's
+     * recommended {20,40,80} MHz CAN clock range.
+     */
+    CLOCK_ROUTE_CLKGEN_DIV(10, DSPIC33AK_CLKSRC_PLL1, 5);
 }
