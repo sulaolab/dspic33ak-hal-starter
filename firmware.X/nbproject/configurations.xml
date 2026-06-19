@@ -20,6 +20,8 @@
       <logicalFolder name="f4" displayName="app" projectFiles="true">
         <itemPath>../src/app/i2c_scan.c</itemPath>
         <itemPath>../src/app/i2c_loopback.c</itemPath>
+        <itemPath>../src/app/can_loopback.c</itemPath>
+        <itemPath>../src/app/can_bus_test.c</itemPath>
         <itemPath>../src/app/rgb_pot.c</itemPath>
         <itemPath>../src/app/led_sw.c</itemPath>
       </logicalFolder>
@@ -42,6 +44,12 @@
         <itemPath>../src/hal/dspic33ak_i2c_master.c</itemPath>
         <itemPath>../src/hal/dspic33ak_i2c_slave.c</itemPath>
         <itemPath>../src/hal/dspic33ak_i2c_device.c</itemPath>
+      </logicalFolder>
+      <logicalFolder name="f6" displayName="hal_can" projectFiles="true">
+        <itemPath>../src/hal_can/dspic33ak_canfd_common.c</itemPath>
+        <itemPath>../src/hal_can/dspic33ak_canfd_device.c</itemPath>
+        <itemPath>../src/hal_can/dspic33ak_canfd_node.c</itemPath>
+        <itemPath>../src/hal_can/dspic33ak_canfd_isr.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f5" displayName="hal_gpio" projectFiles="true">
         <itemPath>../src/hal_gpio/dspic33ak_gpio_event.c</itemPath>
@@ -113,7 +121,7 @@
         <property key="enable-unroll-loops" value="false"/>
         <property key="expand-pragma-config" value="false"/>
         <property key="extra-include-directories"
-                  value="..\src;..\src\clock;..\src\board;..\src\hal;..\src\hal_gpio;..\src\app"/>
+                  value="..\src;..\src\clock;..\src\board;..\src\hal;..\src\hal_gpio;..\src\hal_can;..\src\app"/>
         <property key="isolate-each-function" value="false"/>
         <property key="keep-inline" value="false"/>
         <property key="oXC16gcc-cnsts-mauxflash" value="false"/>

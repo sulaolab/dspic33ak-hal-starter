@@ -38,6 +38,12 @@ void board_spi4_sst26_pins_init(void);
  * The PWM module itself is set up by the rgb_pot sample. */
 void board_rgb_pins_init(void);
 
+/* Configure the CAN1 (CAN FD) pins: C1TX -> RP62 (RD13), C1RX <- RP60 (RD11),
+ * STBY (RD14) driven low = ATA6563 normal mode; also enables the CAN1 module
+ * (PMD3.C1MD = 0). Call before the CAN HAL init; pair with
+ * dspic33ak_clock_can_init() for the 20 MHz CAN clock. */
+void board_can1_pins_init(void);
+
 #ifdef __cplusplus
 }
 #endif

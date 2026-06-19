@@ -4,24 +4,31 @@ A ready-to-run MPLAB X starter project for the **dsPIC33AK512MPS512**.
 
 Flash this project, open a serial terminal, and you should immediately see the
 board bring-up log: clock setup, UART `printf()`, SPI flash verification, I2C
-scan, I2C loopback, RGB LED control, and heartbeat output.
+scan, and then an alternating I2C-loopback / CAN FD bus demo with RGB LED control
+and heartbeat output.
 
-<img src="docs/images/serial-console.png" alt="Serial console output from dspic33ak-hal-starter running on dsPIC33AK hardware" width="900">
+<img src="docs/images/serial-console.png" alt="Serial console from dspic33ak-hal-starter: a two-board CAN FD session with the I2C loopback and CAN FD frames interleaving" width="900">
 
-Captured from a live board session using Tera Term.
+Captured from a live **two-board** session using Tera Term. This board (A) runs
+the starter; a second board (B) flashed in echo config is wired to it over CAN
+(J21 <-> J21, CANH/CANL/GND + termination). So the CAN1 frames are ACKed and
+echoed back — the log shows the `<[CAN1 Tx] id=0x123` transmits and the
+`>[CAN1 Rx] id=0x0B0` echoes from board B, interleaved with the I2C loopback. On
+a single board with no CAN partner, the CAN1 controller instead goes
+`error-passive` and retransmits (a burst you can see on a scope/CAN analyzer).
 
 ## Required hardware
 
-This project targets the following Microchip hardware combination:
+This project targets the following Microchip hardware - just two parts:
 
 * **[EV74H48A](https://www.microchip.com/en-us/development-tool/EV74H48A)** -
-  Curiosity Platform Development Board
+  Curiosity Platform Development Board. It already carries an **on-board PKOB4**
+  programmer/debugger and a USB connector, so a single USB cable handles both
+  programming and the UART console - no separate programmer or adapter needed.
 * **[EV80L65A](https://www.microchip.com/en-us/development-tool/EV80L65A)** -
-  dsPIC33AK512MPS512 DIM
-* On-board **PKOB4** programmer/debugger
-* USB connection for programming and UART console output
+  dsPIC33AK512MPS512 DIM, which plugs into the Curiosity board.
 
-No external hardware is required for the basic bring-up sequence.
+Plus a USB cable. No external hardware is required for the basic bring-up sequence.
 
 The SST26 SPI flash, RGB LED, and potentiometer used by the demo are on the
 Curiosity motherboard. The I2C scan also runs on a bare bus; if an I2C device is
@@ -54,7 +61,16 @@ The firmware demonstrates:
 5. **I2C loopback**  
    Runs an I2C2 master <-> I2C3 slave round-trip test
 
-6. **GPIO / ADC / PWM demo**  
+6. **CAN FD on the bus**  
+   A quick internal-loopback HAL self-check, then CAN1 transmits a CAN FD frame
+   on the real bus each beat (NORMAL FD, 500k/2M). A lone board has no ACK
+   partner, so it goes error-passive and retransmits — a visible burst on
+   CANH/CANL — and the TX queue fills (`queue full / timeout`); connect a CAN
+   node/analyzer (or a 2nd board in echo config) to ACK it and see steady CAN
+   traffic. A dedicated two-board bus test is also available at build time (see
+   `CAN_BUS_TEST` in `main.c`)
+
+7. **GPIO / ADC / PWM demo**  
    LEDs, switches, potentiometer input, RGB LED output, and heartbeat blinking
 
 In short: this is a known-good hardware starter project for checking that the
@@ -63,8 +79,9 @@ together.
 
 This pairs with the standalone HALs:
 [dspic33ak-gpio-hal](https://github.com/sulaolab/dspic33ak-gpio-hal),
-dspic33ak-spi-hal, dspic33ak-i2c-hal, dspic33ak-uart-hal. Those HALs are vendored
-into `src/hal/` here so the project builds without any external dependency.
+dspic33ak-spi-hal, dspic33ak-i2c-hal, dspic33ak-uart-hal, dspic33ak-can-hal.
+Those HALs are vendored into `src/hal/` (and `src/hal_can/`) here so the project
+builds without any external dependency.
 
 ## Toolchain
 
@@ -107,20 +124,34 @@ makefiles are git-ignored and recreated by MPLAB X.
 ==============================================
  I2C loopback: I2C2 master <-> I2C3 slave @0x55 (ready); per beat below.
 ==============================================
+ CAN1 FD @500k/2M live on the bus (HAL self-check: PASS).
+   No ACK partner -> error-passive + retransmit burst; add a CAN node
+   (analyzer / 2nd board echo) to ACK it and see steady CAN H/L.
+==============================================
  RGB LED follows the potentiometer; LED0 blinks with the heartbeat.
 ==============================================
- heartbeat 0
- >I2C2 WR: size=8 ...
- <I2C2 RD: size=8 ...
+ <[CAN1 Tx] id=0x123 len=64 data=05060708...4344
+ [CAN1] state=error-passive TEC=128 REC=0
 
- heartbeat 1
+ <[I2C2 Wr] size=8 1122334455667788
+ >[I2C3 Rd] size=8 1122334455667788
+ >[I2C2 Rd] size=8 1122334455667788
+ <[I2C3 Wr] size=8 1122334455667788
+
+ <[CAN1 Tx] transmit queue full / timeout
+ [CAN1] state=error-passive TEC=128 REC=0
  ...
 ```
 
+The two peripheral demos alternate once per second (CAN FD on one beat, the I2C
+master/slave round trip on the next), separated by a blank line.
+
 (The I2C addresses found depend on what is attached. In the screenshot above,
-the scan finds a device at `0x1A`; the I2C loopback slave itself runs at
-`0x55`. Turning the potentiometer sweeps the RGB LED green -> blue -> white ->
-red.)
+the scan finds a device at `0x1A`; the I2C loopback slave itself runs at `0x55`.
+Turning the potentiometer sweeps the RGB LED green -> blue -> white -> red. With
+no CAN ACK partner the CAN1 controller is `error-passive` and retransmits — the
+TX queue fills (`queue full / timeout`); connect another CAN node to ACK it and
+it returns to `state=active`.)
 
 ## Layout
 
@@ -133,16 +164,18 @@ src/
   hal/                  vendored HALs: dspic33ak_gpio / _uart / _spi / _i2c
                         (+ a tiny printf->UART retarget and a minimal SST26 driver)
   hal_gpio/             GPIO CN event validation layer built above dspic33ak_gpio
-  app/                  samples: i2c_scan, rgb_pot (ADC + PWM)
+  hal_can/              vendored CAN FD HAL: dspic33ak_canfd_* (node + optional ISR layer)
+  app/                  samples: i2c_scan, i2c_loopback, can_loopback,
+                        can_bus_test (two-board), rgb_pot (ADC + PWM)
 docs/
   images/
-    serial-console.png   live UART/PRINTF startup log screenshot
+    serial-console.png   live two-board CAN FD + I2C session screenshot
   hal_gpio_event_design.md
                          GPIO CN event design notes
   touch-addon.md        optional capacitive-touch add-on (QTM; not bundled)
 ```
 
-Design split: **GPIO / UART / SPI / I2C are the HALs**; the clock, board pin
+Design split: **GPIO / UART / SPI / I2C / CAN FD are the HALs**; the clock, board pin
 wiring, and the ADC/PWM demo are starter-specific code, kept deliberately small
 and hand-written. PPS routing lives in the board layer; the HALs never touch
 pins.

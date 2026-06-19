@@ -17,6 +17,8 @@
  *                                   +--> CLKGEN6  --> ADC      (potentiometer)
  *                                   +--> CLKGEN8  --> UART     (printf @230400)
  *                                   +--> CLKGEN9  --> SPI      (SST26 flash)
+ *                                   +--> CLKGEN10 --> CAN FD   (20 MHz FCAN, /10;
+ *                                                     set up by dspic33ak_clock_can_init())
  *
  * Key idea: each "CLKGEN" is a small clock generator block bound to a peripheral
  * domain. You pick its source (here: PLL1), and it feeds that peripheral. A
@@ -57,6 +59,13 @@ typedef enum
  * Returns false if the PLL divider solution could not be found (clock left as-is).
  */
 bool dspic33ak_clock_init(void);
+
+/*
+ * Route CLKGEN10 to PLL1 at divide-by-10 => 20 MHz FCAN for the CAN FD module.
+ * Call after dspic33ak_clock_init() and before bringing up the CAN HAL. The CAN
+ * domain is separate from CLKGEN1/5/6/8/9, so this does not affect other clocks.
+ */
+void dspic33ak_clock_can_init(void);
 
 #ifdef __cplusplus
 }

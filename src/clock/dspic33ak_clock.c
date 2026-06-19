@@ -4,8 +4,10 @@
  * See dspic33ak_clock.h for the clock tree diagram and the public contract.
  *
  * This is a slimmed, dependency-free clock bring-up: PLL1 from the 8 MHz FRC up
- * to 200 MHz, then CLKGEN1/5/6/8/9 routed to PLL1 (divide-by-1). PLL2 and the
- * audio clock paths are intentionally omitted.
+ * to 200 MHz, then CLKGEN1/5/6/8/9 routed to PLL1 (divide-by-1). CLKGEN10 (CAN FD
+ * FCAN = 20 MHz, divide-by-10) is configured separately by
+ * dspic33ak_clock_can_init(). PLL2 and the audio clock paths are intentionally
+ * omitted.
  */
 
 #include <xc.h>
@@ -29,6 +31,24 @@
         CLK##n##CONbits.ON      = 1;                     \
         CLK##n##CONbits.OE      = 1;                     \
         CLK##n##DIVbits.INTDIV  = 0;   /* divide by 1 */ \
+        CLK##n##CONbits.DIVSWEN = 1;                     \
+        while (CLK##n##CONbits.DIVSWEN) { }              \
+        CLK##n##CONbits.OSWEN   = 1;                     \
+        while (CLK##n##CONbits.OSWEN) { }                \
+    } while (0)
+
+/*
+ * Same as CLOCK_ROUTE_CLKGEN, but with a caller-chosen integer divider. The
+ * CLKGENn output ratio is 2*INTDIV (INTDIV=0 = bypass /1), so e.g. INTDIV=5
+ * gives divide-by-10.
+ */
+#define CLOCK_ROUTE_CLKGEN_DIV(n, src, intdiv)           \
+    do {                                                 \
+        CLK##n##CONbits.ON      = 0;                     \
+        CLK##n##CONbits.NOSC    = (uint8_t)(src);        \
+        CLK##n##CONbits.ON      = 1;                     \
+        CLK##n##CONbits.OE      = 1;                     \
+        CLK##n##DIVbits.INTDIV  = (uint16_t)(intdiv);    \
         CLK##n##CONbits.DIVSWEN = 1;                     \
         while (CLK##n##CONbits.DIVSWEN) { }              \
         CLK##n##CONbits.OSWEN   = 1;                     \
@@ -133,4 +153,16 @@ bool dspic33ak_clock_init(void)
     CLOCK_ROUTE_CLKGEN(9, DSPIC33AK_CLKSRC_PLL1);   /* SPI  (SST26 flash)        */
 
     return true;
+}
+
+void dspic33ak_clock_can_init(void)
+{
+    /*
+     * CLKGEN10 -> PLL1 with INTDIV=5 (ratio 2*INTDIV = 10) => 200 MHz / 10 =
+     * 20 MHz FCAN, the CAN FD module clock. The CAN FD module selects this block
+     * with CxCON.CLKSEL = 0 (done by the HAL init). 20 MHz is used because it is
+     * a clean integer divide of the 200 MHz PLL1 and matches the module's
+     * recommended {20,40,80} MHz CAN clock range.
+     */
+    CLOCK_ROUTE_CLKGEN_DIV(10, DSPIC33AK_CLKSRC_PLL1, 5);
 }

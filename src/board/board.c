@@ -52,6 +52,36 @@ void board_uart1_pins_init(void)
     BOARD_UART1_TX_RPnR = BOARD_UART1_TX_PPS_FUNC;
 }
 
+void board_can1_pins_init(void)
+{
+    /* C1TX: digital output, idle high (CAN bus idle line is recessive = high);
+     * PPS then drives it from the CAN module. C1RX: digital input. STBY: output
+     * driven LOW = ATA6563 normal mode (high = standby). */
+    static const dspic33ak_gpio_config_t tx_cfg = {
+        .dir = DSPIC33AK_GPIO_DIR_OUTPUT, .pull = DSPIC33AK_GPIO_PULL_NONE,
+        .analog = false, .open_drain = false, .initial_high = true,
+    };
+    static const dspic33ak_gpio_config_t rx_cfg = {
+        .dir = DSPIC33AK_GPIO_DIR_INPUT,  .pull = DSPIC33AK_GPIO_PULL_NONE,
+        .analog = false, .open_drain = false, .initial_high = false,
+    };
+    static const dspic33ak_gpio_config_t stby_cfg = {
+        .dir = DSPIC33AK_GPIO_DIR_OUTPUT, .pull = DSPIC33AK_GPIO_PULL_NONE,
+        .analog = false, .open_drain = false, .initial_high = false,
+    };
+
+    /* Enable the CAN1 module (clear its module-disable bit) before HAL init. */
+    PMD3bits.C1MD = 0;
+
+    (void)dspic33ak_gpio_config(BOARD_CAN1_PIN_TX,   &tx_cfg);
+    (void)dspic33ak_gpio_config(BOARD_CAN1_PIN_RX,   &rx_cfg);
+    (void)dspic33ak_gpio_config(BOARD_CAN1_PIN_STBY, &stby_cfg);
+
+    /* PPS: route C1RX input from RP60 (RD11), C1TX output onto RP62 (RD13). */
+    _CAN1RXR            = BOARD_CAN1_RX_PPS_SRC;
+    BOARD_CAN1_TX_RPnR  = BOARD_CAN1_TX_PPS_FUNC;
+}
+
 void board_spi4_sst26_pins_init(void)
 {
     /* Per-pin GPIO attributes (the SPI HAL drives only the SPI registers).

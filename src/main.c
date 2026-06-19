@@ -22,9 +22,17 @@
 #include "sst26_min.h"
 #include "i2c_scan.h"
 #include "i2c_loopback.h"
+#include "can_loopback.h"
+#include "can_bus_test.h"
 #include "rgb_pot.h"
 #include "led_sw.h"
 #include "board.h"
+
+/* The optional two-board CAN FD bus test is controlled by CAN_BUS_TEST /
+ * CAN_BUS_TEST_ECHO, both defined (default 0) in can_bus_test.h. With
+ * CAN_BUS_TEST=1 the firmware enters the bus test after the boot self-test and
+ * never returns; build one board with CAN_BUS_TEST_ECHO=0 (originator, id 0x0A0)
+ * and the other with =1 (echo, id 0x0B0), J21<->J21 + 120 ohm termination. */
 
 /* ---- Device configuration words ----
  * Most config bits use device defaults (the device boots on the FRC, which we
@@ -133,14 +141,38 @@ int main(void)
            loopback_ok ? "ready" : "slave init FAILED");
     printf("==============================================\n");
 
+    /* ---- CAN FD (CAN1) ----
+     * Route the 20 MHz CAN clock (CLKGEN10) and configure the CAN1 pins (PPS +
+     * module enable + transceiver out of standby). can_loopback_selftest() runs a
+     * quick INTERNAL-loopback HAL check, then arms CAN1 in NORMAL_FD so the live
+     * demo (can_loopback_tick) transmits on the REAL bus each beat. A lone node
+     * (no ACK partner) goes error-passive and retransmits -> a visible burst on
+     * CANH/CANL (the TX queue then fills, so sends report "queue full / timeout");
+     * connect a CAN node / analyzer (or a 2nd board in echo config) for ACKed
+     * traffic. With CAN_BUS_TEST=1 the firmware instead enters the dedicated
+     * two-board bus test and does not return. */
+    dspic33ak_clock_can_init();
+    board_can1_pins_init();
+    bool can_ok = can_loopback_selftest();
+    printf(" CAN1 FD @500k/2M live on the bus (HAL self-check: %s).\n",
+           can_ok ? "PASS" : "FAILED");
+    printf("   No ACK partner -> error-passive + retransmit burst; add a CAN node\n");
+    printf("   (analyzer / 2nd board echo) to ACK it and see steady CAN H/L.\n");
+    printf("==============================================\n");
+#if CAN_BUS_TEST
+    can_bus_test_run(CAN_BUS_TEST_ECHO);   /* never returns */
+#endif
+
     /* ---- Potentiometer (ADC5) -> RGB LED (PWM1/2/3) ---- */
     rgb_pot_init();
     printf(" RGB LED follows the potentiometer; LED0 blinks with the heartbeat.\n");
     printf("==============================================\n");
 
-    /* Main loop: update the LED color from the pot continuously, and once per
-     * second toggle LED0 (visible liveness without a serial port) and run one
-     * I2C Write+Read round trip, logging both directions. */
+    /* Main loop: update the LED color from the pot continuously, toggle LED0 once
+     * per second (visible liveness without a serial port), and on each 1 s beat
+     * run ONE peripheral demo, alternating between them: even beats run the I2C
+     * master<->slave round trip, odd beats transmit one CAN FD frame on the real
+     * CAN bus. Each demo therefore fires every 2 s, offset 1 s from the other. */
     uint32_t beat      = 0u;
     uint32_t last_beat = systick_ms();
     uint32_t last_term_reset = systick_ms();
@@ -158,8 +190,12 @@ int main(void)
         if ((uint32_t)(now - last_beat) >= 1000u) {
             last_beat = now;
             led_sw_toggle(0u);      /* LED0 = heartbeat indicator */
-            if (loopback_ok) {
-                i2c_loopback_tick(DSPIC33AK_I2C_INST_2, beat);
+            if ((beat & 1u) == 0u) {
+                if (loopback_ok) {
+                    i2c_loopback_tick(DSPIC33AK_I2C_INST_2, beat);  /* even beat: I2C */
+                }
+            } else {
+                can_loopback_tick(beat);                            /* odd beat: CAN */
             }
             beat++;
         }
