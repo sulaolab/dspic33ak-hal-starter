@@ -143,15 +143,21 @@ int main(void)
 
     /* ---- CAN FD (CAN1) ----
      * Route the 20 MHz CAN clock (CLKGEN10) and configure the CAN1 pins (PPS +
-     * module enable), then run the single-board internal-loopback self-test
-     * (always, as a quick HAL check). With CAN_BUS_TEST=1 the firmware then
-     * enters the two-board bus test (CAN_BUS_TEST_ECHO selects originator vs
-     * echo; needs J21<->J21 wiring + termination on both boards) and does not
-     * return; otherwise it continues to the normal heartbeat loop. */
+     * module enable + transceiver out of standby). can_loopback_selftest() runs a
+     * quick INTERNAL-loopback HAL check, then arms CAN1 in NORMAL_FD so the live
+     * demo (can_loopback_tick) transmits on the REAL bus each beat. A lone node
+     * (no ACK partner) goes error-passive and retransmits -> a visible burst on
+     * CANH/CANL (the TX queue then fills, so sends report "queue full / timeout");
+     * connect a CAN node / analyzer (or a 2nd board in echo config) for ACKed
+     * traffic. With CAN_BUS_TEST=1 the firmware instead enters the dedicated
+     * two-board bus test and does not return. */
     dspic33ak_clock_can_init();
     board_can1_pins_init();
-    printf(" CAN1 internal-loopback self-test: %s\n",
-           can_loopback_selftest() ? "PASS" : "FAILED");
+    bool can_ok = can_loopback_selftest();
+    printf(" CAN1 FD @500k/2M live on the bus (HAL self-check: %s).\n",
+           can_ok ? "PASS" : "FAILED");
+    printf("   No ACK partner -> error-passive + retransmit burst; add a CAN node\n");
+    printf("   (analyzer / 2nd board echo) to ACK it and see steady CAN H/L.\n");
     printf("==============================================\n");
 #if CAN_BUS_TEST
     can_bus_test_run(CAN_BUS_TEST_ECHO);   /* never returns */

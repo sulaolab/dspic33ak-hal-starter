@@ -54,10 +54,14 @@ The firmware demonstrates:
 5. **I2C loopback**  
    Runs an I2C2 master <-> I2C3 slave round-trip test
 
-6. **CAN FD self-test**  
-   Runs a CAN1 internal-loopback round-trip (FD frame, BRS) with no external
-   wiring or transceiver; an optional two-board bus test can be enabled at build
-   time (see `CAN_BUS_TEST` in `main.c`)
+6. **CAN FD on the bus**  
+   A quick internal-loopback HAL self-check, then CAN1 transmits a CAN FD frame
+   on the real bus each beat (NORMAL FD, 500k/2M). A lone board has no ACK
+   partner, so it goes error-passive and retransmits — a visible burst on
+   CANH/CANL — and the TX queue fills (`queue full / timeout`); connect a CAN
+   node/analyzer (or a 2nd board in echo config) to ACK it and see steady CAN
+   traffic. A dedicated two-board bus test is also available at build time (see
+   `CAN_BUS_TEST` in `main.c`)
 
 7. **GPIO / ADC / PWM demo**  
    LEDs, switches, potentiometer input, RGB LED output, and heartbeat blinking
@@ -113,22 +117,34 @@ makefiles are git-ignored and recreated by MPLAB X.
 ==============================================
  I2C loopback: I2C2 master <-> I2C3 slave @0x55 (ready); per beat below.
 ==============================================
- CAN1 internal-loopback self-test: PASS
+ CAN1 FD @500k/2M live on the bus (HAL self-check: PASS).
+   No ACK partner -> error-passive + retransmit burst; add a CAN node
+   (analyzer / 2nd board echo) to ACK it and see steady CAN H/L.
 ==============================================
  RGB LED follows the potentiometer; LED0 blinks with the heartbeat.
 ==============================================
- heartbeat 0
- >I2C2 WR: size=8 ...
- <I2C2 RD: size=8 ...
+ <[CAN1 Tx] id=0x123 len=64 data=05060708...4344
+ [CAN1] state=error-passive TEC=128 REC=0
 
- heartbeat 1
+ <[I2C2 Wr] size=8 1122334455667788
+ >[I2C3 Rd] size=8 1122334455667788
+ >[I2C2 Rd] size=8 1122334455667788
+ <[I2C3 Wr] size=8 1122334455667788
+
+ <[CAN1 Tx] transmit queue full / timeout
+ [CAN1] state=error-passive TEC=128 REC=0
  ...
 ```
 
+The two peripheral demos alternate once per second (CAN FD on one beat, the I2C
+master/slave round trip on the next), separated by a blank line.
+
 (The I2C addresses found depend on what is attached. In the screenshot above,
-the scan finds a device at `0x1A`; the I2C loopback slave itself runs at
-`0x55`. Turning the potentiometer sweeps the RGB LED green -> blue -> white ->
-red.)
+the scan finds a device at `0x1A`; the I2C loopback slave itself runs at `0x55`.
+Turning the potentiometer sweeps the RGB LED green -> blue -> white -> red. With
+no CAN ACK partner the CAN1 controller is `error-passive` and retransmits — the
+TX queue fills (`queue full / timeout`); connect another CAN node to ACK it and
+it returns to `state=active`.)
 
 ## Layout
 

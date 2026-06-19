@@ -4,18 +4,23 @@
 /*
  * can_loopback.h
  * --------------
- * CAN FD loopback self-test (example code, not a HAL).
+ * CAN1 demo (example code, not a HAL). Two parts:
  *
- * Brings up CAN1 in INTERNAL loopback (no transceiver, no external wiring, no
- * bus termination needed), transmits one CAN FD frame, receives it back through
- * the controller's internal loopback path, and verifies id/len/payload. This
- * exercises the CAN FD protocol engine end to end on a single bare board.
+ *  - can_loopback_selftest(): one INTERNAL-loopback round trip. Internal
+ *    loopback self-ACKs and self-receives, so it verifies the CAN FD engine on
+ *    a bare board with no transceiver, wiring, termination or partner. It then
+ *    re-arms CAN1 in NORMAL_FD for the live demo.
  *
- * Call once after dspic33ak_clock_can_init() (20 MHz CAN clock) and
- * board_can1_pins_init() (PPS + module enable). To instead drive the on-board
- * ATA6563 and loop back over the real CANH/CANL bus, switch the mode in
- * can_loopback.c to DSPIC33AK_CANFD_MODE_EXTERNAL_LOOPBACK (needs the J22/J23
- * termination shunts installed).
+ *  - can_loopback_tick(): transmits one frame on the REAL bus (NORMAL_FD) each
+ *    call. With an ACK partner the frame goes out once; with NO partner the
+ *    controller retransmits (a burst on CANH/CANL) and climbs to bus-off, which
+ *    the tick logs and recovers from. So a single board still emits a real CAN
+ *    signal and the "no partner" condition is observable on a scope and in the
+ *    log (state=bus-off). For a clean two-board exchange use the separate bus
+ *    test (CAN_BUS_TEST=1, originator/echo with distinct ids).
+ *
+ * Call after dspic33ak_clock_can_init() (20 MHz CAN clock) and
+ * board_can1_pins_init() (PPS + module enable + transceiver out of standby).
  */
 
 #include <stdbool.h>
