@@ -12,16 +12,16 @@ Captured from a live board session using Tera Term.
 
 ## Required hardware
 
-This project targets the following Microchip hardware combination:
+This project targets the following Microchip hardware - just two parts:
 
 * **[EV74H48A](https://www.microchip.com/en-us/development-tool/EV74H48A)** -
-  Curiosity Platform Development Board
+  Curiosity Platform Development Board. It already carries an **on-board PKOB4**
+  programmer/debugger and a USB connector, so a single USB cable handles both
+  programming and the UART console - no separate programmer or adapter needed.
 * **[EV80L65A](https://www.microchip.com/en-us/development-tool/EV80L65A)** -
-  dsPIC33AK512MPS512 DIM
-* On-board **PKOB4** programmer/debugger
-* USB connection for programming and UART console output
+  dsPIC33AK512MPS512 DIM, which plugs into the Curiosity board.
 
-No external hardware is required for the basic bring-up sequence.
+Plus a USB cable. No external hardware is required for the basic bring-up sequence.
 
 The SST26 SPI flash, RGB LED, and potentiometer used by the demo are on the
 Curiosity motherboard. The I2C scan also runs on a bare bus; if an I2C device is

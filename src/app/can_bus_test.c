@@ -51,11 +51,19 @@ void __attribute__((interrupt, no_auto_psv)) _C1RXInterrupt(void) { dspic33ak_ca
 void __attribute__((interrupt, no_auto_psv)) _C1TXInterrupt(void) { dspic33ak_canfd_irq_handler(DSPIC33AK_CANFD_INST_1); }
 void __attribute__((interrupt, no_auto_psv)) _C1Interrupt(void)   { dspic33ak_canfd_irq_handler(DSPIC33AK_CANFD_INST_1); }
 
-#define CAN_BUS_TEST_LOG(dir, name, f)                                                       \
-    printf("[%6lu] %s [%s] id=0x%03lX len=%u data=%02X%02X%02X%02X%02X%02X%02X%02X\n",       \
-           (unsigned long)systick_ms(), (dir), (name), (unsigned long)(f).id, (unsigned)(f).len, \
-           (f).data[0], (f).data[1], (f).data[2], (f).data[3],                               \
-           (f).data[4], (f).data[5], (f).data[6], (f).data[7])
+/* Log one frame in the same format as the can_loopback demo on the other board:
+ * " <[CAN1 Tx] id=0x0B0 len=64 data=...". No timestamp prefix (the terminal adds
+ * its own); all `len` bytes are shown. */
+static void bus_test_log(char dir, const char *tag, const dspic33ak_canfd_frame_t *f)
+{
+    uint8_t i;
+    printf(" %c[CAN1 %s] id=0x%03lX len=%u data=", dir, tag,
+           (unsigned long)f->id, (unsigned)f->len);
+    for (i = 0u; i < f->len; i++) {
+        printf("%02X", f->data[i]);
+    }
+    printf("\n");
+}
 
 void can_bus_test_run(bool is_echo)
 {
@@ -112,7 +120,7 @@ void can_bus_test_run(bool is_echo)
                 tx.data[k] = (uint8_t)(tx_count + k);
             }
             if (dspic33ak_canfd_transmit(DSPIC33AK_CANFD_INST_1, &tx) == DSPIC33AK_CANFD_OK) {
-                CAN_BUS_TEST_LOG("<Tx", name, tx);
+                bus_test_log('<', "Tx", &tx);
                 tx_count++;
             }
         }
@@ -121,11 +129,11 @@ void can_bus_test_run(bool is_echo)
         while (g_rxq_tail != g_rxq_head) {
             rx = g_rxq[g_rxq_tail];
             g_rxq_tail = (uint8_t)((g_rxq_tail + 1u) % CAN_BUS_TEST_RXQ_LEN);
-            CAN_BUS_TEST_LOG(">Rx", name, rx);
+            bus_test_log('>', "Rx", &rx);
             if (is_echo) {
                 rx.id = CAN_BUS_TEST_ECHO_ID;
                 if (dspic33ak_canfd_transmit(DSPIC33AK_CANFD_INST_1, &rx) == DSPIC33AK_CANFD_OK) {
-                    CAN_BUS_TEST_LOG("<Tx", name, rx);
+                    bus_test_log('<', "Tx", &rx);
                 }
             }
         }
