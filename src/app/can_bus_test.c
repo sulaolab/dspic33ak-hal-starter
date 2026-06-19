@@ -6,6 +6,8 @@
 
 #include "can_bus_test.h"
 
+#if CAN_BUS_TEST   /* whole file compiles only when the two-board test is enabled */
+
 #include <stdint.h>
 #include <stdio.h>
 
@@ -57,7 +59,7 @@ void __attribute__((interrupt, no_auto_psv)) _C1Interrupt(void)   { dspic33ak_ca
 
 void can_bus_test_run(bool is_echo)
 {
-    static uint32_t can1_msg_ram[ (576u + 3u) / 4u ] __attribute__((aligned(4)));
+    static uint32_t can1_msg_ram[DSPIC33AK_CANFD_MSG_RAM_WORDS] __attribute__((aligned(4)));
     dspic33ak_canfd_config_t cfg = {0};
     dspic33ak_canfd_frame_t  tx  = {0};
     dspic33ak_canfd_frame_t  rx  = {0};
@@ -98,7 +100,11 @@ void can_bus_test_run(bool is_echo)
             last_ms = now;
             if ((dspic33ak_canfd_get_status(DSPIC33AK_CANFD_INST_1, &st) == DSPIC33AK_CANFD_OK)
                 && st.bus_off) {
+                /* Quiesce the event layer before re-init drops the module into
+                 * config mode, then re-arm it afterwards. */
+                dspic33ak_canfd_isr_disable(DSPIC33AK_CANFD_INST_1);
                 (void)dspic33ak_canfd_init(DSPIC33AK_CANFD_INST_1, &cfg);
+                (void)dspic33ak_canfd_isr_set_callback(DSPIC33AK_CANFD_INST_1, can_bus_test_event, NULL);
                 (void)dspic33ak_canfd_isr_enable(DSPIC33AK_CANFD_INST_1, 4u);
             }
             tx.id = CAN_BUS_TEST_ORIG_ID; tx.extended = false; tx.fd = true; tx.brs = true; tx.len = 8u;
@@ -125,3 +131,5 @@ void can_bus_test_run(bool is_echo)
         }
     }
 }
+
+#endif /* CAN_BUS_TEST */

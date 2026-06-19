@@ -54,7 +54,12 @@ The firmware demonstrates:
 5. **I2C loopback**  
    Runs an I2C2 master <-> I2C3 slave round-trip test
 
-6. **GPIO / ADC / PWM demo**  
+6. **CAN FD self-test**  
+   Runs a CAN1 internal-loopback round-trip (FD frame, BRS) with no external
+   wiring or transceiver; an optional two-board bus test can be enabled at build
+   time (see `CAN_BUS_TEST` in `main.c`)
+
+7. **GPIO / ADC / PWM demo**  
    LEDs, switches, potentiometer input, RGB LED output, and heartbeat blinking
 
 In short: this is a known-good hardware starter project for checking that the
@@ -63,8 +68,9 @@ together.
 
 This pairs with the standalone HALs:
 [dspic33ak-gpio-hal](https://github.com/sulaolab/dspic33ak-gpio-hal),
-dspic33ak-spi-hal, dspic33ak-i2c-hal, dspic33ak-uart-hal. Those HALs are vendored
-into `src/hal/` here so the project builds without any external dependency.
+dspic33ak-spi-hal, dspic33ak-i2c-hal, dspic33ak-uart-hal, dspic33ak-can-hal.
+Those HALs are vendored into `src/hal/` (and `src/hal_can/`) here so the project
+builds without any external dependency.
 
 ## Toolchain
 
@@ -107,6 +113,8 @@ makefiles are git-ignored and recreated by MPLAB X.
 ==============================================
  I2C loopback: I2C2 master <-> I2C3 slave @0x55 (ready); per beat below.
 ==============================================
+ CAN1 FD internal-loopback self-test: PASS
+==============================================
  RGB LED follows the potentiometer; LED0 blinks with the heartbeat.
 ==============================================
  heartbeat 0
@@ -133,7 +141,9 @@ src/
   hal/                  vendored HALs: dspic33ak_gpio / _uart / _spi / _i2c
                         (+ a tiny printf->UART retarget and a minimal SST26 driver)
   hal_gpio/             GPIO CN event validation layer built above dspic33ak_gpio
-  app/                  samples: i2c_scan, rgb_pot (ADC + PWM)
+  hal_can/              vendored CAN FD HAL: dspic33ak_canfd_* (node + optional ISR layer)
+  app/                  samples: i2c_scan, i2c_loopback, can_loopback,
+                        can_bus_test (two-board), rgb_pot (ADC + PWM)
 docs/
   images/
     serial-console.png   live UART/PRINTF startup log screenshot
@@ -142,7 +152,7 @@ docs/
   touch-addon.md        optional capacitive-touch add-on (QTM; not bundled)
 ```
 
-Design split: **GPIO / UART / SPI / I2C are the HALs**; the clock, board pin
+Design split: **GPIO / UART / SPI / I2C / CAN FD are the HALs**; the clock, board pin
 wiring, and the ADC/PWM demo are starter-specific code, kept deliberately small
 and hand-written. PPS routing lives in the board layer; the HALs never touch
 pins.

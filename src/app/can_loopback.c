@@ -13,9 +13,9 @@
 
 bool can_loopback_selftest(void)
 {
-    /* Caller-owned CAN message RAM (TX queue + RX FIFO 1), 4-byte aligned. The
-     * HAL reports the required size via dspic33ak_canfd_msg_ram_size(). */
-    static uint32_t can1_msg_ram[ (576u + 3u) / 4u ] __attribute__((aligned(4)));
+    /* Caller-owned CAN message RAM (TX queue + RX FIFO 1), 4-byte aligned, sized
+     * by the HAL's compile-time geometry constant (= dspic33ak_canfd_msg_ram_size()). */
+    static uint32_t can1_msg_ram[DSPIC33AK_CANFD_MSG_RAM_WORDS] __attribute__((aligned(4)));
 
     dspic33ak_canfd_config_t cfg = {0};
     dspic33ak_canfd_frame_t  tx  = {0};

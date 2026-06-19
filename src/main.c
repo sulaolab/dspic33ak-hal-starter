@@ -28,19 +28,11 @@
 #include "led_sw.h"
 #include "board.h"
 
-/* ---- CAN two-board bus test (optional) ----
- * 0 = boot runs only the single-board internal-loopback self-test, then the
- *     normal heartbeat loop.
- * 1 = after that self-test, enter the two-board CAN FD bus test (never returns).
- *     Build one board with CAN_BUS_TEST_ECHO=0 (originator, id 0x0A0) and the
- *     other with CAN_BUS_TEST_ECHO=1 (echo, id 0x0B0). Needs J21<->J21 wiring
- *     (CANH/CANL/GND) and 120 ohm termination (J22/J23) on both boards. */
-#ifndef CAN_BUS_TEST
-#define CAN_BUS_TEST       0
-#endif
-#ifndef CAN_BUS_TEST_ECHO
-#define CAN_BUS_TEST_ECHO  0
-#endif
+/* The optional two-board CAN FD bus test is controlled by CAN_BUS_TEST /
+ * CAN_BUS_TEST_ECHO, both defined (default 0) in can_bus_test.h. With
+ * CAN_BUS_TEST=1 the firmware enters the bus test after the boot self-test and
+ * never returns; build one board with CAN_BUS_TEST_ECHO=0 (originator, id 0x0A0)
+ * and the other with =1 (echo, id 0x0B0), J21<->J21 + 120 ohm termination. */
 
 /* ---- Device configuration words ----
  * Most config bits use device defaults (the device boots on the FRC, which we

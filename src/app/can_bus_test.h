@@ -19,6 +19,20 @@
 
 #include <stdbool.h>
 
+/* ---- Build switches (single source of truth, shared by main.c) ----
+ * CAN_BUS_TEST:      0 = boot runs only the single-board internal-loopback
+ *                        self-test, then the normal heartbeat loop (default).
+ *                    1 = after that self-test, enter the two-board bus test.
+ *                        Only this build defines the CAN1 interrupt vectors.
+ * CAN_BUS_TEST_ECHO: 0 = ORIGINATOR (id 0x0A0), 1 = ECHO (id 0x0B0).
+ * Override either on the compiler command line (e.g. -DCAN_BUS_TEST=1). */
+#ifndef CAN_BUS_TEST
+#define CAN_BUS_TEST       0
+#endif
+#ifndef CAN_BUS_TEST_ECHO
+#define CAN_BUS_TEST_ECHO  0
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
