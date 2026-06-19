@@ -19,14 +19,21 @@
  */
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* Run the CAN1 internal-loopback self-test. Returns true if the frame round-trips
+/* Run the CAN1 internal-loopback self-test (also brings CAN1 up and leaves it
+ * initialized for can_loopback_tick()). Returns true if the frame round-trips
  * with matching id, length and payload. */
 bool can_loopback_selftest(void);
+
+/* One CAN1 internal-loopback round-trip for the periodic demo: transmit an
+ * 8-byte CAN FD frame (payload seeded by `beat`), receive it back and print the
+ * result. No-op until can_loopback_selftest() has brought CAN1 up. */
+void can_loopback_tick(uint32_t beat);
 
 #ifdef __cplusplus
 }

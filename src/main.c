@@ -162,9 +162,11 @@ int main(void)
     printf(" RGB LED follows the potentiometer; LED0 blinks with the heartbeat.\n");
     printf("==============================================\n");
 
-    /* Main loop: update the LED color from the pot continuously, and once per
-     * second toggle LED0 (visible liveness without a serial port) and run one
-     * I2C Write+Read round trip, logging both directions. */
+    /* Main loop: update the LED color from the pot continuously, toggle LED0 once
+     * per second (visible liveness without a serial port), and on each 1 s beat
+     * run ONE peripheral demo, alternating between them: even beats run the I2C
+     * master<->slave round trip, odd beats run a CAN1 internal-loopback round
+     * trip. Each demo therefore fires every 2 s, offset 1 s from the other. */
     uint32_t beat      = 0u;
     uint32_t last_beat = systick_ms();
     uint32_t last_term_reset = systick_ms();
@@ -182,8 +184,12 @@ int main(void)
         if ((uint32_t)(now - last_beat) >= 1000u) {
             last_beat = now;
             led_sw_toggle(0u);      /* LED0 = heartbeat indicator */
-            if (loopback_ok) {
-                i2c_loopback_tick(DSPIC33AK_I2C_INST_2, beat);
+            if ((beat & 1u) == 0u) {
+                if (loopback_ok) {
+                    i2c_loopback_tick(DSPIC33AK_I2C_INST_2, beat);  /* even beat: I2C */
+                }
+            } else {
+                can_loopback_tick(beat);                            /* odd beat: CAN */
             }
             beat++;
         }
