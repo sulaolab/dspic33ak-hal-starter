@@ -17,6 +17,8 @@
  *                                   +--> CLKGEN6  --> ADC      (potentiometer)
  *                                   +--> CLKGEN8  --> UART     (printf @230400)
  *                                   +--> CLKGEN9  --> SPI      (SST26 flash)
+ *                                   +--> CLKGEN10 --> CAN FD   (20 MHz FCAN, /10;
+ *                                                     set up by dspic33ak_clock_can_init())
  *
  * Key idea: each "CLKGEN" is a small clock generator block bound to a peripheral
  * domain. You pick its source (here: PLL1), and it feeds that peripheral. A

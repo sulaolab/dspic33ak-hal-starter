@@ -11,13 +11,13 @@
  *    a bare board with no transceiver, wiring, termination or partner. It then
  *    re-arms CAN1 in NORMAL_FD for the live demo.
  *
- *  - can_loopback_tick(): transmits one frame on the REAL bus (NORMAL_FD) each
- *    call. With an ACK partner the frame goes out once; with NO partner the
- *    controller retransmits (a burst on CANH/CANL) and climbs to bus-off, which
- *    the tick logs and recovers from. So a single board still emits a real CAN
- *    signal and the "no partner" condition is observable on a scope and in the
- *    log (state=bus-off). For a clean two-board exchange use the separate bus
- *    test (CAN_BUS_TEST=1, originator/echo with distinct ids).
+ *  - can_loopback_tick(): transmits one frame on the REAL CAN bus (NORMAL_FD)
+ *    each call. With an ACK partner the frame is transmitted normally; with no
+ *    partner the controller becomes error-passive and retransmits, so the TX
+ *    queue eventually fills and later sends report timeout. A single board still
+ *    emits observable CANH/CANL activity, and "no partner" shows in the log
+ *    (state=error-passive, queue timeouts). For a clean two-board exchange use
+ *    the separate bus test (CAN_BUS_TEST=1, originator/echo with distinct ids).
  *
  * Call after dspic33ak_clock_can_init() (20 MHz CAN clock) and
  * board_can1_pins_init() (PPS + module enable + transceiver out of standby).
@@ -35,9 +35,10 @@ extern "C" {
  * with matching id, length and payload. */
 bool can_loopback_selftest(void);
 
-/* One CAN1 internal-loopback round-trip for the periodic demo: transmit an
- * 8-byte CAN FD frame (payload seeded by `beat`), receive it back and print the
- * result. No-op until can_loopback_selftest() has brought CAN1 up. */
+/* One CAN1 real-bus transmit for the periodic demo. Sends a CAN FD frame by
+ * default (64 bytes, FDF+BRS; payload seeded by `beat`). If CAN_LOOPBACK_FD=0,
+ * sends a classic 8-byte CAN frame instead. No-op until can_loopback_selftest()
+ * has brought CAN1 up. */
 void can_loopback_tick(uint32_t beat);
 
 #ifdef __cplusplus

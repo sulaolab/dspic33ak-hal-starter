@@ -11,7 +11,7 @@ and heartbeat output.
 
 Captured from a live **two-board** session using Tera Term. This board (A) runs
 the starter; a second board (B) flashed in echo config is wired to it over CAN
-(J21&harr;J21, CANH/CANL/GND + termination). So the CAN1 frames are ACKed and
+(J21 <-> J21, CANH/CANL/GND + termination). So the CAN1 frames are ACKed and
 echoed back — the log shows the `<[CAN1 Tx] id=0x123` transmits and the
 `>[CAN1 Rx] id=0x0B0` echoes from board B, interleaved with the I2C loopback. On
 a single board with no CAN partner, the CAN1 controller instead goes

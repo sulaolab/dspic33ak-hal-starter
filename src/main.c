@@ -171,8 +171,8 @@ int main(void)
     /* Main loop: update the LED color from the pot continuously, toggle LED0 once
      * per second (visible liveness without a serial port), and on each 1 s beat
      * run ONE peripheral demo, alternating between them: even beats run the I2C
-     * master<->slave round trip, odd beats run a CAN1 internal-loopback round
-     * trip. Each demo therefore fires every 2 s, offset 1 s from the other. */
+     * master<->slave round trip, odd beats transmit one CAN FD frame on the real
+     * CAN bus. Each demo therefore fires every 2 s, offset 1 s from the other. */
     uint32_t beat      = 0u;
     uint32_t last_beat = systick_ms();
     uint32_t last_term_reset = systick_ms();

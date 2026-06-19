@@ -4,8 +4,10 @@
  * See dspic33ak_clock.h for the clock tree diagram and the public contract.
  *
  * This is a slimmed, dependency-free clock bring-up: PLL1 from the 8 MHz FRC up
- * to 200 MHz, then CLKGEN1/5/6/8/9 routed to PLL1 (divide-by-1). PLL2 and the
- * audio clock paths are intentionally omitted.
+ * to 200 MHz, then CLKGEN1/5/6/8/9 routed to PLL1 (divide-by-1). CLKGEN10 (CAN FD
+ * FCAN = 20 MHz, divide-by-10) is configured separately by
+ * dspic33ak_clock_can_init(). PLL2 and the audio clock paths are intentionally
+ * omitted.
  */
 
 #include <xc.h>

@@ -132,9 +132,11 @@ bool can_loopback_selftest(void)
     }
 
     /* Arm the live demo on the REAL bus. NORMAL_FD needs another node to ACK:
-     * alone, it goes error-passive and retransmits (a visible burst); see the tick. */
-    (void)can_bringup(DSPIC33AK_CANFD_MODE_NORMAL_FD);
-    return ok;
+     * alone, it goes error-passive and retransmits (a visible burst); see the tick.
+     * Fold the live bring-up into the result so a failed arm (which would leave
+     * can_loopback_tick() a no-op) is reported rather than showing a false PASS. */
+    bool live_ok = can_bringup(DSPIC33AK_CANFD_MODE_NORMAL_FD);
+    return ok && live_ok;
 }
 
 void can_loopback_tick(uint32_t beat)
