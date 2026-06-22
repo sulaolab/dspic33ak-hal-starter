@@ -1,12 +1,16 @@
-#ifndef SYSTICK_H
-#define SYSTICK_H
+#ifndef DSPIC33AK_TICK_TIMER_H
+#define DSPIC33AK_TICK_TIMER_H
 
 /*
- * systick.h
- * ---------
+ * dspic33ak_tick_timer.h
+ * ----------------------
  * Minimal 1 ms time base on Timer1. Provides a monotonic millisecond counter,
- * used for non-blocking timing (heartbeat) and as the I2C HAL's timeout clock so
- * a stuck/empty bus can never hang the scan.
+ * used for non-blocking timing (heartbeat) and as the I2C/CAN HAL timeout clock
+ * so a stuck/empty bus can never hang the demo.
+ *
+ * Phase 1 keeps the original hal-starter public API names:
+ *   - systick_init()
+ *   - systick_ms()
  */
 
 #include <stdint.h>
@@ -25,4 +29,4 @@ uint32_t systick_ms(void);
 }
 #endif
 
-#endif /* SYSTICK_H */
+#endif /* DSPIC33AK_TICK_TIMER_H */

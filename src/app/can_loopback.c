@@ -21,7 +21,7 @@
 
 #include "dspic33ak_canfd_node.h"
 #include "dspic33ak_canfd_isr.h"   /* dspic33ak_canfd_get_status() */
-#include "systick.h"
+#include "dspic33ak_tick_timer.h"
 
 /* Caller-owned CAN message RAM (TX queue + RX FIFO 1), 4-byte aligned, sized by
  * the HAL's compile-time geometry constant (= dspic33ak_canfd_msg_ram_size()).

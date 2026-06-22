@@ -159,7 +159,8 @@ it returns to `state=active`.)
 firmware.X/             MPLAB X project (single config, dsPIC33AK512MPS512)
 src/
   main.c                boot sequence + main loop
-  clock/                dspic33ak_clock (PLL1 + CLKGEN routing), systick (1 ms)
+  clock/                dspic33ak_clock (PLL1 + CLKGEN routing)
+  hal_timer/            Timer1 1 ms tick service used by demos/timeouts
   board/                board pin map + per-peripheral pin/PPS wiring
   hal/                  vendored HALs: dspic33ak_gpio / _uart / _spi / _i2c
                         (+ a tiny printf->UART retarget and a minimal SST26 driver)
@@ -175,10 +176,10 @@ docs/
   touch-addon.md        optional capacitive-touch add-on (QTM; not bundled)
 ```
 
-Design split: **GPIO / UART / SPI / I2C / CAN FD are the HALs**; the clock, board pin
-wiring, and the ADC/PWM demo are starter-specific code, kept deliberately small
-and hand-written. PPS routing lives in the board layer; the HALs never touch
-pins.
+Design split: **GPIO / UART / SPI / I2C / CAN FD / Timer are the HALs**; the
+clock, board pin wiring, and the ADC/PWM demo are starter-specific code, kept
+deliberately small and hand-written. PPS routing lives in the board layer; the
+HALs never touch pins.
 
 ## Capacitive touch
 

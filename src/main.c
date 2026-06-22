@@ -16,7 +16,7 @@
 #include <stdint.h>
 
 #include "dspic33ak_clock.h"
-#include "systick.h"
+#include "dspic33ak_tick_timer.h"
 #include "dspic33ak_uart.h"
 #include "dspic33ak_i2c_master.h"
 #include "sst26_min.h"

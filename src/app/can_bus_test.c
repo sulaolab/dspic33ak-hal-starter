@@ -13,7 +13,7 @@
 
 #include "dspic33ak_canfd_node.h"
 #include "dspic33ak_canfd_isr.h"
-#include "systick.h"
+#include "dspic33ak_tick_timer.h"
 
 #define CAN_BUS_TEST_ORIG_ID  0x0A0u
 #define CAN_BUS_TEST_ECHO_ID  0x0B0u

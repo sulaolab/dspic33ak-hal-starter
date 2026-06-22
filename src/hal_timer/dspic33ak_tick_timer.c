@@ -1,7 +1,7 @@
 /*
- * systick.c
- * ---------
- * 1 ms time base on Timer1. See systick.h.
+ * dspic33ak_tick_timer.c
+ * ----------------------
+ * 1 ms time base on Timer1. See dspic33ak_tick_timer.h.
  *
  * Timer1 runs from the instruction clock (Fcy = system clock / 2) with a 1:256
  * prescaler; PR1 is set so the timer rolls over every millisecond and the ISR
@@ -11,8 +11,8 @@
 #include <xc.h>
 #include <stdint.h>
 
-#include "dspic33ak_clock.h"   /* DSPIC33AK_CLOCK_SYS_HZ */
-#include "systick.h"
+#include "dspic33ak_clock.h"        /* DSPIC33AK_CLOCK_SYS_HZ */
+#include "dspic33ak_tick_timer.h"
 
 /* Instruction clock: Fcy = system clock / 2 on dsPIC33A. */
 #define SYSTICK_FCY_HZ   (DSPIC33AK_CLOCK_SYS_HZ / 2u)

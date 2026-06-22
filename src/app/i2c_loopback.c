@@ -15,7 +15,7 @@
 #include "i2c_loopback.h"
 #include "dspic33ak_i2c_master.h"
 #include "dspic33ak_i2c_slave.h"
-#include "systick.h"
+#include "dspic33ak_tick_timer.h"
 
 #define LB_SLAVE_INST   DSPIC33AK_I2C_INST_3   /* MikroBUS B */
 #define LB_SLAVE_ADDR   0x55u
