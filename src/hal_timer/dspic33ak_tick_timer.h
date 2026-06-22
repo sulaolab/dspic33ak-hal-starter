@@ -4,9 +4,8 @@
 /*
  * dspic33ak_tick_timer.h
  * ----------------------
- * Minimal 1 ms time base on Timer1. Provides a monotonic millisecond counter,
- * used for non-blocking timing (heartbeat) and as the I2C/CAN HAL timeout clock
- * so a stuck/empty bus can never hang the demo.
+ * Minimal Timer1-based 1 ms monotonic tick source for non-blocking timing
+ * and timeout callbacks.
  */
 
 #include <stdint.h>

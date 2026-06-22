@@ -3,9 +3,9 @@
 A ready-to-run MPLAB X starter project for the **dsPIC33AK512MPS512**.
 
 Flash this project, open a serial terminal, and you should immediately see the
-board bring-up log: clock setup, UART `printf()`, SPI flash verification, I2C
-scan, and then an alternating I2C-loopback / CAN FD bus demo with RGB LED control
-and heartbeat output.
+board bring-up log: clock setup, Timer1-based millisecond timing, UART
+`printf()`, SPI flash verification, I2C scan, and then an alternating
+I2C-loopback / CAN FD bus demo with RGB LED control and heartbeat output.
 
 <img src="docs/images/serial-console.png" alt="Serial console from dspic33ak-hal-starter: a two-board CAN FD session with the I2C loopback and CAN FD frames interleaving" width="900">
 
@@ -46,22 +46,27 @@ After programming the board, open a serial terminal at **230400 8N1**.
 
 The firmware demonstrates:
 
-1. **Clock bring-up**  
+1. **Clock bring-up**
    FRC -> PLL1, SYSCLK = 200 MHz
 
-2. **UART console output**  
+2. **Timer1 millisecond tick**
+   A Timer1-based 1 ms monotonic time base drives heartbeat timing and the
+   timeout callbacks used by the I2C and CAN HALs. The application owns the
+   `_T1Interrupt()` vector and forwards it to the Timer HAL handler.
+
+3. **UART console output**
    `printf()` through UART1 at 230400 8N1
 
-3. **SPI flash access**  
+4. **SPI flash access**
    Reads the SST26 JEDEC ID and verifies sector erase/write/read-back
 
-4. **I2C bus scan**  
+5. **I2C bus scan**
    Probes 7-bit I2C addresses and prints devices that ACK
 
-5. **I2C loopback**  
+6. **I2C loopback**
    Runs an I2C2 master <-> I2C3 slave round-trip test
 
-6. **CAN FD on the bus**  
+7. **CAN FD on the bus**
    A quick internal-loopback HAL self-check, then CAN1 transmits a CAN FD frame
    on the real bus each beat (NORMAL FD, 500k/2M). A lone board has no ACK
    partner, so it goes error-passive and retransmits — a visible burst on
@@ -70,7 +75,7 @@ The firmware demonstrates:
    traffic. A dedicated two-board bus test is also available at build time (see
    `CAN_BUS_TEST` in `main.c`)
 
-7. **GPIO / ADC / PWM demo**  
+8. **GPIO / ADC / PWM demo**
    LEDs, switches, potentiometer input, RGB LED output, and heartbeat blinking
 
 In short: this is a known-good hardware starter project for checking that the
@@ -78,12 +83,22 @@ board, toolchain, programmer, UART console, and basic HAL drivers are working
 together.
 
 This pairs with the standalone HALs:
-[dspic33ak-gpio-hal](https://github.com/sulaolab/dspic33ak-gpio-hal),
-dspic33ak-spi-hal, dspic33ak-i2c-hal, dspic33ak-uart-hal, dspic33ak-can-hal.
-Those HALs are vendored into `src/hal/` (and `src/hal_can/`) here so the project
-builds without any external dependency. The Timer HAL is currently integrated
-locally under `src/hal_timer/`; it will be split into a standalone repository
-after final API and hardware validation.
+
+- [dspic33ak-gpio-hal](https://github.com/sulaolab/dspic33ak-gpio-hal)
+- [dspic33ak-uart-hal](https://github.com/sulaolab/dspic33ak-uart-hal)
+- [dspic33ak-spi-hal](https://github.com/sulaolab/dspic33ak-spi-hal)
+- [dspic33ak-i2c-hal](https://github.com/sulaolab/dspic33ak-i2c-hal)
+- [dspic33ak-can-hal](https://github.com/sulaolab/dspic33ak-can-hal)
+- [dspic33ak-timer-hal](https://github.com/sulaolab/dspic33ak-timer-hal)
+
+The reusable HAL implementations are maintained in the standalone repositories
+above. This starter vendors validated snapshots under `src/hal/`,
+`src/hal_gpio/`, `src/hal_can/`, and `src/hal_timer/` so the complete project
+builds without external source dependencies.
+
+This repository serves as the hardware integration and regression-validation
+project for the HAL set: clock, GPIO, UART, SPI, I2C, CAN FD, and Timer are
+exercised together on the target board.
 
 ## Toolchain
 
@@ -162,7 +177,8 @@ firmware.X/             MPLAB X project (single config, dsPIC33AK512MPS512)
 src/
   main.c                boot sequence + main loop
   clock/                dspic33ak_clock (PLL1 + CLKGEN routing)
-  hal_timer/            Timer1 1 ms tick service used by demos/timeouts
+  hal_timer/            vendored dspic33ak-timer-hal snapshot
+                        (Timer1 1 ms tick used by demos/timeouts)
   board/                board pin map + per-peripheral pin/PPS wiring
   hal/                  vendored HALs: dspic33ak_gpio / _uart / _spi / _i2c
                         (+ a tiny printf->UART retarget and a minimal SST26 driver)
@@ -178,11 +194,16 @@ docs/
   touch-addon.md        optional capacitive-touch add-on (QTM; not bundled)
 ```
 
-Design split: **GPIO / UART / SPI / I2C / CAN FD / Timer are the HALs**; the
-clock, board pin wiring, and the ADC/PWM demo are starter-specific code, kept
-deliberately small and hand-written. The Timer HAL currently lives locally in
-`src/hal_timer/` while its public API is finalized. PPS routing lives in the
-board layer; the HALs never touch pins.
+Design split: **GPIO / UART / SPI / I2C / CAN FD / Timer are the HALs**.
+Validated snapshots are vendored into this starter for hardware integration and
+regression testing. Clock setup, board pin wiring, PPS routing, and the ADC/PWM
+demo remain starter-specific code, kept deliberately small and hand-written.
+
+The standalone Timer HAL is maintained at
+[dspic33ak-timer-hal](https://github.com/sulaolab/dspic33ak-timer-hal). The
+copy under `src/hal_timer/` is the version integrated and validated by this
+starter project. PPS routing lives in the board layer; the HALs never touch
+pins.
 
 ## Capacitive touch
 
