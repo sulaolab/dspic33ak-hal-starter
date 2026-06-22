@@ -13,7 +13,7 @@ The HAL is being shaped here before it is split into a standalone
 - Device validation target: dsPIC33AK512MPS512.
 - Compiler: XC-DSC v3.31.01.
 - DFP: Microchip dsPIC33AK-MP DFP 1.3.185 or compatible.
-- dsPIC33AK128MPS106 is expected to be compatible by Timer1 register symmetry,
+- dsPIC33AK128MC106 is expected to be compatible by Timer1 register symmetry,
   but should be listed as hardware-validated only after a final HAL build is
   tested on that target.
 

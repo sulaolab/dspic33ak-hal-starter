@@ -13,6 +13,8 @@ firmware.X/nbproject/private/
 firmware.X/nbproject/Makefile-*.mk
 firmware.X/nbproject/Makefile-genesis.properties
 firmware.X/nbproject/Makefile-variables.mk
+MPLABXLog.xml
+MPLABXLog.xml.lck
 
 # Toolchain intermediates
 *.o
