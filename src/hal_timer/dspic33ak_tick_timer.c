@@ -34,7 +34,7 @@ static const prescaler_option_t prescaler_options[] = {
 };
 
 static volatile uint32_t tick_ms = 0u;
-static bool tick_initialized = false;
+static volatile bool tick_initialized = false;
 
 static dspic33ak_tick_timer_status_t calc_period_reg(
     const dspic33ak_tick_timer_config_t *config,
