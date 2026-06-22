@@ -81,7 +81,9 @@ This pairs with the standalone HALs:
 [dspic33ak-gpio-hal](https://github.com/sulaolab/dspic33ak-gpio-hal),
 dspic33ak-spi-hal, dspic33ak-i2c-hal, dspic33ak-uart-hal, dspic33ak-can-hal.
 Those HALs are vendored into `src/hal/` (and `src/hal_can/`) here so the project
-builds without any external dependency.
+builds without any external dependency. The Timer HAL is currently integrated
+locally under `src/hal_timer/`; it will be split into a standalone repository
+after final API and hardware validation.
 
 ## Toolchain
 
@@ -178,8 +180,9 @@ docs/
 
 Design split: **GPIO / UART / SPI / I2C / CAN FD / Timer are the HALs**; the
 clock, board pin wiring, and the ADC/PWM demo are starter-specific code, kept
-deliberately small and hand-written. PPS routing lives in the board layer; the
-HALs never touch pins.
+deliberately small and hand-written. The Timer HAL currently lives locally in
+`src/hal_timer/` while its public API is finalized. PPS routing lives in the
+board layer; the HALs never touch pins.
 
 ## Capacitive touch
 

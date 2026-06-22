@@ -103,8 +103,8 @@ bool i2c_loopback_init(void)
 
 static void settle_ms(uint32_t ms)
 {
-    uint32_t t0 = systick_ms();
-    while ((uint32_t)(systick_ms() - t0) < ms) { }
+    uint32_t t0 = dspic33ak_tick_timer_get_ms();
+    while ((uint32_t)(dspic33ak_tick_timer_get_ms() - t0) < ms) { }
 }
 
 static void log_bytes(char dir, unsigned inst_num, const char *op,

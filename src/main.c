@@ -71,11 +71,26 @@ static void term_init_safe(void)
     printf("\x1b[0m");     /* Reset text attributes */
 }
 
+void __attribute__((interrupt, context)) _T1Interrupt(void)
+{
+    dspic33ak_tick_timer_irq_handler();
+}
+
 int main(void)
 {
+    const dspic33ak_tick_timer_config_t tick_cfg = {
+        .timer_clk_hz = DSPIC33AK_CLOCK_SYS_HZ / 2u,
+        .irq_priority = 4u,
+        .run_in_idle = false,
+    };
+
     (void)dspic33ak_clock_init();      /* FRC -> PLL1 200 MHz; route CLKGEN1/5/6/8/9 */
     board_ports_digital_default();     /* all pins digital (needed for I2C SDA/SCL) */
-    systick_init();                    /* 1 ms time base (heartbeat + I2C timeout)  */
+    if (dspic33ak_tick_timer_init(&tick_cfg) != DSPIC33AK_TICK_TIMER_OK) {
+        while (1) {
+            Nop();
+        }
+    }
     console_uart_init();               /* UART1 pins + 230400 8N1, printf retargeted */
 
     printf("\n\n");
@@ -122,7 +137,7 @@ int main(void)
             .fcy_hz             = DSPIC33AK_CLOCK_SYS_HZ / 2u,   /* fcy = sysclk/2  */
             .bus_hz             = 400000u,                       /* 400 kHz         */
             .timeout_ms         = 5u,                            /* never hang      */
-            .get_ms             = systick_ms,
+            .get_ms             = dspic33ak_tick_timer_get_ms,
             .pending_timeout_ms = 50u,
         };
         if (dspic33ak_i2c_init(DSPIC33AK_I2C_INST_2, &i2c_cfg) == DSPIC33AK_I2C_OK) {
@@ -174,14 +189,14 @@ int main(void)
      * master<->slave round trip, odd beats transmit one CAN FD frame on the real
      * CAN bus. Each demo therefore fires every 2 s, offset 1 s from the other. */
     uint32_t beat      = 0u;
-    uint32_t last_beat = systick_ms();
-    uint32_t last_term_reset = systick_ms();
+    uint32_t last_beat = dspic33ak_tick_timer_get_ms();
+    uint32_t last_term_reset = dspic33ak_tick_timer_get_ms();
     while (1)
     {
         rgb_pot_update();
         led_sw_update();      /* SW1/2 polled; SW3 event state mirrored on LED5 */
 
-        uint32_t now = systick_ms();
+        uint32_t now = dspic33ak_tick_timer_get_ms();
         if ((uint32_t)(now - last_term_reset) >= 3000u) {
             last_term_reset = now;
             term_init_safe();

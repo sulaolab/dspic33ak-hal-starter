@@ -7,23 +7,44 @@
  * Minimal 1 ms time base on Timer1. Provides a monotonic millisecond counter,
  * used for non-blocking timing (heartbeat) and as the I2C/CAN HAL timeout clock
  * so a stuck/empty bus can never hang the demo.
- *
- * Phase 1 keeps the original hal-starter public API names:
- *   - systick_init()
- *   - systick_ms()
  */
 
 #include <stdint.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* Start Timer1 with a 1 ms interrupt. Call once after the clock is up. */
-void systick_init(void);
+typedef enum {
+    DSPIC33AK_TICK_TIMER_OK = 0,
+    DSPIC33AK_TICK_TIMER_ERR_INVALID_ARG,
+    DSPIC33AK_TICK_TIMER_ERR_NOT_PRESENT,
+    DSPIC33AK_TICK_TIMER_ERR_NOT_INITIALIZED,
+    DSPIC33AK_TICK_TIMER_ERR_OUT_OF_RANGE
+} dspic33ak_tick_timer_status_t;
 
-/* Milliseconds elapsed since systick_init(). Monotonic; wraps after ~49 days. */
-uint32_t systick_ms(void);
+typedef struct {
+    uint32_t timer_clk_hz;
+    uint8_t irq_priority;
+    bool run_in_idle;
+} dspic33ak_tick_timer_config_t;
+
+/* Start Timer1 with a periodic interrupt. Call once after the clock is up. */
+dspic33ak_tick_timer_status_t dspic33ak_tick_timer_init(
+    const dspic33ak_tick_timer_config_t *config);
+
+dspic33ak_tick_timer_status_t dspic33ak_tick_timer_deinit(void);
+
+bool dspic33ak_tick_timer_is_present(void);
+
+/* Milliseconds elapsed since init. Monotonic; wraps after ~49 days at 1 kHz. */
+uint32_t dspic33ak_tick_timer_get_ms(void);
+
+/* True after successful initialization. */
+bool dspic33ak_tick_timer_is_initialized(void);
+
+void dspic33ak_tick_timer_irq_handler(void);
 
 #ifdef __cplusplus
 }

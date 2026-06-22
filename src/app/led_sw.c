@@ -135,9 +135,9 @@ void led_sw_boot_test(uint32_t hold_ms)
 
     led_sw_all(true);
 
-    start = systick_ms();
-    while ((uint32_t)(systick_ms() - start) < hold_ms) {
-        /* busy-wait on the systick time base */
+    start = dspic33ak_tick_timer_get_ms();
+    while ((uint32_t)(dspic33ak_tick_timer_get_ms() - start) < hold_ms) {
+        /* busy-wait on the Timer1 tick time base */
     }
 
     led_sw_all(false);
