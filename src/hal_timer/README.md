@@ -82,7 +82,12 @@ const dspic33ak_high_res_timer_config_t high_res_timer_config = {
     .run_in_idle = false,
 };
 
-(void)dspic33ak_high_res_timer_init(&high_res_timer_config);
+if (dspic33ak_high_res_timer_init(&high_res_timer_config) !=
+    DSPIC33AK_HIGH_RES_TIMER_OK) {
+    while (1) {
+        ;
+    }
+}
 ```
 
 ## Tick Accuracy
@@ -99,6 +104,9 @@ PR1 = 99999
 ```
 
 Therefore, the configured period is exactly 1 ms for this project.
+
+`dspic33ak_tick_timer_get_ms()` returns 0 before successful initialization and
+after `dspic33ak_tick_timer_deinit()`.
 
 ## Ownership
 

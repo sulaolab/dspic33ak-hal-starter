@@ -37,7 +37,8 @@ dspic33ak_tick_timer_status_t dspic33ak_tick_timer_deinit(void);
 
 bool dspic33ak_tick_timer_is_present(void);
 
-/* Milliseconds elapsed since init. Monotonic; wraps after ~49 days at 1 kHz. */
+/* Milliseconds elapsed since init. Monotonic; wraps after ~49 days at 1 kHz.
+ * Returns 0 before successful init and after deinit. */
 uint32_t dspic33ak_tick_timer_get_ms(void);
 
 /* True after successful initialization. */

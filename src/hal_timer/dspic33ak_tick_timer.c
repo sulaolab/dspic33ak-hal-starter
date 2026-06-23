@@ -15,7 +15,8 @@
 #define DSPIC33AK_TICK_TIMER_HZ             1000u
 #define DSPIC33AK_TICK_TIMER_MAX_PRIORITY   7u
 
-#if defined(T1CON) && defined(TMR1) && defined(PR1)
+#if defined(T1CON) && defined(TMR1) && defined(PR1) && \
+    defined(_T1IF) && defined(_T1IE) && defined(_T1IP)
 #define DSPIC33AK_TICK_TIMER_PRESENT         1
 #else
 #define DSPIC33AK_TICK_TIMER_PRESENT         0
@@ -54,9 +55,9 @@ dspic33ak_tick_timer_status_t dspic33ak_tick_timer_init(
     }
 
 #if DSPIC33AK_TICK_TIMER_PRESENT
-    IEC1bits.T1IE = 0;
+    _T1IE = 0;
     T1CONbits.ON = 0;
-    IFS1bits.T1IF = 0;
+    _T1IF = 0;
     tick_initialized = false;
 
     T1CON = 0u;
@@ -65,11 +66,11 @@ dspic33ak_tick_timer_status_t dspic33ak_tick_timer_init(
     T1CONbits.TCS = 0;
     T1CONbits.TCKPS = tckps;
     T1CONbits.SIDL = config->run_in_idle ? 0u : 1u;
-    IPC6bits.T1IP = config->irq_priority;
+    _T1IP = config->irq_priority;
     tick_ms = 0u;
     tick_initialized = true;
-    IFS1bits.T1IF = 0;
-    IEC1bits.T1IE = 1;
+    _T1IF = 0;
+    _T1IE = 1;
     T1CONbits.ON = 1;
 
     return DSPIC33AK_TICK_TIMER_OK;
@@ -85,12 +86,13 @@ dspic33ak_tick_timer_status_t dspic33ak_tick_timer_deinit(void)
         return DSPIC33AK_TICK_TIMER_ERR_NOT_INITIALIZED;
     }
 
-    IEC1bits.T1IE = 0;
+    _T1IE = 0;
     T1CONbits.ON = 0;
-    IFS1bits.T1IF = 0;
+    _T1IF = 0;
     TMR1 = 0;
     PR1 = 0;
     T1CON = 0u;
+    tick_ms = 0u;
     tick_initialized = false;
 
     return DSPIC33AK_TICK_TIMER_OK;
@@ -110,6 +112,10 @@ bool dspic33ak_tick_timer_is_present(void)
 
 uint32_t dspic33ak_tick_timer_get_ms(void)
 {
+    if (!tick_initialized) {
+        return 0u;
+    }
+
     return tick_ms;
 }
 
@@ -121,7 +127,7 @@ bool dspic33ak_tick_timer_is_initialized(void)
 void dspic33ak_tick_timer_irq_handler(void)
 {
 #if DSPIC33AK_TICK_TIMER_PRESENT
-    IFS1bits.T1IF = 0;
+    _T1IF = 0;
 
     if (tick_initialized) {
         tick_ms++;
