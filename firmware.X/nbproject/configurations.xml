@@ -22,10 +22,10 @@
         <itemPath>../src/app/i2c_loopback.c</itemPath>
         <itemPath>../src/app/can_loopback.c</itemPath>
         <itemPath>../src/app/can_bus_test.c</itemPath>
-        <itemPath>../src/app/rgb_pot.c</itemPath>
-        <itemPath>../src/app/led_sw.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f11" displayName="board_components" projectFiles="true">
+        <itemPath>../src/board_components/led_sw.c</itemPath>
+        <itemPath>../src/board_components/rgb_pot.c</itemPath>
         <itemPath>../src/board_components/sst26_min.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f1" displayName="clock" projectFiles="true">

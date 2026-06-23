@@ -35,7 +35,7 @@ void board_spi4_sst26_pins_init(void);
  *   Blue  = PWM1H on RP51 (RD2)
  *   Green = PWM2H on RP49 (RD0)
  *   Red   = PWM3H on RP58 (RD9)
- * The PWM module itself is set up by the rgb_pot sample. */
+ * The PWM module itself is set up by the rgb_pot board component. */
 void board_rgb_pins_init(void);
 
 /* Configure the CAN1 (CAN FD) pins: C1TX -> RP62 (RD13), C1RX <- RP60 (RD11),

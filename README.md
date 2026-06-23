@@ -98,7 +98,7 @@ The reusable HAL implementations are maintained in the standalone repositories
 above. This starter vendors validated snapshots under matching `src/hal_xxx/`
 directories so the complete project builds without external source dependencies.
 Starter-only glue intentionally stays outside those HAL folders: board pin/PPS
-wiring lives in `src/board.*` and `src/board_pins.h`, board component drivers
+wiring lives in `src/board.*` and `src/board_pins.h`, board component helpers
 live in `src/board_components/`, and the `printf()` UART retarget lives in
 `src/console/`.
 
@@ -195,7 +195,8 @@ src/
   board.c/.h            board bring-up entry points
   board_pins.h          board pin map + per-peripheral PPS wiring
   clock/                dspic33ak_clock (PLL1 + CLKGEN routing)
-  board_components/     board component drivers built on HALs (SST26 SPI-NOR)
+  board_components/     board component helpers built on HALs
+                        (LED/SW, RGB/POT, SST26 SPI-NOR)
   console/              starter glue: printf write() retarget to UART1
   hal_gpio/             vendored GPIO HAL: core + CN event layer
   hal_uart/             vendored UART HAL
@@ -205,8 +206,8 @@ src/
   hal_timer/            vendored Timer HAL
                         (Timer1 1 ms tick + Timer2 high-resolution counter)
   hal_udid/             local UDID helper used by the boot banner
-  app/                  samples: i2c_scan, i2c_loopback, can_loopback,
-                        can_bus_test (two-board), rgb_pot (ADC + PWM)
+  app/                  bus validation samples: i2c_scan, i2c_loopback,
+                        can_loopback, can_bus_test (two-board)
 docs/
   images/
     serial-console.png   live two-board CAN FD + I2C session screenshot
@@ -220,7 +221,7 @@ docs/
 Design split: **GPIO / UART / SPI / I2C / CAN FD / Timer are the HALs**.
 Validated snapshots are vendored into matching `src/hal_xxx/` folders for
 hardware integration and regression testing. Clock setup, board pin/PPS wiring,
-board component drivers, console retargeting, and the ADC/PWM demo
+board component helpers, console retargeting, and the bus validation demos
 remain starter-specific code, kept deliberately small and hand-written. See
 `docs/source_layout.md` for the ownership rules.
 

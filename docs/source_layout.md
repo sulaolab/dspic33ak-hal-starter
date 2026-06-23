@@ -29,15 +29,15 @@ Code that binds the HALs to this board stays outside the HAL folders:
 | Path | Ownership |
 |---|---|
 | `src/board.c`, `src/board.h`, `src/board_pins.h` | Curiosity board pin names, PPS wiring, and board bring-up entry points. |
-| `src/board_components/` | Board component drivers built on top of HALs, such as `sst26_min.*`. |
+| `src/board_components/` | Board component helpers built on top of HALs, such as `led_sw.*`, `rgb_pot.*`, and `sst26_min.*`. |
 | `src/console/` | Starter glue that retargets `printf()` to UART1. |
 | `src/clock/` | PLL and clock-generator setup for this board/demo. |
-| `src/app/` | Validation demos and application-level interrupt vector ownership. |
+| `src/app/` | Bus validation demos and application-level orchestration. |
 | `src/hal_udid/` | Local UDID boot-banner helper; not currently a standalone public HAL. |
 
 The root-level `board.*` files are intentionally not folded into
 `src/board_components/`: they name the board's fixed wiring and PPS routes,
-while `board_components/` contains drivers for specific devices attached to that
+while `board_components/` contains helpers for specific devices attached to that
 wiring.
 
 ## MPLAB X project updates

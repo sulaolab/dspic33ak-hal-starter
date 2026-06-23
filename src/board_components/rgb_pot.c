@@ -1,7 +1,8 @@
 /*
  * rgb_pot.c
  * ---------
- * Potentiometer (ADC5) -> RGB LED (PWM1/2/3) sample. See rgb_pot.h.
+ * Board component helper: potentiometer (ADC5) -> RGB LED (PWM1/2/3).
+ * See rgb_pot.h.
  *
  * This is deliberately minimal, hand-written register code (no MCC, no HAL) so a
  * newcomer can see exactly what an ADC read and a PWM channel need on this

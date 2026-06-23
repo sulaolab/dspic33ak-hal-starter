@@ -12,7 +12,8 @@ framework.
 - `src/hal_gpio/dspic33ak_gpio_event.h` and
   `src/hal_gpio/dspic33ak_gpio_event.c` provide the CN event layer above the
   existing GPIO pin representation in the same vendored GPIO HAL snapshot.
-- `src/app/led_sw.c` owns the validation example and the `_CNBInterrupt()` vector.
+- `src/board_components/led_sw.c` owns the validation example and the
+  `_CNBInterrupt()` vector.
 - `firmware.X/nbproject/configurations.xml` includes the GPIO core and event
   layer from `../src/hal_gpio/` in the MPLAB X build and adds
   `..\src\hal_gpio` to the C include path.
@@ -63,7 +64,7 @@ the event layer:
 - It clears the matching port interrupt flag, such as `CNBIF` through the port's
   `IFSx` register mask.
 
-The application still owns interrupt setup. For the SW3 validation path,
+The board component still owns interrupt setup for this validation path.
 `led_sw_init()` clears `_CNBIF`, sets `_CNBIP`, and enables `_CNBIE` after SW3 is
 configured and attached.
 
@@ -97,10 +98,10 @@ callback stays small and does not directly touch LED outputs.
 - interrupt priority
 - interrupt enable bits
 
-The application must configure the pin as a digital input before attaching an
-event. In the current validation app, `led_sw_init()` clears ANSEL, sets input
-direction, and enables the pull-up for SW1, SW2, and SW3 before attaching the
-SW3 event.
+The integration layer must configure the pin as a digital input before attaching
+an event. In the current LED/SW board component, `led_sw_init()` clears ANSEL,
+sets input direction, and enables the pull-up for SW1, SW2, and SW3 before
+attaching the SW3 event.
 
 ## Current Validation Behavior
 
@@ -108,7 +109,7 @@ SW3 event.
 - SW2 remains a polling input and drives LED6.
 - SW3 uses the CN event layer and drives LED5.
 - SW3 is active-low.
-- `_CNBInterrupt()` is defined in `src/app/led_sw.c`, not in the HAL.
+- `_CNBInterrupt()` is defined in `src/board_components/led_sw.c`, not in the HAL.
 
 Expected serial banner line:
 
