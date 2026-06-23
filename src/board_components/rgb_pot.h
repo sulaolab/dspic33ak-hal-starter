@@ -4,9 +4,10 @@
 /*
  * rgb_pot.h
  * ---------
- * Sample (NOT a HAL): read the on-board potentiometer with ADC5 and drive the
- * RGB LED color with PWM1/2/3. Minimal, hand-written register setup, just enough
- * to be a lively demo. A real project would wrap ADC/PWM in proper drivers.
+ * Board component helper (NOT a HAL): read the on-board potentiometer with ADC5
+ * and drive the RGB LED color with PWM1/2/3. Minimal, hand-written register
+ * setup, just enough to be a lively demo. A real project would wrap ADC/PWM in
+ * proper drivers.
  *
  * Pin routing (PPS + LED GPIO) is owned by board_rgb_pins_init(); the pot analog
  * pin (RA7 / AD5AN0) ANSEL is set here.

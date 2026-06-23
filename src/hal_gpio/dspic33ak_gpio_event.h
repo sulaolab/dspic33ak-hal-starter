@@ -6,7 +6,7 @@
  * ----------------------
  * Small Change Notification (CN) event layer for the GPIO HAL.
  *
- * This is intentionally separate from src/hal/dspic33ak_gpio.*:
+ * This is intentionally separate from the core src/dspic33ak_gpio.* files:
  *   - event_attach() only configures CN edge detection state
  *   - it does not change PPS
  *   - it does not change ANSEL, TRIS, CNPU, or CNPD

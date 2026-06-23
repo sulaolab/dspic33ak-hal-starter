@@ -4,9 +4,8 @@
 /*
  * led_sw.h
  * --------
- * Tiny GPIO sample for the Curiosity motherboard's 8 user LEDs and 3 user
- * switches, built on dspic33ak_gpio (the GPIO HAL). This is example code, not
- * a HAL.
+ * Tiny board component helper for the Curiosity motherboard's 8 user LEDs and
+ * 3 user switches, built on dspic33ak_gpio (the GPIO HAL). This is not a HAL.
  *
  * Board wiring (EV74H48A + EV80L65A, dsPIC33AK512MPS512 DIM):
  *   LED0..LED7  = RC8..RC15  (active-high: drive high to light)
@@ -27,7 +26,7 @@
 extern "C" {
 #endif
 
-#define LED_SW_LED_COUNT  8u   /* LED1..LED8 */
+#define LED_SW_LED_COUNT  8u   /* LED0..LED7 */
 #define LED_SW_SW_COUNT   3u   /* SW1..SW3   */
 
 /* Configure the 8 LED pins as outputs (all off) and the 3 switch pins as

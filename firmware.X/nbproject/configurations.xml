@@ -22,27 +22,17 @@
         <itemPath>../src/app/i2c_loopback.c</itemPath>
         <itemPath>../src/app/can_loopback.c</itemPath>
         <itemPath>../src/app/can_bus_test.c</itemPath>
-        <itemPath>../src/app/rgb_pot.c</itemPath>
-        <itemPath>../src/app/led_sw.c</itemPath>
       </logicalFolder>
-      <logicalFolder name="f2" displayName="board" projectFiles="true">
-        <itemPath>../src/board/board.c</itemPath>
+      <logicalFolder name="f11" displayName="board_components" projectFiles="true">
+        <itemPath>../src/board_components/led_sw.c</itemPath>
+        <itemPath>../src/board_components/rgb_pot.c</itemPath>
+        <itemPath>../src/board_components/sst26_min.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f1" displayName="clock" projectFiles="true">
         <itemPath>../src/clock/dspic33ak_clock.c</itemPath>
       </logicalFolder>
-      <logicalFolder name="f3" displayName="hal" projectFiles="true">
-        <itemPath>../src/hal/dspic33ak_gpio.c</itemPath>
-        <itemPath>../src/hal/dspic33ak_uart.c</itemPath>
-        <itemPath>../src/hal/dspic33ak_uart_device.c</itemPath>
-        <itemPath>../src/hal/dspic33ak_uart_rx_isr_ring.c</itemPath>
-        <itemPath>../src/hal/uart_stdio.c</itemPath>
-        <itemPath>../src/hal/dspic33ak_spi.c</itemPath>
-        <itemPath>../src/hal/sst26_min.c</itemPath>
-        <itemPath>../src/hal/dspic33ak_i2c_common.c</itemPath>
-        <itemPath>../src/hal/dspic33ak_i2c_master.c</itemPath>
-        <itemPath>../src/hal/dspic33ak_i2c_slave.c</itemPath>
-        <itemPath>../src/hal/dspic33ak_i2c_device.c</itemPath>
+      <logicalFolder name="f12" displayName="console" projectFiles="true">
+        <itemPath>../src/console/uart_stdio.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f6" displayName="hal_can" projectFiles="true">
         <itemPath>../src/hal_can/dspic33ak_canfd_common.c</itemPath>
@@ -50,16 +40,32 @@
         <itemPath>../src/hal_can/dspic33ak_canfd_node.c</itemPath>
         <itemPath>../src/hal_can/dspic33ak_canfd_isr.c</itemPath>
       </logicalFolder>
-      <logicalFolder name="f5" displayName="hal_gpio" projectFiles="true">
+      <logicalFolder name="f3" displayName="hal_gpio" projectFiles="true">
+        <itemPath>../src/hal_gpio/dspic33ak_gpio.c</itemPath>
         <itemPath>../src/hal_gpio/dspic33ak_gpio_event.c</itemPath>
+      </logicalFolder>
+      <logicalFolder name="f10" displayName="hal_i2c" projectFiles="true">
+        <itemPath>../src/hal_i2c/dspic33ak_i2c_common.c</itemPath>
+        <itemPath>../src/hal_i2c/dspic33ak_i2c_master.c</itemPath>
+        <itemPath>../src/hal_i2c/dspic33ak_i2c_slave.c</itemPath>
+        <itemPath>../src/hal_i2c/dspic33ak_i2c_device.c</itemPath>
+      </logicalFolder>
+      <logicalFolder name="f9" displayName="hal_spi" projectFiles="true">
+        <itemPath>../src/hal_spi/dspic33ak_spi.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f7" displayName="hal_timer" projectFiles="true">
         <itemPath>../src/hal_timer/dspic33ak_tick_timer.c</itemPath>
         <itemPath>../src/hal_timer/dspic33ak_high_res_timer.c</itemPath>
       </logicalFolder>
+      <logicalFolder name="f5" displayName="hal_uart" projectFiles="true">
+        <itemPath>../src/hal_uart/dspic33ak_uart.c</itemPath>
+        <itemPath>../src/hal_uart/dspic33ak_uart_device.c</itemPath>
+        <itemPath>../src/hal_uart/dspic33ak_uart_rx_isr_ring.c</itemPath>
+      </logicalFolder>
       <logicalFolder name="f8" displayName="hal_udid" projectFiles="true">
         <itemPath>../src/hal_udid/dspic33ak_udid.c</itemPath>
       </logicalFolder>
+      <itemPath>../src/board.c</itemPath>
       <itemPath>../src/main.c</itemPath>
     </logicalFolder>
   </logicalFolder>
@@ -127,7 +133,7 @@
         <property key="enable-unroll-loops" value="false"/>
         <property key="expand-pragma-config" value="false"/>
         <property key="extra-include-directories"
-                  value="..\src;..\src\clock;..\src\board;..\src\hal;..\src\hal_gpio;..\src\hal_can;..\src\hal_timer;..\src\hal_udid;..\src\app"/>
+                  value="..\src;..\src\clock;..\src\board_components;..\src\console;..\src\hal_gpio;..\src\hal_uart;..\src\hal_spi;..\src\hal_i2c;..\src\hal_can;..\src\hal_timer;..\src\hal_udid;..\src\app"/>
         <property key="isolate-each-function" value="false"/>
         <property key="keep-inline" value="false"/>
         <property key="oXC16gcc-cnsts-mauxflash" value="false"/>
@@ -158,8 +164,7 @@
       <C30-AS>
         <property key="assembler-symbols" value=""/>
         <property key="expand-macros" value="false"/>
-        <property key="extra-include-directories-for-assembler"
-                  value="..\src\dspic33-cmsis-dsp\PrivateInclude"/>
+        <property key="extra-include-directories-for-assembler" value=""/>
         <property key="extra-include-directories-for-preprocessor" value=""/>
         <property key="false-conditionals" value="false"/>
         <property key="keep-locals" value="false"/>
@@ -874,8 +879,7 @@
         <property key="periphComp4.gte" value="gt"/>
         <property key="periphComp5.gte" value="gt"/>
         <property key="periphComp6.gte" value="gt"/>
-        <property key="programmerToGoFilePath"
-                  value="C:/00_storage/GitWork_root/dsPIC33AK/__clean_test/perseus_512_wm8904_96k/perseus_512.X/debug/dsPIC33AK512/perseus_512_ptg"/>
+        <property key="programmerToGoFilePath" value=""/>
         <property key="programoptions.donoteraseauxmem" value="false"/>
         <property key="programoptions.eraseb4program" value="true"/>
         <property key="programoptions.pgmentry.voltage" value="low"/>

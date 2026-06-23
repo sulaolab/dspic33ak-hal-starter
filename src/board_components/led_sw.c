@@ -1,10 +1,11 @@
 /*
  * led_sw.c
  * --------
- * 8 user LEDs + 3 user switches sample, built on the GPIO HAL. See led_sw.h.
+ * Board component helper for the 8 user LEDs + 3 user switches, built on the
+ * GPIO HAL. See led_sw.h.
  *
  * Board wiring (dsPIC33AK512MPS512 DIM on the Curiosity motherboard):
- *   LED1..LED8 = RC8..RC15  (active-high)
+ *   LED0..LED7 = RC8..RC15  (active-high)
  *   SW1 = RF3, SW2 = RF0, SW3 = RB2  (active-low, pulled up)
  */
 
@@ -12,6 +13,7 @@
 #include <stdio.h>
 
 #include "led_sw.h"
+#include "board_pins.h"
 #include "dspic33ak_gpio.h"
 #include "dspic33ak_gpio_event.h"
 #include "dspic33ak_tick_timer.h"
@@ -19,21 +21,21 @@
 /* LED0..LED7 -> RC8..RC15, lit when driven high. LEDs are 0-indexed to match
  * the board silkscreen (LED0..LED7); the switches below are 1-indexed (SW1..3). */
 static const dspic33ak_gpio_pin_t LED_PINS[LED_SW_LED_COUNT] = {
-    DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C,  8),   /* LED0 */
-    DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C,  9),   /* LED1 */
-    DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C, 10),   /* LED2 */
-    DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C, 11),   /* LED3 */
-    DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C, 12),   /* LED4 */
-    DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C, 13),   /* LED5 */
-    DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C, 14),   /* LED6 */
-    DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C, 15),   /* LED7 */
+    BOARD_LED0_PIN,
+    BOARD_LED1_PIN,
+    BOARD_LED2_PIN,
+    BOARD_LED3_PIN,
+    BOARD_LED4_PIN,
+    BOARD_LED5_PIN,
+    BOARD_LED6_PIN,
+    BOARD_LED7_PIN,
 };
 
 /* SW1..SW3, active-low (reads 0 while pressed). */
 static const dspic33ak_gpio_pin_t SW_PINS[LED_SW_SW_COUNT] = {
-    DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_F, 3),    /* SW1 */
-    DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_F, 0),    /* SW2 (RF0 = AD3AN4) */
-    DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_B, 2),    /* SW3 */
+    BOARD_SW1_PIN,
+    BOARD_SW2_PIN,
+    BOARD_SW3_PIN,
 };
 
 #define LED_SW_SW3_INDEX      2u
