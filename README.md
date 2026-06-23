@@ -95,9 +95,12 @@ This pairs with the standalone HALs:
 - [dspic33ak-timer-hal](https://github.com/sulaolab/dspic33ak-timer-hal)
 
 The reusable HAL implementations are maintained in the standalone repositories
-above. This starter vendors validated snapshots under `src/hal/`,
-`src/hal_gpio/`, `src/hal_can/`, and `src/hal_timer/` so the complete project
-builds without external source dependencies.
+above. This starter vendors validated snapshots under matching `src/hal_xxx/`
+directories so the complete project builds without external source dependencies.
+Starter-only glue intentionally stays outside those HAL folders: board pin/PPS
+wiring lives in `src/board/`, board component drivers live in
+`src/board_components/`, and the `printf()` UART retarget lives in
+`src/console/`.
 
 This repository serves as the hardware integration and regression-validation
 project for the HAL set: clock, GPIO, UART, SPI, I2C, CAN FD, and Timer are
@@ -122,6 +125,11 @@ through MPLAB X.
 Only `firmware.X/nbproject/{configurations,project}.xml` and the top-level
 `firmware.X/Makefile` are tracked; build output and the per-machine generated
 makefiles are git-ignored and recreated by MPLAB X.
+
+When a change adds, removes, renames, or moves `.c` files or source folders,
+open the project in MPLAB X or otherwise regenerate the per-configuration
+makefiles before building. `configurations.xml` is the tracked source of truth;
+`nbproject/Makefile-*.mk` files are local generated artifacts.
 
 ## Expected serial output
 
@@ -185,27 +193,34 @@ firmware.X/             MPLAB X project (single config, dsPIC33AK512MPS512)
 src/
   main.c                boot sequence + main loop
   clock/                dspic33ak_clock (PLL1 + CLKGEN routing)
-  hal_timer/            vendored dspic33ak-timer-hal snapshot
-                        (Timer1 1 ms tick + Timer2 high-resolution counter)
   board/                board pin map + per-peripheral pin/PPS wiring
-  hal/                  vendored HALs: dspic33ak_gpio / _uart / _spi / _i2c
-                        (+ a tiny printf->UART retarget and a minimal SST26 driver)
-  hal_gpio/             GPIO CN event validation layer built above dspic33ak_gpio
+  board_components/     board component drivers built on HALs (SST26 SPI-NOR)
+  console/              starter glue: printf write() retarget to UART1
+  hal_gpio/             vendored GPIO HAL: core + CN event layer
+  hal_uart/             vendored UART HAL
+  hal_spi/              vendored SPI HAL
+  hal_i2c/              vendored I2C HAL
   hal_can/              vendored CAN FD HAL: dspic33ak_canfd_* (node + optional ISR layer)
+  hal_timer/            vendored Timer HAL
+                        (Timer1 1 ms tick + Timer2 high-resolution counter)
+  hal_udid/             local UDID helper used by the boot banner
   app/                  samples: i2c_scan, i2c_loopback, can_loopback,
                         can_bus_test (two-board), rgb_pot (ADC + PWM)
 docs/
   images/
     serial-console.png   live two-board CAN FD + I2C session screenshot
+  source_layout.md       source-tree ownership and vendored-HAL layout notes
   hal_gpio_event_design.md
                          GPIO CN event design notes
   touch-addon.md        optional capacitive-touch add-on (QTM; not bundled)
 ```
 
 Design split: **GPIO / UART / SPI / I2C / CAN FD / Timer are the HALs**.
-Validated snapshots are vendored into this starter for hardware integration and
-regression testing. Clock setup, board pin wiring, PPS routing, and the ADC/PWM
-demo remain starter-specific code, kept deliberately small and hand-written.
+Validated snapshots are vendored into matching `src/hal_xxx/` folders for
+hardware integration and regression testing. Clock setup, board pin wiring, PPS
+routing, board component drivers, console retargeting, and the ADC/PWM demo
+remain starter-specific code, kept deliberately small and hand-written. See
+`docs/source_layout.md` for the ownership rules.
 
 The standalone Timer HAL is maintained at
 [dspic33ak-timer-hal](https://github.com/sulaolab/dspic33ak-timer-hal). The

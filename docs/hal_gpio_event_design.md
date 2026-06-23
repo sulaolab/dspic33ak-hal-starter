@@ -6,14 +6,14 @@ validation, not a production-grade GPIO driver.
 
 ## File Split
 
-- `src/hal/dspic33ak_gpio.h` and `src/hal/dspic33ak_gpio.c` remain the GPIO core.
-  They handle ANSEL, TRIS, LAT, PORT, ODC, CNPU, and CNPD.
+- `src/hal_gpio/dspic33ak_gpio.h` and `src/hal_gpio/dspic33ak_gpio.c` are the
+  GPIO core. They handle ANSEL, TRIS, LAT, PORT, ODC, CNPU, and CNPD.
 - `src/hal_gpio/dspic33ak_gpio_event.h` and
   `src/hal_gpio/dspic33ak_gpio_event.c` provide the CN event layer above the
-  existing GPIO pin representation.
+  existing GPIO pin representation in the same vendored GPIO HAL snapshot.
 - `src/app/led_sw.c` owns the validation example and the `_CNBInterrupt()` vector.
-- `firmware.X/nbproject/configurations.xml` includes
-  `../src/hal_gpio/dspic33ak_gpio_event.c` in the MPLAB X build and adds
+- `firmware.X/nbproject/configurations.xml` includes the GPIO core and event
+  layer from `../src/hal_gpio/` in the MPLAB X build and adds
   `..\src\hal_gpio` to the C include path.
 
 ## API

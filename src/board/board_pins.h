@@ -8,9 +8,9 @@
  * a dsPIC33AK512MPS512 DIM, in its standard (unmodified) configuration.
  *
  * This is the ONE place that names the board's physical pins and the PPS
- * (peripheral pin select) codes. The HALs under src/hal know nothing about pins
- * or PPS; the board layer (board.c) wires peripherals to these pins using the
- * GPIO HAL plus the PPS registers below.
+ * (peripheral pin select) codes. The vendored HALs under src/hal_xxx know
+ * nothing about pins or PPS; the board layer (board.c) wires peripherals to
+ * these pins using the GPIO HAL plus the PPS registers below.
  *
  * PPS note (dsPIC33AK): _RPnnR (output) and _xxxR (input) are bit-field aliases
  * into the RPOR / RPINR SFRs. This starter writes them directly (no RPCON.IOLOCK
