@@ -19,6 +19,7 @@
 #include "dspic33ak_tick_timer.h"
 #include "dspic33ak_high_res_timer.h"
 #include "dspic33ak_uart.h"
+#include "dspic33ak_udid.h"
 #include "dspic33ak_i2c_master.h"
 #include "sst26_min.h"
 #include "i2c_scan.h"
@@ -164,6 +165,21 @@ int main(void)
     printf(" dspic33ak-hal-starter\n");
     printf(" build  : " __DATE__ " " __TIME__ "\n");
     printf(" device : dsPIC33AK512MPS512\n");
+    /* Per-die Unique Device ID (board-individual identity). UDID128 is the four
+     * read-only words concatenated UDID4..UDID1 (high word first). */
+    {
+        dspic33ak_udid_t udid;
+        if (DSPIC33AK_UDID_Read(&udid))
+        {
+            printf(" udid   : %08lX%08lX%08lX%08lX\n",
+                   (unsigned long)udid.word[3], (unsigned long)udid.word[2],
+                   (unsigned long)udid.word[1], (unsigned long)udid.word[0]);
+        }
+        else
+        {
+            printf(" udid   : read failed or invalid\n");
+        }
+    }
     printf(" sysclk : %lu Hz (FRC -> PLL1)\n", (unsigned long)DSPIC33AK_CLOCK_SYS_HZ);
     printf(" uart   : UART1 @ 230400 8N1\n");
     printf("==============================================\n");

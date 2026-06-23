@@ -57,6 +57,9 @@
         <itemPath>../src/hal_timer/dspic33ak_tick_timer.c</itemPath>
         <itemPath>../src/hal_timer/dspic33ak_high_res_timer.c</itemPath>
       </logicalFolder>
+      <logicalFolder name="f8" displayName="hal_udid" projectFiles="true">
+        <itemPath>../src/hal_udid/dspic33ak_udid.c</itemPath>
+      </logicalFolder>
       <itemPath>../src/main.c</itemPath>
     </logicalFolder>
   </logicalFolder>
@@ -124,7 +127,7 @@
         <property key="enable-unroll-loops" value="false"/>
         <property key="expand-pragma-config" value="false"/>
         <property key="extra-include-directories"
-                  value="..\src;..\src\clock;..\src\board;..\src\hal;..\src\hal_gpio;..\src\hal_can;..\src\hal_timer;..\src\app"/>
+                  value="..\src;..\src\clock;..\src\board;..\src\hal;..\src\hal_gpio;..\src\hal_can;..\src\hal_timer;..\src\hal_udid;..\src\app"/>
         <property key="isolate-each-function" value="false"/>
         <property key="keep-inline" value="false"/>
         <property key="oXC16gcc-cnsts-mauxflash" value="false"/>
