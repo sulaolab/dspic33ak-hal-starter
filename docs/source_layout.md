@@ -10,7 +10,7 @@ snapshot commits are recorded in `docs/vendor_manifest.md`.
 
 Reusable HAL snapshots live in module-specific `src/hal_xxx/` folders:
 
-| Folder | Ownership |
+| Path | Ownership |
 |---|---|
 | `src/hal_gpio/` | GPIO HAL core plus the CN event layer used by this starter. |
 | `src/hal_uart/` | UART HAL core, device table, and optional RX ISR ring backend. |
@@ -26,18 +26,19 @@ These folders should not contain board pin maps, PPS routing, application demos,
 
 Code that binds the HALs to this board stays outside the HAL folders:
 
-| Folder | Ownership |
+| Path | Ownership |
 |---|---|
-| `src/board/` | Curiosity board pin names, PPS wiring, and board bring-up entry points. |
+| `src/board.c`, `src/board.h`, `src/board_pins.h` | Curiosity board pin names, PPS wiring, and board bring-up entry points. |
 | `src/board_components/` | Board component drivers built on top of HALs, such as `sst26_min.*`. |
 | `src/console/` | Starter glue that retargets `printf()` to UART1. |
 | `src/clock/` | PLL and clock-generator setup for this board/demo. |
 | `src/app/` | Validation demos and application-level interrupt vector ownership. |
 | `src/hal_udid/` | Local UDID boot-banner helper; not currently a standalone public HAL. |
 
-`src/board/` is intentionally not folded into `src/board_components/`: it names
-the board's fixed wiring and PPS routes, while `board_components/` contains
-drivers for specific devices attached to that wiring.
+The root-level `board.*` files are intentionally not folded into
+`src/board_components/`: they name the board's fixed wiring and PPS routes,
+while `board_components/` contains drivers for specific devices attached to that
+wiring.
 
 ## MPLAB X project updates
 

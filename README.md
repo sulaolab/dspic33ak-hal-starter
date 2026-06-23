@@ -98,8 +98,8 @@ The reusable HAL implementations are maintained in the standalone repositories
 above. This starter vendors validated snapshots under matching `src/hal_xxx/`
 directories so the complete project builds without external source dependencies.
 Starter-only glue intentionally stays outside those HAL folders: board pin/PPS
-wiring lives in `src/board/`, board component drivers live in
-`src/board_components/`, and the `printf()` UART retarget lives in
+wiring lives in `src/board.*` and `src/board_pins.h`, board component drivers
+live in `src/board_components/`, and the `printf()` UART retarget lives in
 `src/console/`.
 
 This repository serves as the hardware integration and regression-validation
@@ -192,8 +192,9 @@ it returns to `state=active`.)
 firmware.X/             MPLAB X project (single config, dsPIC33AK512MPS512)
 src/
   main.c                boot sequence + main loop
+  board.c/.h            board bring-up entry points
+  board_pins.h          board pin map + per-peripheral PPS wiring
   clock/                dspic33ak_clock (PLL1 + CLKGEN routing)
-  board/                board pin map + per-peripheral pin/PPS wiring
   board_components/     board component drivers built on HALs (SST26 SPI-NOR)
   console/              starter glue: printf write() retarget to UART1
   hal_gpio/             vendored GPIO HAL: core + CN event layer
@@ -218,8 +219,8 @@ docs/
 
 Design split: **GPIO / UART / SPI / I2C / CAN FD / Timer are the HALs**.
 Validated snapshots are vendored into matching `src/hal_xxx/` folders for
-hardware integration and regression testing. Clock setup, board pin wiring, PPS
-routing, board component drivers, console retargeting, and the ADC/PWM demo
+hardware integration and regression testing. Clock setup, board pin/PPS wiring,
+board component drivers, console retargeting, and the ADC/PWM demo
 remain starter-specific code, kept deliberately small and hand-written. See
 `docs/source_layout.md` for the ownership rules.
 
