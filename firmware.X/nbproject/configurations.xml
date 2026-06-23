@@ -879,8 +879,7 @@
         <property key="periphComp4.gte" value="gt"/>
         <property key="periphComp5.gte" value="gt"/>
         <property key="periphComp6.gte" value="gt"/>
-        <property key="programmerToGoFilePath"
-                  value="C:/00_storage/GitWork_root/dsPIC33AK/__clean_test/perseus_512_wm8904_96k/perseus_512.X/debug/dsPIC33AK512/perseus_512_ptg"/>
+        <property key="programmerToGoFilePath" value=""/>
         <property key="programoptions.donoteraseauxmem" value="false"/>
         <property key="programoptions.eraseb4program" value="true"/>
         <property key="programoptions.pgmentry.voltage" value="low"/>

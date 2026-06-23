@@ -40,8 +40,8 @@ The root-level `board.*` files are intentionally not folded into
 while `board_components/` contains helpers for specific devices attached to that
 wiring.
 
-The `board_components` directory name and role are kept aligned with the
-Perseus project.
+The `board_components` directory name is intentional: these files are
+board-specific component helpers, not reusable HAL implementations.
 
 ## MPLAB X project updates
 
