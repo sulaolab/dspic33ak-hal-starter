@@ -17,6 +17,7 @@
 
 #include "dspic33ak_clock.h"
 #include "dspic33ak_tick_timer.h"
+#include "dspic33ak_high_res_timer.h"
 #include "dspic33ak_uart.h"
 #include "dspic33ak_i2c_master.h"
 #include "sst26_min.h"
@@ -76,6 +77,65 @@ void __attribute__((interrupt, context)) _T1Interrupt(void)
     dspic33ak_tick_timer_irq_handler();
 }
 
+static void wait_ms_from_tick(uint32_t wait_ms)
+{
+    uint32_t start = dspic33ak_tick_timer_get_ms();
+
+    while ((uint32_t)(dspic33ak_tick_timer_get_ms() - start) < wait_ms) {
+        ;
+    }
+}
+
+static void high_res_timer_boot_test(dspic33ak_high_res_timer_status_t init_status)
+{
+    const uint32_t count_to_us_100 = dspic33ak_high_res_timer_count_to_us(100u);
+    const uint32_t count_to_us_x10_10 = dspic33ak_high_res_timer_count_to_us_x10(10u);
+    const uint32_t count_to_us_x10_100 = dspic33ak_high_res_timer_count_to_us_x10(100u);
+    uint32_t count0;
+    uint32_t count1;
+    uint32_t count2;
+    uint32_t delta1;
+    uint32_t delta10;
+    bool conversion_ok;
+    bool counter_ok;
+    bool status_ok;
+
+    count0 = dspic33ak_high_res_timer_get_count();
+    wait_ms_from_tick(1u);
+    count1 = dspic33ak_high_res_timer_get_count();
+    wait_ms_from_tick(10u);
+    count2 = dspic33ak_high_res_timer_get_count();
+
+    delta1 = count1 - count0;
+    delta10 = count2 - count1;
+    conversion_ok = (count_to_us_100 == 1u) &&
+                    (count_to_us_x10_10 == 1u) &&
+                    (count_to_us_x10_100 == 10u);
+    counter_ok = (count1 != count0) && (count2 != count1);
+    status_ok = (init_status == DSPIC33AK_HIGH_RES_TIMER_OK) &&
+                dspic33ak_high_res_timer_is_present() &&
+                dspic33ak_high_res_timer_is_initialized();
+
+    printf(" HRT: init=%d present=%d initialized=%d clk=%lu Hz\n",
+           (int)init_status,
+           (int)dspic33ak_high_res_timer_is_present(),
+           (int)dspic33ak_high_res_timer_is_initialized(),
+           (unsigned long)(DSPIC33AK_CLOCK_SYS_HZ / 2u));
+    printf(" HRT: count0=%lu count1=%lu count2=%lu d1=%lu d10=%lu\n",
+           (unsigned long)count0,
+           (unsigned long)count1,
+           (unsigned long)count2,
+           (unsigned long)delta1,
+           (unsigned long)delta10);
+    printf(" HRT: conv 100cnt=%lu us, 10cnt=%lu x0.1us, 100cnt=%lu x0.1us\n",
+           (unsigned long)count_to_us_100,
+           (unsigned long)count_to_us_x10_10,
+           (unsigned long)count_to_us_x10_100);
+    printf(" HRT self-check: %s\n",
+           (status_ok && counter_ok && conversion_ok) ? "PASS" : "FAIL");
+    printf("==============================================\n");
+}
+
 int main(void)
 {
     const dspic33ak_tick_timer_config_t tick_cfg = {
@@ -83,6 +143,11 @@ int main(void)
         .irq_priority = 4u,
         .run_in_idle = false,
     };
+    const dspic33ak_high_res_timer_config_t high_res_cfg = {
+        .timer_clk_hz = DSPIC33AK_CLOCK_SYS_HZ / 2u,
+        .run_in_idle = false,
+    };
+    dspic33ak_high_res_timer_status_t high_res_status;
 
     (void)dspic33ak_clock_init();      /* FRC -> PLL1 200 MHz; route CLKGEN1/5/6/8/9 */
     board_ports_digital_default();     /* all pins digital (needed for I2C SDA/SCL) */
@@ -91,6 +156,7 @@ int main(void)
             Nop();
         }
     }
+    high_res_status = dspic33ak_high_res_timer_init(&high_res_cfg);
     console_uart_init();               /* UART1 pins + 230400 8N1, printf retargeted */
 
     printf("\n\n");
@@ -101,6 +167,7 @@ int main(void)
     printf(" sysclk : %lu Hz (FRC -> PLL1)\n", (unsigned long)DSPIC33AK_CLOCK_SYS_HZ);
     printf(" uart   : UART1 @ 230400 8N1\n");
     printf("==============================================\n");
+    high_res_timer_boot_test(high_res_status);
 
     /* ---- User LEDs + switches (GPIO) ----
      * Power-on indicator: light all 8 LEDs for 1 s, then clear. Afterwards the

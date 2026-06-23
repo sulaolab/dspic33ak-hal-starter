@@ -3,7 +3,8 @@
 A ready-to-run MPLAB X starter project for the **dsPIC33AK512MPS512**.
 
 Flash this project, open a serial terminal, and you should immediately see the
-board bring-up log: clock setup, Timer1-based millisecond timing, UART
+board bring-up log: clock setup, Timer1-based millisecond timing, Timer2
+high-resolution counter self-check, UART
 `printf()`, SPI flash verification, I2C scan, and then an alternating
 I2C-loopback / CAN FD bus demo with RGB LED control and heartbeat output.
 
@@ -49,10 +50,12 @@ The firmware demonstrates:
 1. **Clock bring-up**
    FRC -> PLL1, SYSCLK = 200 MHz
 
-2. **Timer1 millisecond tick**
+2. **Timer HAL self-check**
    A Timer1-based 1 ms monotonic time base drives heartbeat timing and the
    timeout callbacks used by the I2C and CAN HALs. The application owns the
-   `_T1Interrupt()` vector and forwards it to the Timer HAL handler.
+   `_T1Interrupt()` vector and forwards it to the Timer HAL handler. Timer2 is
+   also initialized as a free-running high-resolution counter and checked after
+   the boot banner.
 
 3. **UART console output**
    `printf()` through UART1 at 230400 8N1
@@ -130,6 +133,11 @@ makefiles are git-ignored and recreated by MPLAB X.
  sysclk : 200000000 Hz (FRC -> PLL1)
  uart   : UART1 @ 230400 8N1
 ==============================================
+ HRT: init=0 present=1 initialized=1 clk=100000000 Hz
+ HRT: count0=... count1=... count2=... d1=... d10=...
+ HRT: conv 100cnt=1 us, 10cnt=1 x0.1us, 100cnt=10 x0.1us
+ HRT self-check: PASS
+==============================================
  LEDs: SW1/SW2 poll LED7/LED6; SW3 CN event drives LED5.
 ==============================================
  SST26 JEDEC: MFR=0xBF TYPE=0x26 DEV=0x12 (good)
@@ -178,7 +186,7 @@ src/
   main.c                boot sequence + main loop
   clock/                dspic33ak_clock (PLL1 + CLKGEN routing)
   hal_timer/            vendored dspic33ak-timer-hal snapshot
-                        (Timer1 1 ms tick used by demos/timeouts)
+                        (Timer1 1 ms tick + Timer2 high-resolution counter)
   board/                board pin map + per-peripheral pin/PPS wiring
   hal/                  vendored HALs: dspic33ak_gpio / _uart / _spi / _i2c
                         (+ a tiny printf->UART retarget and a minimal SST26 driver)
