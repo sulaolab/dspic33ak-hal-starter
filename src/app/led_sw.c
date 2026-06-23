@@ -4,7 +4,7 @@
  * 8 user LEDs + 3 user switches sample, built on the GPIO HAL. See led_sw.h.
  *
  * Board wiring (dsPIC33AK512MPS512 DIM on the Curiosity motherboard):
- *   LED1..LED8 = RC8..RC15  (active-high)
+ *   LED0..LED7 = RC8..RC15  (active-high)
  *   SW1 = RF3, SW2 = RF0, SW3 = RB2  (active-low, pulled up)
  */
 
