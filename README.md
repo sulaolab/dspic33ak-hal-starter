@@ -210,6 +210,7 @@ docs/
   images/
     serial-console.png   live two-board CAN FD + I2C session screenshot
   source_layout.md       source-tree ownership and vendored-HAL layout notes
+  vendor_manifest.md     upstream commit recorded for each vendored HAL snapshot
   hal_gpio_event_design.md
                          GPIO CN event design notes
   touch-addon.md        optional capacitive-touch add-on (QTM; not bundled)

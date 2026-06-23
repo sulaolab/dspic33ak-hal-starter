@@ -1,8 +1,9 @@
 # GPIO CN Event Design
 
 This note describes the small GPIO Change Notification (CN) event layer used by
-the `gpio-event-sw3-validation` branch. It is an experiment for real hardware
-validation, not a production-grade GPIO driver.
+the hal-starter SW3 validation path. It is intentionally minimal hardware
+integration code above the GPIO core, not a full production-grade GPIO event
+framework.
 
 ## File Split
 

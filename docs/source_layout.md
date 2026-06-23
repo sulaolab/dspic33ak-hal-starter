@@ -3,7 +3,8 @@
 This starter keeps reusable HAL code and board-specific integration code in
 separate folders. The goal is that each public HAL can be compared with, copied
 from, or updated from its standalone repository without rediscovering which
-files are part of the HAL and which files are starter glue.
+files are part of the HAL and which files are starter glue. The upstream
+snapshot commits are recorded in `docs/vendor_manifest.md`.
 
 ## Vendored HAL folders
 

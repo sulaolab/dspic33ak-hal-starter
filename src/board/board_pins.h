@@ -57,6 +57,23 @@
 #define BOARD_RGB_GREEN_RPnR      _RP49R   /* PWM2H output pin select (RD0) */
 #define BOARD_RGB_RED_RPnR        _RP58R   /* PWM3H output pin select (RD9) */
 
+/* ---- User LEDs and switches on the Curiosity motherboard ----
+ *   LED0..LED7 = RC8..RC15  (active-high)
+ *   SW1 = RF3, SW2 = RF0, SW3 = RB2  (active-low, pulled up)
+ */
+#define BOARD_LED0_PIN            DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C,  8)
+#define BOARD_LED1_PIN            DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C,  9)
+#define BOARD_LED2_PIN            DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C, 10)
+#define BOARD_LED3_PIN            DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C, 11)
+#define BOARD_LED4_PIN            DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C, 12)
+#define BOARD_LED5_PIN            DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C, 13)
+#define BOARD_LED6_PIN            DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C, 14)
+#define BOARD_LED7_PIN            DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C, 15)
+
+#define BOARD_SW1_PIN             DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_F, 3)
+#define BOARD_SW2_PIN             DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_F, 0)
+#define BOARD_SW3_PIN             DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_B, 2)
+
 /* ---- Potentiometer -> ADC5 channel 0 (AD5AN0 on RA7) ---- */
 #define BOARD_POT_ANSEL_PORT      ANSELA
 #define BOARD_POT_ANSEL_BIT       (7u)     /* RA7 = AD5AN0 (analog input) */
