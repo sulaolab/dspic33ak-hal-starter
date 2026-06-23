@@ -195,7 +195,8 @@ src/
   board.c/.h            board bring-up entry points
   board_pins.h          board pin map + per-peripheral PPS wiring
   clock/                dspic33ak_clock (PLL1 + CLKGEN routing)
-  board_components/     board component helpers built on HALs
+  board_components/     board-specific component helpers built on HALs
+                        or minimal device-level code
                         (LED/SW, RGB/POT, SST26 SPI-NOR)
   console/              starter glue: printf write() retarget to UART1
   hal_gpio/             vendored GPIO HAL: core + CN event layer
@@ -221,7 +222,7 @@ docs/
 Design split: **GPIO / UART / SPI / I2C / CAN FD / Timer are the HALs**.
 Validated snapshots are vendored into matching `src/hal_xxx/` folders for
 hardware integration and regression testing. Clock setup, board pin/PPS wiring,
-board component helpers, console retargeting, and the bus validation demos
+board-specific component helpers, console retargeting, and the bus validation demos
 remain starter-specific code, kept deliberately small and hand-written. See
 `docs/source_layout.md` for the ownership rules.
 
