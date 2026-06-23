@@ -47,16 +47,20 @@ uint32_t dspic33ak_high_res_timer_get_count(void);
  * Timer2 counter cycle. At 100 MHz, one cycle is about 42.95 seconds. */
 uint32_t dspic33ak_high_res_timer_elapsed_count(uint32_t start_count);
 
-/* Convert raw counts to integer microseconds. The result is truncated. */
+/* Convert raw counts to integer microseconds. The result is truncated and
+ * saturates to UINT32_MAX if the converted value does not fit in uint32_t. */
 uint32_t dspic33ak_high_res_timer_count_to_us(uint32_t count);
 
 /* Convert raw counts to 0.1 us units. For example, 1234 means 123.4 us.
- * This uses 64-bit division; prefer storing raw counts in ISRs and converting
- * them later in foreground/status code. */
+ * The result is truncated and saturates to UINT32_MAX if the converted value
+ * does not fit in uint32_t. This uses 64-bit division; prefer storing raw
+ * counts in ISRs and converting them later in foreground/status code. */
 uint32_t dspic33ak_high_res_timer_count_to_us_x10(uint32_t count);
 
+/* Return elapsed time from a saved count in integer microseconds. */
 uint32_t dspic33ak_high_res_timer_elapsed_us(uint32_t start_count);
 
+/* Return elapsed time from a saved count in 0.1 us units. */
 uint32_t dspic33ak_high_res_timer_elapsed_us_x10(uint32_t start_count);
 
 #ifdef __cplusplus

@@ -18,6 +18,8 @@
 static uint32_t high_res_timer_clk_hz = 0u;
 static volatile bool high_res_timer_initialized = false;
 
+static uint32_t count_to_units(uint32_t count, uint64_t units_per_second);
+
 dspic33ak_high_res_timer_status_t dspic33ak_high_res_timer_init(
     const dspic33ak_high_res_timer_config_t *config)
 {
@@ -126,20 +128,12 @@ uint32_t dspic33ak_high_res_timer_elapsed_count(uint32_t start_count)
 
 uint32_t dspic33ak_high_res_timer_count_to_us(uint32_t count)
 {
-    if (high_res_timer_clk_hz == 0u) {
-        return 0u;
-    }
-
-    return (uint32_t)(((uint64_t)count * 1000000ULL) / high_res_timer_clk_hz);
+    return count_to_units(count, 1000000ULL);
 }
 
 uint32_t dspic33ak_high_res_timer_count_to_us_x10(uint32_t count)
 {
-    if (high_res_timer_clk_hz == 0u) {
-        return 0u;
-    }
-
-    return (uint32_t)(((uint64_t)count * 10000000ULL) / high_res_timer_clk_hz);
+    return count_to_units(count, 10000000ULL);
 }
 
 uint32_t dspic33ak_high_res_timer_elapsed_us(uint32_t start_count)
@@ -152,4 +146,20 @@ uint32_t dspic33ak_high_res_timer_elapsed_us_x10(uint32_t start_count)
 {
     return dspic33ak_high_res_timer_count_to_us_x10(
         dspic33ak_high_res_timer_elapsed_count(start_count));
+}
+
+static uint32_t count_to_units(uint32_t count, uint64_t units_per_second)
+{
+    uint64_t converted;
+
+    if (high_res_timer_clk_hz == 0u) {
+        return 0u;
+    }
+
+    converted = ((uint64_t)count * units_per_second) / high_res_timer_clk_hz;
+    if (converted > UINT32_MAX) {
+        return UINT32_MAX;
+    }
+
+    return (uint32_t)converted;
 }

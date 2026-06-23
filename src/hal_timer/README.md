@@ -127,13 +127,15 @@ The Timer2 path provides:
 - 32-bit free-running raw count reads.
 - wraparound-safe elapsed count calculation for intervals shorter than one full
   32-bit Timer2 cycle.
-- integer microsecond conversion.
-- 0.1 us conversion via `*_us_x10()` helpers.
+- integer microsecond conversion, saturating to `UINT32_MAX` on overflow.
+- 0.1 us conversion via `*_us_x10()` helpers, saturating to `UINT32_MAX` on
+  overflow.
 
 At 100 MHz, one Timer2 count is 10 ns and a full 32-bit cycle is about
-42.95 seconds. The conversion helpers use 64-bit division, so interrupt code
-should normally store raw counts and convert them later in foreground/status
-code.
+42.95 seconds. The conversion helpers use 64-bit division. Results are
+truncated to the requested unit and saturate to `UINT32_MAX` if the converted
+value does not fit in `uint32_t`, so interrupt code should normally store raw
+counts and convert them later in foreground/status code.
 
 ## Integration Regression Checks
 
