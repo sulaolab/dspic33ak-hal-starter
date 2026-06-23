@@ -14,7 +14,7 @@
 #include "led_sw.h"
 #include "dspic33ak_gpio.h"
 #include "dspic33ak_gpio_event.h"
-#include "systick.h"
+#include "dspic33ak_tick_timer.h"
 
 /* LED0..LED7 -> RC8..RC15, lit when driven high. LEDs are 0-indexed to match
  * the board silkscreen (LED0..LED7); the switches below are 1-indexed (SW1..3). */
@@ -135,9 +135,9 @@ void led_sw_boot_test(uint32_t hold_ms)
 
     led_sw_all(true);
 
-    start = systick_ms();
-    while ((uint32_t)(systick_ms() - start) < hold_ms) {
-        /* busy-wait on the systick time base */
+    start = dspic33ak_tick_timer_get_ms();
+    while ((uint32_t)(dspic33ak_tick_timer_get_ms() - start) < hold_ms) {
+        /* busy-wait on the Timer1 tick time base */
     }
 
     led_sw_all(false);

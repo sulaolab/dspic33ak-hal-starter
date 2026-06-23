@@ -21,7 +21,7 @@
 
 #include "dspic33ak_canfd_node.h"
 #include "dspic33ak_canfd_isr.h"   /* dspic33ak_canfd_get_status() */
-#include "systick.h"
+#include "dspic33ak_tick_timer.h"
 
 /* Caller-owned CAN message RAM (TX queue + RX FIFO 1), 4-byte aligned, sized by
  * the HAL's compile-time geometry constant (= dspic33ak_canfd_msg_ram_size()).
@@ -67,7 +67,7 @@ static bool can_bringup(dspic33ak_canfd_mode_t mode)
     cfg.brs          = CAN_LB_CFG_BRS;   /* FD: BRS allowed; classic: single rate */
     cfg.mode         = mode;
     cfg.timeout_ms   = 10u;
-    cfg.get_ms       = systick_ms;
+    cfg.get_ms       = dspic33ak_tick_timer_get_ms;
     cfg.msg_ram      = can1_msg_ram;
     cfg.msg_ram_size = (uint16_t)sizeof(can1_msg_ram);
 

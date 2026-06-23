@@ -49,7 +49,7 @@ void led_sw_toggle(uint8_t led);
 bool led_sw_pressed(uint8_t sw);
 
 /* Power-on indicator: light all LEDs, hold for the given time, then clear.
- * Blocking; uses the systick millisecond time base. */
+ * Blocking; uses the Timer1 tick millisecond time base. */
 void led_sw_boot_test(uint32_t hold_ms);
 
 /* Map the switches to LEDs. SW1 and SW2 are polled and drive LED7/LED6.
