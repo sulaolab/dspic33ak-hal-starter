@@ -136,9 +136,8 @@ makefiles before building. `configurations.xml` is the tracked source of truth;
 ### Command-line (PowerShell)
 
 The `buildtools/` scripts provide a command-line build and flash workflow without
-opening MPLAB X. MPLAB X and XC-DSC must be installed (the scripts auto-detect
-the MPLAB X installation directory and find the compiler and make tools from
-there).
+opening MPLAB X. MPLAB X and XC-DSC must be installed. The scripts auto-detect the MPLAB X
+make and project-generator tools; the generated project makefiles invoke XC-DSC.
 
 ```powershell
 # Incremental build (auto-detects MPLAB X version and firmware.X project)
@@ -163,7 +162,7 @@ there).
 .\buildtools\flashauto.ps1 -List
 
 # Specify target serial and device explicitly
-.\buildtools\flashauto.ps1 -Serial <PKOB4_SERIAL> -Device dsPIC33AK512MPS512
+.\buildtools\flashauto.ps1 -Serial 'YOUR_PKOB4_SERIAL' -Device dsPIC33AK512MPS512
 ```
 
 `flashauto.ps1` requires `flash_pkob4.exe` and `reset_pkob4.exe` from a
