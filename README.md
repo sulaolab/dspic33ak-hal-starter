@@ -117,6 +117,8 @@ through MPLAB X.
 
 ## Build & run
 
+### MPLAB X IDE
+
 1. Open `firmware.X` in MPLAB X (this regenerates the per-machine makefiles).
 2. Build (single configuration `dsPIC33AK512`, device dsPIC33AK512MPS512).
 3. Program to the board with the on-board PKOB4.
@@ -130,6 +132,41 @@ When a change adds, removes, renames, or moves `.c` files or source folders,
 open the project in MPLAB X or otherwise regenerate the per-configuration
 makefiles before building. `configurations.xml` is the tracked source of truth;
 `nbproject/Makefile-*.mk` files are local generated artifacts.
+
+### Command-line (PowerShell)
+
+The `buildtools/` scripts provide a command-line build and flash workflow without
+opening MPLAB X. MPLAB X must still be installed for the compiler and make tools.
+
+```powershell
+# Incremental build (auto-detects MPLAB X version and firmware.X project)
+.\buildtools\build.ps1
+
+# Full clean-build: regenerate makefiles, clean outputs, rebuild
+.\buildtools\build.ps1 -Full
+
+# Clean outputs only
+.\buildtools\build.ps1 -Clean
+
+# Regenerate MPLAB X makefiles only (use after adding/moving source files)
+.\buildtools\build.ps1 -Generate
+
+# Flash the built HEX to the connected board (auto-detects PKOB4 serial)
+.\buildtools\flashauto.ps1
+
+# Reset the board without flashing
+.\buildtools\flashauto.ps1 -Reset
+
+# List connected PKOB4 serials
+.\buildtools\flashauto.ps1 -List
+
+# Specify target serial and device explicitly
+.\buildtools\flashauto.ps1 -Serial 020085204RYN001164 -Device dsPIC33AK512MPS512
+```
+
+`flashauto.ps1` looks for the `_flash_reset_tools/` sibling directory (which
+contains `flash_pkob4.exe` and `reset_pkob4.exe`) and auto-selects the serial
+number when only one PKOB4 is connected.
 
 ## Expected serial output
 
@@ -190,16 +227,22 @@ it returns to `state=active`.)
 
 ```
 firmware.X/             MPLAB X project (single config, dsPIC33AK512MPS512)
+buildtools/             command-line build, clean, flash, and reset scripts
+.vscode/clean.ps1       robust MPLAB X output cleanup helper (used by build.ps1)
 src/
   main.c                boot sequence + main loop
-  board.c/.h            board bring-up entry points
-  board_pins.h          board pin map + per-peripheral PPS wiring
+  board.c/.h            board bring-up: GPIO electrical config + PPS routing
+  board_pins.h          board pin names (RP numbers for PPS pins; packed pin
+                        for non-PPS GPIO-only pins)
   clock/                dspic33ak_clock (PLL1 + CLKGEN routing)
   board_components/     board-specific component helpers built on HALs
                         or minimal device-level code
                         (LED/SW, RGB/POT, SST26 SPI-NOR)
   console/              starter glue: printf write() retarget to UART1
-  hal_gpio/             vendored GPIO HAL: core + CN event layer
+  hal_gpio/             vendored GPIO+PPS HAL family:
+                        dspic33ak_gpio.*    GPIO electrical attributes
+                        dspic33ak_pps.*     peripheral signal routing (PPS)
+                        dspic33ak_gpio_event.*  CN change-notification events
   hal_uart/             vendored UART HAL
   hal_spi/              vendored SPI HAL
   hal_i2c/              vendored I2C HAL
@@ -229,8 +272,15 @@ remain starter-specific code, kept deliberately small and hand-written. See
 The standalone Timer HAL is maintained at
 [dspic33ak-timer-hal](https://github.com/sulaolab/dspic33ak-timer-hal). The
 copy under `src/hal_timer/` is the version integrated and validated by this
-starter project. PPS routing lives in the board layer; the HALs never touch
-pins.
+starter project.
+
+**GPIO / PPS architecture:** the board layer owns the board-specific pin
+assignments (which signal goes to which RP on this PCB). GPIO electrical
+configuration (direction, pull, analog, open-drain) is handled by
+`dspic33ak_gpio.*`; generic PPS signal routing is handled by the companion
+`dspic33ak_pps.*` layer. Both are in `src/hal_gpio/`. The board layer
+(`board.c` / `board_pins.h`) wires them together, using the RP number as the
+single identifier for both GPIO config and PPS routing on PPS-capable pins.
 
 ## Capacitive touch
 

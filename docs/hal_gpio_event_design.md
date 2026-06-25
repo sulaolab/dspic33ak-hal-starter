@@ -99,8 +99,9 @@ callback stays small and does not directly touch LED outputs.
 - interrupt enable bits
 
 The integration layer must configure the pin as a digital input before attaching
-an event. In the current LED/SW board component, `led_sw_init()` clears ANSEL,
-sets input direction, and enables the pull-up for SW1, SW2, and SW3 before
+an event. In the current LED/SW board component, `led_sw_init()` calls
+`dspic33ak_gpio_config()` with a config struct (`dir=INPUT`, `pull=UP`,
+`analog=false`) for SW1, SW2, and SW3 in a single glitch-aware call before
 attaching the SW3 event.
 
 ## Current Validation Behavior
@@ -141,12 +142,21 @@ This layer is a useful stepping stone for a future GPIO wrapper:
 - `dspic33ak_gpio_event_attach()` can become the basis for event callbacks after
   edge policy, debounce, and ownership rules are defined.
 
-Open decisions for a later wrapper layer:
+Resolved decisions (no longer open):
 
-- whether GPIO init should automatically force ANSEL to digital
-- how analog-capable pins should be protected from accidental digital use
-- how PPS ownership should be represented without moving PPS into the HAL
-- whether pin handles should stay as packed `port + bit` values or use board
-  enum IDs
-- whether single-edge attach should be exposed before fully documenting
-  dsPIC33AK `CNEN0x`/`CNEN1x` polarity
+- **PPS ownership:** `dspic33ak_pps.*` is now a companion layer in the same
+  `src/hal_gpio/` HAL family. It provides generic PPS register routing without
+  board-specific knowledge; board-specific RP assignments live in `board.c` /
+  `board_pins.h`.
+- **Pin handle style:** PPS-capable pins use the RP number (single identifier
+  for both GPIO HAL and PPS HAL). Non-PPS GPIO-only pins use the packed
+  `(port, bit)` handle via `DSPIC33AK_GPIO_PIN()`.
+- **ANSEL management:** the caller is responsible for ANSEL. `dspic33ak_gpio_config()`
+  and `dspic33ak_gpio_config_digital_output/input()` set `analog=false` explicitly.
+
+Still open for a future wrapper layer:
+
+- Whether single-edge attach (`FALLING` / `RISING`) should be exposed before
+  fully documenting dsPIC33AK `CNEN0x`/`CNEN1x` polarity mapping.
+- Debounce filtering and multiple-callback-slots per pin.
+- Protection against shared CN port ownership with unrelated code.
