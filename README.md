@@ -136,7 +136,9 @@ makefiles before building. `configurations.xml` is the tracked source of truth;
 ### Command-line (PowerShell)
 
 The `buildtools/` scripts provide a command-line build and flash workflow without
-opening MPLAB X. MPLAB X must still be installed for the compiler and make tools.
+opening MPLAB X. MPLAB X and XC-DSC must be installed (the scripts auto-detect
+the MPLAB X installation directory and find the compiler and make tools from
+there).
 
 ```powershell
 # Incremental build (auto-detects MPLAB X version and firmware.X project)
@@ -161,12 +163,15 @@ opening MPLAB X. MPLAB X must still be installed for the compiler and make tools
 .\buildtools\flashauto.ps1 -List
 
 # Specify target serial and device explicitly
-.\buildtools\flashauto.ps1 -Serial 020085204RYN001164 -Device dsPIC33AK512MPS512
+.\buildtools\flashauto.ps1 -Serial <PKOB4_SERIAL> -Device dsPIC33AK512MPS512
 ```
 
-`flashauto.ps1` looks for the `_flash_reset_tools/` sibling directory (which
-contains `flash_pkob4.exe` and `reset_pkob4.exe`) and auto-selects the serial
-number when only one PKOB4 is connected.
+`flashauto.ps1` requires `flash_pkob4.exe` and `reset_pkob4.exe` from a
+`_flash_reset_tools/` sibling directory. These executables are **not included
+in this repository** — they are optional external tools. When they are present,
+the script auto-detects the serial number if only one PKOB4 is connected; pass
+`-Serial <PKOB4_SERIAL>` when multiple boards are attached. Without these tools,
+use MPLAB X or the standard `ipecmd` for programming.
 
 ## Expected serial output
 
