@@ -134,7 +134,9 @@ static void sst26_fast_read(uint32_t addr, uint8_t *buf, size_t len)
 bool sst26_min_init(void)
 {
     /* Board pins + PPS (RST left asserted low), then complete the reset pulse. */
-    board_spi4_sst26_pins_init();
+    if (!board_spi4_sst26_pins_init()) {
+        return false;
+    }
     CS_DEASSERT();
     short_delay();
     (void)dspic33ak_gpio_set(BOARD_SST26_PIN_RST);   /* release reset */

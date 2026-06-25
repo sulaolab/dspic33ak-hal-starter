@@ -12,15 +12,19 @@ Reusable HAL snapshots live in module-specific `src/hal_xxx/` folders:
 
 | Path | Ownership |
 |---|---|
-| `src/hal_gpio/` | GPIO HAL core plus the CN event layer used by this starter. |
+| `src/hal_gpio/` | GPIO HAL family: `dspic33ak_gpio.*` (electrical attributes), `dspic33ak_pps.*` (generic PPS signal routing), and `dspic33ak_gpio_event.*` (CN change-notification events). |
 | `src/hal_uart/` | UART HAL core, device table, and optional RX ISR ring backend. |
 | `src/hal_spi/` | SPI HAL core. |
 | `src/hal_i2c/` | I2C HAL common, master, slave, and device abstraction. |
 | `src/hal_can/` | CAN FD HAL node/device/common code and optional ISR layer. |
 | `src/hal_timer/` | Timer1 tick and Timer2 high-resolution timer HAL. |
 
-These folders should not contain board pin maps, PPS routing, application demos,
-`printf()` retargeting, or one-off component drivers.
+These folders may contain generic, reusable HAL implementations. The distinction
+for `src/hal_gpio/` specifically: `dspic33ak_pps.*` provides generic PPS register
+routing (signal-to-RPn mapping, IOLOCK management) and belongs here; board-specific
+RP assignments ("which signal goes to which physical pin on this PCB") stay in
+`src/board.c` and `src/board_pins.h`. HAL folders should not contain board pin
+maps, application demos, `printf()` retargeting, or one-off component drivers.
 
 ## Starter-specific folders
 

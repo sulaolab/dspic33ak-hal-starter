@@ -113,9 +113,15 @@ static uint16_t adc_pot_read(void)
 
 void rgb_pot_init(void)
 {
-    board_rgb_pins_init();
-    pwm_rgb_init();
+    /* ADC (pot input) is independent of the RGB PWM output pins; always init
+     * so rgb_pot_update() can read the pot without blocking on CH0RDY. */
     adc_pot_init();
+
+    /* Skip PWM init if RGB pin config failed -- output would be unrouted,
+     * but the pot ADC is already up so rgb_pot_update() will not hang. */
+    if (board_rgb_pins_init()) {
+        pwm_rgb_init();
+    }
 }
 
 void rgb_pot_update(void)

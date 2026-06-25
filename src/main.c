@@ -56,7 +56,9 @@ static void console_uart_init(void)
         .rx_mode     = DSPIC33AK_UART_RX_MODE_POLLING,
     };
 
-    board_uart1_pins_init();
+    /* If pin init fails the UART is not yet up -- can't printf. Proceed anyway;
+     * a wrong PPS config will be visible as garbled / no output. */
+    (void)board_uart1_pins_init();
     (void)dspic33ak_uart_init(DSPIC33AK_UART_INST_1, &cfg);
 }
 
@@ -250,7 +252,9 @@ int main(void)
      * traffic. With CAN_BUS_TEST=1 the firmware instead enters the dedicated
      * two-board bus test and does not return. */
     dspic33ak_clock_can_init();
-    board_can1_pins_init();
+    if (!board_can1_pins_init()) {
+        printf(" WARNING: board_can1_pins_init failed\n");
+    }
     bool can_ok = can_loopback_selftest();
     printf(" CAN1 FD @500k/2M live on the bus (HAL self-check: %s).\n",
            can_ok ? "PASS" : "FAILED");

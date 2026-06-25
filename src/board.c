@@ -2,14 +2,16 @@
  * board.c
  * -------
  * Board pin wiring for the Curiosity + dsPIC33AK512MPS512 DIM starter.
- * Uses the GPIO HAL for pin attributes and writes the PPS registers directly
- * (see board_pins.h). The CLKGEN clock routing is done separately in
- * dspic33ak_clock_init().
+ * PPS-capable pins are configured via the RP-first GPIO API and the PPS HAL,
+ * using the RP number as the single identifier for both GPIO attributes and
+ * signal routing. Non-PPS pins (CS, WP, RST, STBY) use the packed-pin API.
+ * The CLKGEN clock routing is done separately in dspic33ak_clock_init().
  */
 
 #include <xc.h>
 
 #include "dspic33ak_gpio.h"
+#include "dspic33ak_pps.h"
 #include "board_pins.h"
 #include "board.h"
 
@@ -24,113 +26,91 @@ void board_ports_digital_default(void)
     ANSELD = 0;
 }
 
-void board_uart1_pins_init(void)
+bool board_uart1_pins_init(void)
 {
-    /* U1TX: digital push-pull output, idle high (UART idle line is high).
-     * The LAT high is applied before the pin becomes an output (glitch-free). */
-    static const dspic33ak_gpio_config_t tx_cfg = {
-        .dir          = DSPIC33AK_GPIO_DIR_OUTPUT,
-        .pull         = DSPIC33AK_GPIO_PULL_NONE,
-        .analog       = false,
-        .open_drain   = false,
-        .initial_high = true,
-    };
-    /* U1RX: digital input. */
-    static const dspic33ak_gpio_config_t rx_cfg = {
-        .dir          = DSPIC33AK_GPIO_DIR_INPUT,
-        .pull         = DSPIC33AK_GPIO_PULL_NONE,
-        .analog       = false,
-        .open_drain   = false,
-        .initial_high = false,
-    };
+    /* U1TX: idle-high output (UART idle line is high); GPIO before PPS. */
+    if (!dspic33ak_gpio_rp_config_digital_output(BOARD_UART1_TX_RP, true))
+        return false;
+    if (!dspic33ak_pps_route_output(DSPIC33AK_PPS_OUTPUT_U1TX, BOARD_UART1_TX_RP))
+        return false;
 
-    (void)dspic33ak_gpio_config(BOARD_UART1_PIN_TX, &tx_cfg);
-    (void)dspic33ak_gpio_config(BOARD_UART1_PIN_RX, &rx_cfg);
+    /* U1RX: digital input; GPIO before PPS. */
+    if (!dspic33ak_gpio_rp_config_digital_input(BOARD_UART1_RX_RP))
+        return false;
+    if (!dspic33ak_pps_route_input(DSPIC33AK_PPS_INPUT_U1RX, BOARD_UART1_RX_RP))
+        return false;
 
-    /* PPS: route U1RX input from its source RP, U1TX output onto its RP pin. */
-    _U1RXR              = BOARD_UART1_RX_PPS_SRC;
-    BOARD_UART1_TX_RPnR = BOARD_UART1_TX_PPS_FUNC;
+    return true;
 }
 
-void board_can1_pins_init(void)
+bool board_can1_pins_init(void)
 {
-    /* C1TX: digital output, idle high (CAN bus idle line is recessive = high);
-     * PPS then drives it from the CAN module. C1RX: digital input. STBY: output
-     * driven LOW = ATA6563 normal mode (high = standby). */
-    static const dspic33ak_gpio_config_t tx_cfg = {
-        .dir = DSPIC33AK_GPIO_DIR_OUTPUT, .pull = DSPIC33AK_GPIO_PULL_NONE,
-        .analog = false, .open_drain = false, .initial_high = true,
-    };
-    static const dspic33ak_gpio_config_t rx_cfg = {
-        .dir = DSPIC33AK_GPIO_DIR_INPUT,  .pull = DSPIC33AK_GPIO_PULL_NONE,
-        .analog = false, .open_drain = false, .initial_high = false,
-    };
+    /* Enable the CAN1 module (clear its module-disable bit) before HAL init. */
+    PMD3bits.C1MD = 0;
+
+    /* C1TX: idle-high output (CAN recessive state is high). */
+    if (!dspic33ak_gpio_rp_config_digital_output(BOARD_CAN1_TX_RP, true))
+        return false;
+    if (!dspic33ak_pps_route_output(DSPIC33AK_PPS_OUTPUT_CAN1TX, BOARD_CAN1_TX_RP))
+        return false;
+
+    /* C1RX: digital input. */
+    if (!dspic33ak_gpio_rp_config_digital_input(BOARD_CAN1_RX_RP))
+        return false;
+    if (!dspic33ak_pps_route_input(DSPIC33AK_PPS_INPUT_CAN1RX, BOARD_CAN1_RX_RP))
+        return false;
+
+    /* STBY: non-PPS output, Low = ATA6563 normal mode. Packed-pin API. */
     static const dspic33ak_gpio_config_t stby_cfg = {
         .dir = DSPIC33AK_GPIO_DIR_OUTPUT, .pull = DSPIC33AK_GPIO_PULL_NONE,
         .analog = false, .open_drain = false, .initial_high = false,
     };
+    if (!dspic33ak_gpio_config(BOARD_CAN1_PIN_STBY, &stby_cfg))
+        return false;
 
-    /* Enable the CAN1 module (clear its module-disable bit) before HAL init. */
-    PMD3bits.C1MD = 0;
-
-    (void)dspic33ak_gpio_config(BOARD_CAN1_PIN_TX,   &tx_cfg);
-    (void)dspic33ak_gpio_config(BOARD_CAN1_PIN_RX,   &rx_cfg);
-    (void)dspic33ak_gpio_config(BOARD_CAN1_PIN_STBY, &stby_cfg);
-
-    /* PPS: route C1RX input from RP60 (RD11), C1TX output onto RP62 (RD13). */
-    _CAN1RXR            = BOARD_CAN1_RX_PPS_SRC;
-    BOARD_CAN1_TX_RPnR  = BOARD_CAN1_TX_PPS_FUNC;
+    return true;
 }
 
-void board_spi4_sst26_pins_init(void)
+bool board_spi4_sst26_pins_init(void)
 {
-    /* Per-pin GPIO attributes (the SPI HAL drives only the SPI registers).
-     *   SDO4 / SCK4 : digital output, idle low
-     *   SDI4        : digital input
-     *   CS / WP     : active-low controls, idle high (deasserted / WP released)
-     *   RST         : active-low, asserted low here; the SST26 driver releases it
-     *                 after the reset-pulse delay.
-     */
-    static const dspic33ak_gpio_config_t out_low  = {
-        .dir = DSPIC33AK_GPIO_DIR_OUTPUT, .pull = DSPIC33AK_GPIO_PULL_NONE,
-        .analog = false, .open_drain = false, .initial_high = false,
-    };
-    static const dspic33ak_gpio_config_t in_cfg   = {
-        .dir = DSPIC33AK_GPIO_DIR_INPUT,  .pull = DSPIC33AK_GPIO_PULL_NONE,
-        .analog = false, .open_drain = false, .initial_high = false,
-    };
+    /* Non-PPS control pins: CS/WP (active-low, idle high) and RST (asserted low
+     * here; the SST26 driver releases it after the reset-pulse delay). */
     static const dspic33ak_gpio_config_t out_high = {
         .dir = DSPIC33AK_GPIO_DIR_OUTPUT, .pull = DSPIC33AK_GPIO_PULL_NONE,
         .analog = false, .open_drain = false, .initial_high = true,
     };
-
-    (void)dspic33ak_gpio_config(BOARD_SST26_PIN_SDO, &out_low);
-    (void)dspic33ak_gpio_config(BOARD_SST26_PIN_SCK, &out_low);
-    (void)dspic33ak_gpio_config(BOARD_SST26_PIN_SDI, &in_cfg);
-    (void)dspic33ak_gpio_config(BOARD_SST26_PIN_CS,  &out_high);
-    (void)dspic33ak_gpio_config(BOARD_SST26_PIN_WP,  &out_high);
-    (void)dspic33ak_gpio_config(BOARD_SST26_PIN_RST, &out_low);
-
-    /* PPS: SDI4 input from its source RP; SDO4 / SCK4 outputs onto their RP pins. */
-    _SDI4R                = BOARD_SST26_SDI4_PPS_SRC;
-    BOARD_SST26_SDO4_RPnR = BOARD_SST26_SDO4_PPS_FUNC;
-    BOARD_SST26_SCK4_RPnR = BOARD_SST26_SCK4_PPS_FUNC;
-}
-
-void board_rgb_pins_init(void)
-{
-    /* RGB LED pins are PWM-driven outputs (the PWM module drives them via PPS). */
     static const dspic33ak_gpio_config_t out_low = {
         .dir = DSPIC33AK_GPIO_DIR_OUTPUT, .pull = DSPIC33AK_GPIO_PULL_NONE,
         .analog = false, .open_drain = false, .initial_high = false,
     };
+    if (!dspic33ak_gpio_config(BOARD_SST26_PIN_CS,  &out_high)) return false;
+    if (!dspic33ak_gpio_config(BOARD_SST26_PIN_WP,  &out_high)) return false;
+    if (!dspic33ak_gpio_config(BOARD_SST26_PIN_RST, &out_low))  return false;
 
-    (void)dspic33ak_gpio_config(BOARD_RGB_PIN_BLUE,  &out_low);
-    (void)dspic33ak_gpio_config(BOARD_RGB_PIN_GREEN, &out_low);
-    (void)dspic33ak_gpio_config(BOARD_RGB_PIN_RED,   &out_low);
+    /* PPS-capable SPI4 signal pins via RP-first API; GPIO before PPS. */
+    if (!dspic33ak_gpio_rp_config_digital_output(BOARD_SST26_SDO4_RP, false)) return false;
+    if (!dspic33ak_pps_route_output(DSPIC33AK_PPS_OUTPUT_SDO4, BOARD_SST26_SDO4_RP)) return false;
 
-    /* PPS: route PWM1H/PWM2H/PWM3H outputs onto the LED pins. */
-    BOARD_RGB_BLUE_RPnR  = _RPOUT_PWM1H;
-    BOARD_RGB_GREEN_RPnR = _RPOUT_PWM2H;
-    BOARD_RGB_RED_RPnR   = _RPOUT_PWM3H;
+    if (!dspic33ak_gpio_rp_config_digital_output(BOARD_SST26_SCK4_RP, false)) return false;
+    if (!dspic33ak_pps_route_output(DSPIC33AK_PPS_OUTPUT_SCK4, BOARD_SST26_SCK4_RP)) return false;
+
+    if (!dspic33ak_gpio_rp_config_digital_input(BOARD_SST26_SDI4_RP)) return false;
+    if (!dspic33ak_pps_route_input(DSPIC33AK_PPS_INPUT_SDI4, BOARD_SST26_SDI4_RP)) return false;
+
+    return true;
+}
+
+bool board_rgb_pins_init(void)
+{
+    /* RGB LED pins are PWM-driven. GPIO output (idle low) before PPS routing. */
+    if (!dspic33ak_gpio_rp_config_digital_output(BOARD_RGB_BLUE_RP,  false)) return false;
+    if (!dspic33ak_pps_route_output(DSPIC33AK_PPS_OUTPUT_PWM1H, BOARD_RGB_BLUE_RP))  return false;
+
+    if (!dspic33ak_gpio_rp_config_digital_output(BOARD_RGB_GREEN_RP, false)) return false;
+    if (!dspic33ak_pps_route_output(DSPIC33AK_PPS_OUTPUT_PWM2H, BOARD_RGB_GREEN_RP)) return false;
+
+    if (!dspic33ak_gpio_rp_config_digital_output(BOARD_RGB_RED_RP,   false)) return false;
+    if (!dspic33ak_pps_route_output(DSPIC33AK_PPS_OUTPUT_PWM3H, BOARD_RGB_RED_RP))   return false;
+
+    return true;
 }
