@@ -113,7 +113,10 @@ static uint16_t adc_pot_read(void)
 
 void rgb_pot_init(void)
 {
-    board_rgb_pins_init();
+    /* Skip PWM init if pin config failed -- PWM output would be unrouted. */
+    if (!board_rgb_pins_init()) {
+        return;
+    }
     pwm_rgb_init();
     adc_pot_init();
 }

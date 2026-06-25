@@ -10,7 +10,7 @@
 # are harmless and recreated on the next build). It fails only if real output files
 # stay locked.
 #
-# Invoked by the "MPLAB: Clean" task with cwd = perseus_512.X.
+# Invoked by the "MPLAB: Clean" task with cwd = the MPLAB X project directory (firmware.X).
 # Configuration overridable via MPLABX_CONF.
 $ErrorActionPreference = 'Continue'
 

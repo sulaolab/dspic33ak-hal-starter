@@ -77,16 +77,20 @@ void led_sw_init(void)
 {
     uint8_t i;
 
+    /* LEDs: glitch-aware one-call config -- seeds LAT low (LED off) before
+     * enabling the output driver, so no LED flashes during init. */
     for (i = 0u; i < LED_SW_LED_COUNT; i++) {
-        dspic33ak_gpio_set_analog(LED_PINS[i], false);
-        dspic33ak_gpio_set_direction(LED_PINS[i], DSPIC33AK_GPIO_DIR_OUTPUT);
-        dspic33ak_gpio_write(LED_PINS[i], false);    /* off */
+        (void)dspic33ak_gpio_config_digital_output(LED_PINS[i], false);
     }
 
+    /* Switches: active-low with board pull-up. Use full config struct to
+     * set all attributes in one call. */
+    static const dspic33ak_gpio_config_t sw_cfg = {
+        .dir = DSPIC33AK_GPIO_DIR_INPUT, .pull = DSPIC33AK_GPIO_PULL_UP,
+        .analog = false, .open_drain = false, .initial_high = false,
+    };
     for (i = 0u; i < LED_SW_SW_COUNT; i++) {
-        dspic33ak_gpio_set_analog(SW_PINS[i], false);
-        dspic33ak_gpio_set_direction(SW_PINS[i], DSPIC33AK_GPIO_DIR_INPUT);
-        dspic33ak_gpio_set_pull(SW_PINS[i], DSPIC33AK_GPIO_PULL_UP);
+        (void)dspic33ak_gpio_config(SW_PINS[i], &sw_cfg);
     }
 
     s_sw3_pressed = led_sw_pressed(LED_SW_SW3_NUMBER);
