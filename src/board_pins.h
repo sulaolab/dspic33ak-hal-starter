@@ -7,26 +7,27 @@
  * Board pin assignment for: Microchip Curiosity Platform Development Board with
  * a dsPIC33AK512MPS512 DIM, in its standard (unmodified) configuration.
  *
- * This is the ONE place that names the board's physical pins and the PPS
- * (peripheral pin select) codes. The vendored HALs under src/hal_xxx know
- * nothing about pins or PPS; the board layer (board.c) wires peripherals to
- * these pins using the GPIO HAL plus the PPS registers below.
+ * This is the ONE place that names the board's physical pins and the RP
+ * (remappable-pin) numbers used for PPS. The vendored HALs under src/hal_xxx
+ * know nothing about pins or PPS; the board layer (board.c) wires peripherals to
+ * these pins using the GPIO HAL plus the PPS HAL (dspic33ak_pps_route_*).
  *
- * PPS note (dsPIC33AK): _RPnnR (output) and _xxxR (input) are bit-field aliases
- * into the RPOR / RPINR SFRs. This starter writes them directly (no RPCON.IOLOCK
- * lock/unlock) to stay minimal.
+ * PPS note (dsPIC33AK): routing goes through the GPIO HAL's companion PPS layer
+ * (dspic33ak_pps_route_output/input), which self-brackets RPCON.IOLOCK. The
+ * board only names the signal + the RP pin number; the raw RPORx/RPINRx
+ * registers and peripheral function codes stay inside the PPS HAL.
  */
 
 #include "dspic33ak_gpio.h"
+#include "dspic33ak_pps.h"
 
 /* ---- UART1 (console / printf @ 230400) ----
  *   U1TX = RH1 (RP114)   U1RX = RD1 (RP50-source code 0x32)
  */
 #define BOARD_UART1_PIN_TX        DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_H, 1)
 #define BOARD_UART1_PIN_RX        DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_D, 1)
-#define BOARD_UART1_TX_RPnR       _RP114R    /* U1TX output pin select register */
-#define BOARD_UART1_TX_PPS_FUNC   (0x13u)    /* U1TX output function code        */
-#define BOARD_UART1_RX_PPS_SRC    (0x32u)    /* U1RX input  <- RP source (RD1)   */
+#define BOARD_UART1_TX_RP         (114u)   /* U1TX output  -> RP114 (RH1) */
+#define BOARD_UART1_RX_RP         (50u)    /* U1RX input   <- RP50  (RD1) */
 
 /* ---- SPI4 -> SST26 external SPI NOR flash (on the Curiosity motherboard) ----
  *   SDO4 = RA12 (RP13)   SDI4 = RA13 (RP14)   SCK4 = RE1 (RP66)
@@ -39,11 +40,9 @@
 #define BOARD_SST26_PIN_CS        DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_D, 15)
 #define BOARD_SST26_PIN_RST       DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_E,  0)
 
-#define BOARD_SST26_SDI4_PPS_SRC  (14u)    /* SDI4 input  <- RP14            */
-#define BOARD_SST26_SDO4_RPnR     _RP13R   /* SDO4 output pin select (RP13)  */
-#define BOARD_SST26_SDO4_PPS_FUNC (34u)    /* SDO4 output function code      */
-#define BOARD_SST26_SCK4_RPnR     _RP66R   /* SCK4 output pin select (RP66)  */
-#define BOARD_SST26_SCK4_PPS_FUNC (35u)    /* SCK4 output function code      */
+#define BOARD_SST26_SDI4_RP       (14u)    /* SDI4 input  <- RP14 (RA13) */
+#define BOARD_SST26_SDO4_RP       (13u)    /* SDO4 output -> RP13 (RA12) */
+#define BOARD_SST26_SCK4_RP       (66u)    /* SCK4 output -> RP66 (RE1)  */
 
 /* ---- RGB LED (PWM1/2/3 -> RP51/49/58) on the Curiosity motherboard ----
  *   Blue  = PWM1H on RP51 (RD2)
@@ -53,9 +52,9 @@
 #define BOARD_RGB_PIN_BLUE        DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_D, 2)
 #define BOARD_RGB_PIN_GREEN       DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_D, 0)
 #define BOARD_RGB_PIN_RED         DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_D, 9)
-#define BOARD_RGB_BLUE_RPnR       _RP51R   /* PWM1H output pin select (RD2) */
-#define BOARD_RGB_GREEN_RPnR      _RP49R   /* PWM2H output pin select (RD0) */
-#define BOARD_RGB_RED_RPnR        _RP58R   /* PWM3H output pin select (RD9) */
+#define BOARD_RGB_BLUE_RP         (51u)    /* PWM1H output -> RP51 (RD2) */
+#define BOARD_RGB_GREEN_RP        (49u)    /* PWM2H output -> RP49 (RD0) */
+#define BOARD_RGB_RED_RP          (58u)    /* PWM3H output -> RP58 (RD9) */
 
 /* ---- User LEDs and switches on the Curiosity motherboard ----
  *   LED0..LED7 = RC8..RC15  (active-high)
@@ -86,8 +85,7 @@
 #define BOARD_CAN1_PIN_TX         DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_D, 13)
 #define BOARD_CAN1_PIN_RX         DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_D, 11)
 #define BOARD_CAN1_PIN_STBY       DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_D, 14)
-#define BOARD_CAN1_TX_RPnR        _RP62R          /* C1TX output pin select (RP62/RD13) */
-#define BOARD_CAN1_TX_PPS_FUNC    _RPOUT_CAN1TX   /* C1TX output function code           */
-#define BOARD_CAN1_RX_PPS_SRC     (60u)           /* C1RX input <- RP60 (RD11)           */
+#define BOARD_CAN1_TX_RP          (62u)    /* C1TX output -> RP62 (RD13) */
+#define BOARD_CAN1_RX_RP          (60u)    /* C1RX input  <- RP60 (RD11) */
 
 #endif /* BOARD_PINS_H */

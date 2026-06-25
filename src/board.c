@@ -2,14 +2,15 @@
  * board.c
  * -------
  * Board pin wiring for the Curiosity + dsPIC33AK512MPS512 DIM starter.
- * Uses the GPIO HAL for pin attributes and writes the PPS registers directly
- * (see board_pins.h). The CLKGEN clock routing is done separately in
- * dspic33ak_clock_init().
+ * Uses the GPIO HAL for pin attributes and the PPS HAL (dspic33ak_pps_route_*)
+ * for peripheral pin routing (RP numbers in board_pins.h). The CLKGEN clock
+ * routing is done separately in dspic33ak_clock_init().
  */
 
 #include <xc.h>
 
 #include "dspic33ak_gpio.h"
+#include "dspic33ak_pps.h"
 #include "board_pins.h"
 #include "board.h"
 
@@ -48,8 +49,8 @@ void board_uart1_pins_init(void)
     (void)dspic33ak_gpio_config(BOARD_UART1_PIN_RX, &rx_cfg);
 
     /* PPS: route U1RX input from its source RP, U1TX output onto its RP pin. */
-    _U1RXR              = BOARD_UART1_RX_PPS_SRC;
-    BOARD_UART1_TX_RPnR = BOARD_UART1_TX_PPS_FUNC;
+    (void)dspic33ak_pps_route_input(DSPIC33AK_PPS_INPUT_U1RX,  BOARD_UART1_RX_RP);
+    (void)dspic33ak_pps_route_output(DSPIC33AK_PPS_OUTPUT_U1TX, BOARD_UART1_TX_RP);
 }
 
 void board_can1_pins_init(void)
@@ -78,8 +79,8 @@ void board_can1_pins_init(void)
     (void)dspic33ak_gpio_config(BOARD_CAN1_PIN_STBY, &stby_cfg);
 
     /* PPS: route C1RX input from RP60 (RD11), C1TX output onto RP62 (RD13). */
-    _CAN1RXR            = BOARD_CAN1_RX_PPS_SRC;
-    BOARD_CAN1_TX_RPnR  = BOARD_CAN1_TX_PPS_FUNC;
+    (void)dspic33ak_pps_route_input(DSPIC33AK_PPS_INPUT_CAN1RX,  BOARD_CAN1_RX_RP);
+    (void)dspic33ak_pps_route_output(DSPIC33AK_PPS_OUTPUT_CAN1TX, BOARD_CAN1_TX_RP);
 }
 
 void board_spi4_sst26_pins_init(void)
@@ -112,9 +113,9 @@ void board_spi4_sst26_pins_init(void)
     (void)dspic33ak_gpio_config(BOARD_SST26_PIN_RST, &out_low);
 
     /* PPS: SDI4 input from its source RP; SDO4 / SCK4 outputs onto their RP pins. */
-    _SDI4R                = BOARD_SST26_SDI4_PPS_SRC;
-    BOARD_SST26_SDO4_RPnR = BOARD_SST26_SDO4_PPS_FUNC;
-    BOARD_SST26_SCK4_RPnR = BOARD_SST26_SCK4_PPS_FUNC;
+    (void)dspic33ak_pps_route_input(DSPIC33AK_PPS_INPUT_SDI4,  BOARD_SST26_SDI4_RP);
+    (void)dspic33ak_pps_route_output(DSPIC33AK_PPS_OUTPUT_SDO4, BOARD_SST26_SDO4_RP);
+    (void)dspic33ak_pps_route_output(DSPIC33AK_PPS_OUTPUT_SCK4, BOARD_SST26_SCK4_RP);
 }
 
 void board_rgb_pins_init(void)
@@ -130,7 +131,7 @@ void board_rgb_pins_init(void)
     (void)dspic33ak_gpio_config(BOARD_RGB_PIN_RED,   &out_low);
 
     /* PPS: route PWM1H/PWM2H/PWM3H outputs onto the LED pins. */
-    BOARD_RGB_BLUE_RPnR  = _RPOUT_PWM1H;
-    BOARD_RGB_GREEN_RPnR = _RPOUT_PWM2H;
-    BOARD_RGB_RED_RPnR   = _RPOUT_PWM3H;
+    (void)dspic33ak_pps_route_output(DSPIC33AK_PPS_OUTPUT_PWM1H, BOARD_RGB_BLUE_RP);
+    (void)dspic33ak_pps_route_output(DSPIC33AK_PPS_OUTPUT_PWM2H, BOARD_RGB_GREEN_RP);
+    (void)dspic33ak_pps_route_output(DSPIC33AK_PPS_OUTPUT_PWM3H, BOARD_RGB_RED_RP);
 }

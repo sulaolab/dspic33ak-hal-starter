@@ -125,8 +125,9 @@ void led_sw_toggle(uint8_t led)
 bool led_sw_pressed(uint8_t sw)
 {
     if (sw >= 1u && sw <= LED_SW_SW_COUNT) {
-        /* Active-low: a pressed switch pulls the pin to 0. */
-        return (dspic33ak_gpio_read(SW_PINS[sw - 1u]) == false);
+        /* Active-low: a pressed switch pulls the pin to 0. read() returns a
+         * 3-state level; treat only a genuine LOW as pressed (ERROR -> not). */
+        return (dspic33ak_gpio_read(SW_PINS[sw - 1u]) == DSPIC33AK_GPIO_LEVEL_LOW);
     }
     return false;
 }
