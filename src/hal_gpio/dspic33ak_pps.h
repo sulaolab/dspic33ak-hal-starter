@@ -31,10 +31,12 @@
  * (RP129..RP144) are intentionally NOT routable here -- if they are ever needed,
  * add a separate virtual-output API rather than overloading this GPIO-typed one.
  * route_input() rejects an rp that is not a physical pin on this device (returns
- * false before writing). The peripheral-SIGNAL enums below are the set this
- * repository currently routes (U1, SPI1/2/4, CLC1..3) -- NOT every PPS-capable
- * peripheral the device has; add one by extending the enum plus the matching case
- * in dspic33ak_pps.c. Routing a signal absent on the selected device returns false.
+ * false before writing). The peripheral-SIGNAL enums contain the signals currently
+ * required by this codebase (U1TX/RX, SPI1/2/4, CLC1-3, PWM1H/2H/3H,
+ * PWM5H/5L-8H/8L, REFI1, CAN1TX/RX); they do NOT represent every PPS-capable
+ * peripheral the device supports. Add a new signal by extending the enum and the
+ * matching case in dspic33ak_pps.c. Routing a signal absent on the selected
+ * device returns false.
  *
  * Pairing with hal_gpio: PPS routing does NOT configure the pin's direction or
  * analog/digital select. Configure the pin first (dspic33ak_gpio_rp_config_*),
