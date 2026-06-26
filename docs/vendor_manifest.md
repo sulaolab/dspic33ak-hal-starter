@@ -11,11 +11,11 @@ upstream commit that each `src/hal_xxx/` folder was checked against.
 | `src/hal_spi/` | `sulaolab/dspic33ak-spi-hal` | `44620edd88b1cf7957872eea9e5f50b782d39072` |
 | `src/hal_i2c/` | `sulaolab/dspic33ak-i2c-hal` | `33dfee6371c0c61d15e1d318cb87f94358e993ac` |
 | `src/hal_can/` | `sulaolab/dspic33ak-can-hal` | `c9a418a9cc1af5c63cf9c1234e8d300de7b1c618` |
-| `src/hal_timer/` | `sulaolab/dspic33ak-timer-hal` | `880ebee58f5d61a631dbe7e704218fc69ba2af93` |
+| `src/hal_timer/` | `sulaolab/dspic33ak-timer-hal` | `bc739d3c85fc8b2d0d8c608c3392d2b5b404c6c7` |
 
-The source files in these folders were compared against the local upstream
-repository checkouts at the commits above during the `tidy-hal-vendor-layout`
-branch work.
+Unless noted below, the source files in these folders were compared against the
+local upstream repository checkouts at the commits above during the
+`tidy-hal-vendor-layout` branch work.
 
 **Note on `src/hal_gpio/`:** the current snapshot includes the reviewed, hardware-
 validated all-in GPIO+PPS HAL (RP-first API, PPS companion layer, full attribute

@@ -143,7 +143,7 @@ int main(void)
 {
     const dspic33ak_tick_timer_config_t tick_cfg = {
         .timer_clk_hz = DSPIC33AK_CLOCK_SYS_HZ / 2u,
-        .irq_priority = 4u,
+        .irq_priority = DSPIC33AK_TICK_TIMER_DEFAULT_IRQ_PRIORITY,
         .run_in_idle = false,
     };
     const dspic33ak_high_res_timer_config_t high_res_cfg = {

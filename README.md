@@ -53,9 +53,10 @@ The firmware demonstrates:
 2. **Timer HAL self-check**
    A Timer1-based 1 ms monotonic time base drives heartbeat timing and the
    timeout callbacks used by the I2C and CAN HALs. The application owns the
-   `_T1Interrupt()` vector and forwards it to the Timer HAL handler. Timer2 is
-   also initialized as a free-running high-resolution counter and checked after
-   the boot banner.
+   `_T1Interrupt()` vector and forwards it to the Timer HAL handler. The
+   starter uses the Timer HAL's public default IRQ-priority macro for this tick.
+   Timer2 is also initialized as a free-running high-resolution counter and
+   checked after the boot banner.
 
 3. **UART console output**
    `printf()` through UART1 at 230400 8N1
@@ -252,7 +253,8 @@ src/
   hal_i2c/              vendored I2C HAL
   hal_can/              vendored CAN FD HAL: dspic33ak_canfd_* (node + optional ISR layer)
   hal_timer/            vendored Timer HAL
-                        (Timer1 1 ms tick + Timer2 high-resolution counter)
+                        (Timer1 1 ms tick, default IRQ priority macro,
+                        and Timer2 high-resolution counter)
   hal_udid/             local UDID helper used by the boot banner
   app/                  bus validation samples: i2c_scan, i2c_loopback,
                         can_loopback, can_bus_test (two-board)
