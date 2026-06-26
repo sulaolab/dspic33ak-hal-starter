@@ -23,9 +23,19 @@ typedef enum {
     DSPIC33AK_TICK_TIMER_ERR_OUT_OF_RANGE
 } dspic33ak_tick_timer_status_t;
 
+/* Recommended CPU interrupt priority for the 1 ms Timer1 tick. Applications may
+ * supply a different non-zero priority when their interrupt ordering requires
+ * it. */
+#define DSPIC33AK_TICK_TIMER_DEFAULT_IRQ_PRIORITY   4u
+
 typedef struct {
+    /* Actual input clock supplied to Timer1, in Hz. */
     uint32_t timer_clk_hz;
+
+    /* CPU interrupt priority for the Timer1 tick. Valid range: 1..7. */
     uint8_t irq_priority;
+
+    /* Keep Timer1 running while the CPU is in Idle mode. */
     bool run_in_idle;
 } dspic33ak_tick_timer_config_t;
 

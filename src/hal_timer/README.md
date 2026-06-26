@@ -33,7 +33,8 @@ This starter supplies:
 - `timer_clk_hz = DSPIC33AK_CLOCK_SYS_HZ / 2u`
 - Timer1 input clock = 100 MHz
 - Timer2 input clock = 100 MHz
-- Timer1 interrupt priority = 4
+- Timer1 interrupt priority =
+  `DSPIC33AK_TICK_TIMER_DEFAULT_IRQ_PRIORITY` (`4u`)
 - `_T1Interrupt()` in `src/main.c`
 - `dspic33ak_tick_timer_get_ms()` as the timeout source for I2C and CAN
 - heartbeat and application timing from the same millisecond counter
@@ -50,7 +51,7 @@ This starter supplies:
 
 const dspic33ak_tick_timer_config_t tick_timer_config = {
     .timer_clk_hz = DSPIC33AK_CLOCK_SYS_HZ / 2u,
-    .irq_priority = 4u,
+    .irq_priority = DSPIC33AK_TICK_TIMER_DEFAULT_IRQ_PRIORITY,
     .run_in_idle = false,
 };
 
@@ -107,6 +108,11 @@ Therefore, the configured period is exactly 1 ms for this project.
 
 `dspic33ak_tick_timer_get_ms()` returns 0 before successful initialization and
 after `dspic33ak_tick_timer_deinit()`.
+
+The public `DSPIC33AK_TICK_TIMER_DEFAULT_IRQ_PRIORITY` macro provides the
+starter's recommended CPU interrupt priority for the 1 ms tick. It is not a
+hardware requirement; applications that need different interrupt ordering can
+pass another valid priority in `dspic33ak_tick_timer_config_t`.
 
 ## Ownership
 
@@ -165,6 +171,7 @@ In scope:
 - Configurable Timer1 input clock.
 - Configurable Timer2 input clock.
 - Configurable Timer1 interrupt priority.
+- Starter default Timer1 interrupt priority macro.
 - Init, deinit, presence, and initialized-state queries.
 - Application-owned interrupt forwarding.
 
