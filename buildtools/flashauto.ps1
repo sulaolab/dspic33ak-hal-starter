@@ -11,7 +11,8 @@ param(
     [string]$Configuration = $env:MPLABX_CONF,
     [string]$Root = (Get-Location).Path,
     [string]$ProjectDir,
-    [string]$ToolsDir = $env:FLASH_RESET_TOOLS
+    [string]$ToolsDir = $env:FLASH_RESET_TOOLS,
+    [int]$ResetTimeoutSec = 120
 )
 
 $ErrorActionPreference = 'Stop'
@@ -229,10 +230,11 @@ Write-Status "Tools: $toolsDir"
 Write-Status "Serial: $serialNumber"
 
 if ($Reset) {
-    $resetArgs = @('--serial', $serialNumber, '--device', $resetDeviceToken)
+    $resetArgs = @('--serial', $serialNumber, '--device', $resetDeviceToken, '--timeout', $ResetTimeoutSec)
     if (-not $Quiet) { $resetArgs += '--verbose' }
     if ($DryRun) { $resetArgs += '--dry-run' }
     Write-Status "Reset device token: $resetDeviceToken"
+    Write-Status "Reset timeout: ${ResetTimeoutSec}s"
     Invoke-CheckedExe -Exe $resetTool -Arguments $resetArgs
     Write-Status "flashauto: reset completed"
     return
@@ -247,14 +249,21 @@ Write-Status "HEX: $hexPath"
 $flashArgs = @(
     '--serial', $serialNumber,
     '--device', $Device,
-    '--hex', $hexPath,
-    '--reset-after-flash'
+    '--hex', $hexPath
 )
-if (-not [string]::IsNullOrWhiteSpace($ResetDevice)) {
-    $flashArgs += @('--reset-device', $ResetDevice)
-}
 if (-not $Quiet) { $flashArgs += '--verbose' }
 if ($DryRun) { $flashArgs += '--dry-run' }
 
 Invoke-CheckedExe -Exe $flashTool -Arguments $flashArgs
+
+$resetArgs = @('--serial', $serialNumber, '--device', $resetDeviceToken, '--timeout', $ResetTimeoutSec)
+if (-not $Quiet) { $resetArgs += '--verbose' }
+if ($DryRun) { $resetArgs += '--dry-run' }
+
+Write-Status "Running reset after successful flash..."
+Write-Status "Reset timeout: ${ResetTimeoutSec}s"
+$resetStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+Invoke-CheckedExe -Exe $resetTool -Arguments $resetArgs
+$resetStopwatch.Stop()
+Write-Status ("Reset elapsed: {0:N1}s" -f $resetStopwatch.Elapsed.TotalSeconds)
 Write-Status "flashauto: flash + reset completed"
