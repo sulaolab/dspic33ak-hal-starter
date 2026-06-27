@@ -42,6 +42,13 @@ static const dspic33ak_gpio_pin_t SW_PINS[LED_SW_SW_COUNT] = {
 #define LED_SW_SW3_NUMBER     3u
 #define LED_SW_SW3_EVENT_LED  5u
 
+#if !defined(LED_SW_DEBOUNCE_MS)
+/* Mechanical-switch contact settle time: a raw level must hold this long before
+ * led_sw_update() accepts it, so contact bounce on a quick/sloppy press no
+ * longer produces spurious transition logs and LED flicker. Overridable. */
+#define LED_SW_DEBOUNCE_MS    (15u)
+#endif
+
 static volatile bool s_sw3_pressed;
 
 static void led_sw_log_transition(uint8_t sw, bool pressed)
@@ -150,13 +157,35 @@ void led_sw_boot_test(uint32_t hold_ms)
     led_sw_all(false);
 }
 
+/* Per-switch stable-confirm debounce. Returns the confirmed (debounced) level
+ * for switch index idx (0..LED_SW_SW_COUNT-1): the raw level is only accepted
+ * once it has held steady for LED_SW_DEBOUNCE_MS, so bounce shorter than that
+ * window is filtered out. Both the polled (SW1/2) and CN-event (SW3) inputs are
+ * passed through this, so all three switches behave identically downstream. */
+static bool led_sw_debounce(uint8_t idx, bool raw)
+{
+    static bool     confirmed[LED_SW_SW_COUNT];      /* debounced level         */
+    static bool     candidate[LED_SW_SW_COUNT];      /* last raw level seen     */
+    static uint32_t candidate_ms[LED_SW_SW_COUNT];   /* when candidate appeared */
+
+    uint32_t now = dspic33ak_tick_timer_get_ms();
+
+    if (raw != candidate[idx]) {
+        candidate[idx]    = raw;
+        candidate_ms[idx] = now;        /* raw changed -> restart settle window */
+    } else if ((uint32_t)(now - candidate_ms[idx]) >= LED_SW_DEBOUNCE_MS) {
+        confirmed[idx]    = raw;        /* stable long enough -> accept         */
+    }
+    return confirmed[idx];
+}
+
 void led_sw_update(void)
 {
     static bool initialized;
     static bool previous_pressed[LED_SW_SW_COUNT];
-    bool sw1_pressed = led_sw_pressed(1u);
-    bool sw2_pressed = led_sw_pressed(2u);
-    bool sw3_pressed = s_sw3_pressed;
+    bool sw1_pressed = led_sw_debounce(0u, led_sw_pressed(1u));
+    bool sw2_pressed = led_sw_debounce(1u, led_sw_pressed(2u));
+    bool sw3_pressed = led_sw_debounce(LED_SW_SW3_INDEX, s_sw3_pressed);
 
     led_sw_set(7u, sw1_pressed);
     led_sw_set(6u, sw2_pressed);
