@@ -38,8 +38,10 @@ connected, its ACK address is printed.
 For the I2C master/slave loopback demo, I2C2 and I2C3 are used as a shared-bus
 loopback on the starter board setup.
 
-This starter is intentionally board- and device-specific (single device, no
-`__dsPIC33AK128MC106__` branches) to stay small and obvious.
+The starter application target is intentionally board- and device-specific:
+EV74H48A + EV80L65A with a dsPIC33AK512MPS512 DIM. Some vendored HAL candidate
+folders also contain dsPIC33AK512 / dsPIC33AK128 silicon facts so the HAL code
+can remain reusable, but the starter board path shown here is the AK512 setup.
 
 ## What runs after programming?
 
@@ -95,6 +97,26 @@ The firmware demonstrates:
    reported but does not stop the other demos. (The MikroBUS-A I2C SDA/SCL pins are
    different and are unaffected either way.)
 
+### TDM8 smoke demo on mikroBUS-A
+
+The starter firmware enables the TDM smoke demo by default. When the board is
+running, the mikroBUS-A SPI pins output a TDM8-style framed serial waveform.
+This is intended as a quick oscilloscope-visible bring-up check and a showcase
+that the dsPIC33AK SPI framed-mode path can generate TDM-style audio timing
+without a codec attached.
+
+<img src="docs/images/tdm8-smoke-waveform.svg" alt="Expected TDM8 smoke-demo waveform on mikroBUS-A: frame sync, bit clock, and eight data slots" width="900">
+
+The snapshot above is an expected waveform reference for the default
+configuration: FS around 48.8 kHz, BCLK around 12.5 MHz, 8 slots per frame, and
+SPI1 DataOut carrying a test tone pattern. For a loopback check, jumper
+DataOut -> DataIn and watch the `[TDM1]` status line move toward `0 dB rel`.
+
+To use mikroBUS-A as a normal SPI Click interface, set
+`HAL_STARTER_ENABLE_TDM_SMOKE_DEMO` to `0` in `src/app/app_config.h`. That frees
+the mikroBUS-A SPI pins; the I2C pins on the same mikroBUS header are separate
+and remain usable either way.
+
 In short: this is a known-good hardware starter project for checking that the
 board, toolchain, programmer, UART console, and basic HAL drivers are working
 together.
@@ -107,6 +129,13 @@ This pairs with the standalone HALs:
 - [dspic33ak-i2c-hal](https://github.com/sulaolab/dspic33ak-i2c-hal)
 - [dspic33ak-can-hal](https://github.com/sulaolab/dspic33ak-can-hal)
 - [dspic33ak-timer-hal](https://github.com/sulaolab/dspic33ak-timer-hal)
+
+This starter also currently vendors candidate or integration HAL folders that
+are exercised by the app but may still be published separately or folded into an
+existing HAL family: `hal_dma`, `hal_spi_i2s_tdm`, and the `hal_gpio_event`
+change-notification layer inside `hal_gpio`. The starter's active HAL surface
+therefore includes GPIO/PPS/CN events, UART, SPI, I2C, CAN FD, Timer, DMA, and
+SPI framed-mode I2S/TDM.
 
 The reusable HAL implementations are maintained in the standalone repositories
 above. This starter vendors validated snapshots under matching `src/hal_xxx/`
@@ -274,17 +303,20 @@ src/
                         (DMA ping-pong + per-instance block callback; board-free
                         via a port hook). See its own README.md.
   dspic33ak_spi_i2s_tdm_conf.h  project-supplied (self-contained) config for the
-                        TDM HAL: single SPI1 TDM8 stream, DMA0/1.
+                        TDM HAL: single SPI1 TDM8 stream, DMA0/1. It is kept
+                        near the top of src/ so it is easy to find in MPLAB X.
   app/                  bus validation samples: i2c_scan, i2c_loopback,
                         can_loopback, can_bus_test (two-board); app_config.h
                         (demo toggles); tdm_smoke (SPI1 TDM8 smoke demo)
 docs/
   images/
     serial-console.png   live two-board CAN FD + I2C session screenshot
+    tdm8-smoke-waveform.svg
+                         expected TDM8 smoke-demo waveform reference
   source_layout.md       source-tree ownership and vendored-HAL layout notes
-  vendor_manifest.md     upstream commit recorded for each vendored HAL snapshot
   hal_gpio_event_design.md
-                         GPIO CN event design notes
+                         GPIO CN event usage and current limitations
+  hal_udid.md           UDID helper notes
   touch-addon.md        optional capacitive-touch add-on (QTM; not bundled)
 ```
 
