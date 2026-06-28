@@ -298,7 +298,7 @@ int main(void)
     uint32_t last_beat = dspic33ak_tick_timer_get_ms();
     uint32_t last_term_reset = dspic33ak_tick_timer_get_ms();
 #if HAL_STARTER_ENABLE_TDM_SMOKE_DEMO
-    uint32_t last_tdm  = dspic33ak_tick_timer_get_ms();
+    uint32_t last_tdm  = dspic33ak_tick_timer_get_ms() - 5000u;
 #endif
     while (1)
     {
