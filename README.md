@@ -82,6 +82,19 @@ The firmware demonstrates:
 8. **GPIO / ADC / PWM demo**
    LEDs, switches, potentiometer input, RGB LED output, and heartbeat blinking
 
+9. **SPI1 TDM8 smoke demo (codec-less, MikroBUS-A)** — default ON
+   SPI1 runs as a self-clocked framed-mode (TDM8) master on MikroBUS-A
+   (FS=RP70, BCLK=RP75, DataOut=RP101, DataIn=RP106), driving all 8 slots with a
+   ~800 Hz-class sine, so a scope on DataOut shows a TDM8 frame (BCLK ~12.5 MHz,
+   FS ~48.8 kHz — these are expected design values, not measurements). Jumper
+   DataOut->DataIn to read the RX level near `0 dB rel`; with no jumper it floors near
+   `-140 dB rel`. The stream runs on DMA/ISR and prints one status line every ~5 s:
+   `[TDM1] TDM8 master exp_fs~48.8kHz exp_bclk~12.5MHz block=... miss=0 rx=... dB rel`.
+   **This demo holds the MikroBUS-A SPI pins** — to use a real SPI Click board there, set
+   `HAL_STARTER_ENABLE_TDM_SMOKE_DEMO 0` in `src/app/app_config.h`. A start failure is
+   reported but does not stop the other demos. (The MikroBUS-A I2C SDA/SCL pins are
+   different and are unaffected either way.)
+
 In short: this is a known-good hardware starter project for checking that the
 board, toolchain, programmer, UART console, and basic HAL drivers are working
 together.
@@ -249,15 +262,22 @@ src/
                         dspic33ak_pps.*     peripheral signal routing (PPS)
                         dspic33ak_gpio_event.*  CN change-notification events
   hal_uart/             vendored UART HAL
-  hal_spi/              vendored SPI HAL
+  hal_spi/              vendored SPI HAL (blocking master; SST26 flash on SPI4)
   hal_i2c/              vendored I2C HAL
   hal_can/              vendored CAN FD HAL: dspic33ak_canfd_* (node + optional ISR layer)
   hal_timer/            vendored Timer HAL
                         (Timer1 1 ms tick, default IRQ priority macro,
                         and Timer2 high-resolution counter)
   hal_udid/             local UDID helper used by the boot banner
+  hal_dma/              vendored DMA HAL (low-level channel config; used by the TDM HAL)
+  hal_spi_i2s_tdm/      vendored SPI framed-mode I2S/TDM transport HAL
+                        (DMA ping-pong + per-instance block callback; board-free
+                        via a port hook). See its own README.md.
+  dspic33ak_spi_i2s_tdm_conf.h  project-supplied (self-contained) config for the
+                        TDM HAL: single SPI1 TDM8 stream, DMA0/1.
   app/                  bus validation samples: i2c_scan, i2c_loopback,
-                        can_loopback, can_bus_test (two-board)
+                        can_loopback, can_bus_test (two-board); app_config.h
+                        (demo toggles); tdm_smoke (SPI1 TDM8 smoke demo)
 docs/
   images/
     serial-console.png   live two-board CAN FD + I2C session screenshot
