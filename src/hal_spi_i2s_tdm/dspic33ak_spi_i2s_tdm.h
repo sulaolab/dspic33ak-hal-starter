@@ -47,9 +47,9 @@
 // core #error's otherwise; other parts need their facts added). Known sibling-HAL
 // dependencies: dspic33ak_dma (required), and the load monitor's use of the hal_timer
 // high-res public API (dspic33ak_high_res_timer_*, runtime-gated via is_initialized()) --
-// a clean sibling-HAL dependency, like hal_dma. The debug-only deps (<stdio.h>, dspic33ak_tick_timer.h
-// GetTicks, board_dbg_pins.h scope pins) are included only under ENA_TDM_DBG, so the
-// default (debug-off) core pulls none of them.
+// a clean sibling-HAL dependency, like hal_dma. The debug-only deps (<stdio.h>,
+// dspic33ak_tick_timer.h for timestamps, board_dbg_pins.h scope pins) are included only
+// under ENA_TDM_DBG, so the default (debug-off) core pulls none of them.
 //===========================================================
 
 //===========================================================

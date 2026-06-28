@@ -3,8 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-// UDID word addresses (unified address space; 4-byte aligned). See the header and
-// docs/hal_udid.md.
+// UDID word addresses (unified address space; 4-byte aligned). See the header.
 #define DSPIC33AK_UDID1_ADDRESS UINT32_C(0x007F2BE0)
 #define DSPIC33AK_UDID2_ADDRESS UINT32_C(0x007F2BE4)
 #define DSPIC33AK_UDID3_ADDRESS UINT32_C(0x007F2BE8)

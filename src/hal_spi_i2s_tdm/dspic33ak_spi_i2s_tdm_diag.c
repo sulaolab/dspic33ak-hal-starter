@@ -25,7 +25,7 @@
 
 #if defined(ENA_TDM_DBG)
   #include <stdio.h>                 // printf (debug build only)
-  #include "dspic33ak_tick_timer.h"  // GetTicks() for the debug trap print
+  #include "dspic33ak_tick_timer.h"  // timestamp for the debug trap print
   #include "board_dbg_pins.h"        // BOARD_DBG_PIN_* scope pins
   #define TDM_DBG_PRINTF(...)   printf(__VA_ARGS__)
 #else
@@ -179,7 +179,9 @@ void dspic33ak_spi_i2s_tdm_diag_check_deadline( dspic33ak_spi_i2s_tdm_diag_t* d,
     // A HALF+DONE conflict means this instance's block ISR fell a full block behind.
     d->block_deadline_miss_count++;
 
-    TDM_DBG_PRINTF(" dma_debug_check: dma=%d half/done conflict @%ld\n", dma_x, GetTicks());
+    TDM_DBG_PRINTF(" dma_debug_check: dma=%d half/done conflict @%ld\n",
+                   dma_x,
+                   dspic33ak_tick_timer_get_ms());
     (void)dma_x;
 }
 

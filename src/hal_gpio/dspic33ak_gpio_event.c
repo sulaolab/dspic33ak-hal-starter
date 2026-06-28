@@ -62,6 +62,7 @@ static bool                               dspic33ak_gpio_event_trigger_matches(d
                                                                               dspic33ak_gpio_event_edge_t actual_edge);
 static bool                               dspic33ak_gpio_event_irq_set_priority(unsigned port_index, uint8_t priority);
 static bool                               dspic33ak_gpio_event_irq_clear_flag(unsigned port_index);
+static bool                               dspic33ak_gpio_event_irq_get_enable(unsigned port_index, bool *enabled);
 static bool                               dspic33ak_gpio_event_irq_set_enable(unsigned port_index, bool enable);
 
 
@@ -219,6 +220,30 @@ bool dspic33ak_gpio_event_irq_disable(dspic33ak_gpio_pin_t pin)
     return dspic33ak_gpio_event_irq_clear_flag(port_index);
 }
 
+bool dspic33ak_gpio_event_irq_is_enabled(dspic33ak_gpio_pin_t pin, bool *enabled)
+{
+    const dspic33ak_gpio_event_regs_t *regs = dspic33ak_gpio_event_regs_for(pin);
+    unsigned port_index = dspic33ak_gpio_event_port_index(pin);
+
+    if ((regs == 0) || (enabled == 0))
+    {
+        return false;
+    }
+    return dspic33ak_gpio_event_irq_get_enable(port_index, enabled);
+}
+
+bool dspic33ak_gpio_event_irq_set_enabled(dspic33ak_gpio_pin_t pin, bool enable)
+{
+    const dspic33ak_gpio_event_regs_t *regs = dspic33ak_gpio_event_regs_for(pin);
+    unsigned port_index = dspic33ak_gpio_event_port_index(pin);
+
+    if (regs == 0)
+    {
+        return false;
+    }
+    return dspic33ak_gpio_event_irq_set_enable(port_index, enable);
+}
+
 bool dspic33ak_gpio_event_rp_attach(dspic33ak_gpio_rp_t rp,
                                     dspic33ak_gpio_event_edge_t trigger,
                                     dspic33ak_gpio_event_callback_t callback,
@@ -264,6 +289,28 @@ bool dspic33ak_gpio_event_rp_irq_disable(dspic33ak_gpio_rp_t rp)
         return false;
     }
     return dspic33ak_gpio_event_irq_disable(pin);
+}
+
+bool dspic33ak_gpio_event_rp_irq_is_enabled(dspic33ak_gpio_rp_t rp, bool *enabled)
+{
+    dspic33ak_gpio_pin_t pin;
+
+    if (!dspic33ak_gpio_pin_from_rp(rp, &pin))
+    {
+        return false;
+    }
+    return dspic33ak_gpio_event_irq_is_enabled(pin, enabled);
+}
+
+bool dspic33ak_gpio_event_rp_irq_set_enabled(dspic33ak_gpio_rp_t rp, bool enable)
+{
+    dspic33ak_gpio_pin_t pin;
+
+    if (!dspic33ak_gpio_pin_from_rp(rp, &pin))
+    {
+        return false;
+    }
+    return dspic33ak_gpio_event_irq_set_enabled(pin, enable);
 }
 
 void dspic33ak_gpio_event_process_isr(void)
@@ -437,6 +484,38 @@ static bool dspic33ak_gpio_event_irq_clear_flag(unsigned port_index)
 #endif
 #if defined(_CNHIF)
     case DSPIC33AK_GPIO_PORT_H: _CNHIF = 0u; return true;
+#endif
+    default: return false;
+    }
+}
+
+static bool dspic33ak_gpio_event_irq_get_enable(unsigned port_index, bool *enabled)
+{
+    switch (port_index)
+    {
+#if defined(_CNAIE)
+    case DSPIC33AK_GPIO_PORT_A: *enabled = (_CNAIE != 0u); return true;
+#endif
+#if defined(_CNBIE)
+    case DSPIC33AK_GPIO_PORT_B: *enabled = (_CNBIE != 0u); return true;
+#endif
+#if defined(_CNCIE)
+    case DSPIC33AK_GPIO_PORT_C: *enabled = (_CNCIE != 0u); return true;
+#endif
+#if defined(_CNDIE)
+    case DSPIC33AK_GPIO_PORT_D: *enabled = (_CNDIE != 0u); return true;
+#endif
+#if defined(_CNEIE)
+    case DSPIC33AK_GPIO_PORT_E: *enabled = (_CNEIE != 0u); return true;
+#endif
+#if defined(_CNFIE)
+    case DSPIC33AK_GPIO_PORT_F: *enabled = (_CNFIE != 0u); return true;
+#endif
+#if defined(_CNGIE)
+    case DSPIC33AK_GPIO_PORT_G: *enabled = (_CNGIE != 0u); return true;
+#endif
+#if defined(_CNHIE)
+    case DSPIC33AK_GPIO_PORT_H: *enabled = (_CNHIE != 0u); return true;
 #endif
     default: return false;
     }
