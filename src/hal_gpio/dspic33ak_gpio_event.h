@@ -10,7 +10,8 @@
  *   - event_attach() only configures CN edge detection state
  *   - it does not change PPS
  *   - it does not change ANSEL, TRIS, CNPU, or CNPD
- *   - the application owns interrupt vectors, priority, and IEC enable bits
+ *   - the application owns interrupt vectors; this layer can arm the matching
+ *     CN port interrupt priority / flag / enable bits when requested
  *   - dspic33ak_gpio_event_process_isr() clears the handled per-pin CNF bits
  *     and the matching port interrupt flag
  *
@@ -46,6 +47,21 @@ bool dspic33ak_gpio_event_attach(dspic33ak_gpio_pin_t pin,
                                  dspic33ak_gpio_event_callback_t callback,
                                  void *user_data);
 bool dspic33ak_gpio_event_detach(dspic33ak_gpio_pin_t pin);
+
+/* Optional CPU interrupt helpers. The actual vector remains application-owned,
+ * but these helpers hide the scattered CNxIP/CNxIF/CNxIE symbols. The selected
+ * pin identifies the CN port interrupt line to arm. */
+bool dspic33ak_gpio_event_irq_enable(dspic33ak_gpio_pin_t pin, uint8_t priority);
+bool dspic33ak_gpio_event_irq_disable(dspic33ak_gpio_pin_t pin);
+
+/* RP-first wrappers for event users whose board pins are named by RP number. */
+bool dspic33ak_gpio_event_rp_attach(dspic33ak_gpio_rp_t rp,
+                                    dspic33ak_gpio_event_edge_t trigger,
+                                    dspic33ak_gpio_event_callback_t callback,
+                                    void *user_data);
+bool dspic33ak_gpio_event_rp_detach(dspic33ak_gpio_rp_t rp);
+bool dspic33ak_gpio_event_rp_irq_enable(dspic33ak_gpio_rp_t rp, uint8_t priority);
+bool dspic33ak_gpio_event_rp_irq_disable(dspic33ak_gpio_rp_t rp);
 
 void dspic33ak_gpio_event_process_isr(void);
 

@@ -15,7 +15,7 @@
  * silkscreen) while switches are 1-based (SW1..SW3).
  *
  * Note RF0 is also an analog input (AD3AN4), so this sample clears ANSEL on
- * every pin it owns; it does not rely on board_ports_digital_default().
+ * every switch RP it owns; it does not rely on board_ports_digital_default().
  */
 
 #include <stdint.h>

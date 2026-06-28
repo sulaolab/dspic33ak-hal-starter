@@ -60,7 +60,8 @@
 /* ---- User LEDs and switches on the Curiosity motherboard ----
  *   LED0..LED7 = RC8..RC15  (active-high)
  *   SW1 = RF3, SW2 = RF0, SW3 = RB2  (active-low, pulled up)
- * Non-PPS: packed pin.
+ * LEDs use packed pins here. Switches are RP-capable, so name them by RP number
+ * and use the RP-first GPIO/CN APIs in board component code.
  */
 #define BOARD_LED0_PIN            DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C,  8)
 #define BOARD_LED1_PIN            DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C,  9)
@@ -71,9 +72,9 @@
 #define BOARD_LED6_PIN            DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C, 14)
 #define BOARD_LED7_PIN            DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C, 15)
 
-#define BOARD_SW1_PIN             DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_F, 3)
-#define BOARD_SW2_PIN             DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_F, 0)
-#define BOARD_SW3_PIN             DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_B, 2)
+#define BOARD_SW1_RP              ((dspic33ak_gpio_rp_t)84u)  /* RF3 */
+#define BOARD_SW2_RP              ((dspic33ak_gpio_rp_t)81u)  /* RF0 */
+#define BOARD_SW3_RP              ((dspic33ak_gpio_rp_t)19u)  /* RB2 */
 
 /* ---- Potentiometer -> ADC5 channel 0 (AD5AN0 on RA7) ---- */
 #define BOARD_POT_PIN             DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_A, 7)

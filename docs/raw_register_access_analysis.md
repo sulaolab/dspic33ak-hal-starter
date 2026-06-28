@@ -51,16 +51,15 @@ already exists or should exist.
 
 ### GPIO/PPS-Related Direct Access Outside `src/hal_gpio/`
 
-The first app-only cleanup pass converted the direct ANSEL users that can be
-expressed with the existing GPIO HAL, without changing any `src/hal_xxx/`
-implementation files:
+The cleanup converted the direct GPIO/PPS-related users that can be expressed
+through the HAL boundary:
 
 | Location | Current direct access | Notes |
 |---|---|---|
 | `src/board.c` | formerly `ANSELA = 0`, `ANSELB = 0`, `ANSELC = 0`, `ANSELD = 0` | Now calls `dspic33ak_gpio_set_analog(..., false)` across ports A..D. |
 | `src/board_pins.h` | formerly `BOARD_POT_ANSEL_PORT ANSELA`, `BOARD_POT_ANSEL_BIT` | Now names the pot as `BOARD_POT_PIN` using `DSPIC33AK_GPIO_PIN()`. |
 | `src/board_components/rgb_pot.c` | formerly `BOARD_POT_ANSEL_PORT |= ...` | Now configures RA7 through `dspic33ak_gpio_config()` with `analog = true`. |
-| `src/board_components/led_sw.c` | `_CNBIP`, `_CNBIF`, `_CNBIE` | CN vector setup is intentionally still owned by the component per `docs/hal_gpio_event_design.md`. A small event IRQ API could move this into `hal_gpio_event`. |
+| `src/board_pins.h` / `src/board_components/led_sw.c` | formerly switch packed pins and `_CNBIP`, `_CNBIF`, `_CNBIE` | SW1/SW2/SW3 are now named as RP numbers. Switch GPIO and SW3 CN setup use RP-first GPIO/event APIs; the CN interrupt symbols are isolated inside `hal_gpio_event`. |
 
 No active `_RPnnR` / `_U1RXR` / `_SSxR` style PPS writes were found outside
 `src/hal_gpio/` in this starter. The comments in `dspic33ak_pps.h` are examples,
@@ -72,9 +71,9 @@ These are direct SFR uses, but they are not directly replaceable by `hal_gpio`:
 
 | Location | Current direct access | Likely ownership |
 |---|---|---|
-| `src/board.c` | `PMD3bits.C1MD = 0` | CAN module power/PMD ownership. Could move into CAN board bring-up helper or CAN HAL policy later. |
+| `src/board.c` | formerly `PMD3bits.C1MD = 0` | Now calls `dspic33ak_canfd_module_enable(DSPIC33AK_CANFD_INST_1, true)`. `_C1MD` / `_C2MD` stay inside the CAN HAL device layer. |
 | `src/board_components/rgb_pot.c` | PWM generator registers, ADC5 registers | Minimal board component/device code. Not a GPIO cleanup unless a PWM/ADC HAL is introduced. |
-| `src/app/i2c_loopback.c` | `_I2C3IP`, `_I2C3RXIP`, `_I2C3TXIP` | I2C interrupt priority setup. Could be covered by a future I2C IRQ helper, not by `hal_gpio`. |
+| `src/app/i2c_loopback.c` | formerly `_I2C3IP`, `_I2C3RXIP`, `_I2C3TXIP` | Now calls `dspic33ak_i2c_set_interrupt_priority()`. `_I2CxIP` / `_I2CxRXIP` / `_I2CxTXIP` stay inside the I2C HAL device layer. |
 | `src/clock/dspic33ak_clock.c` | CLK/PLL registers | Clock HAL owns these direct accesses. |
 | `src/hal_timer/`, `src/hal_can/`, `src/hal_uart/`, `src/hal_i2c/` | Peripheral registers and interrupt bits | HAL-internal direct access; expected. |
 
@@ -153,27 +152,51 @@ Done in the first app-only cleanup pass for ports A..D, using the existing
 `dspic33ak_gpio_set_analog()` API. A future GPIO HAL helper could make this less
 verbose, but that would require changing `src/hal_gpio/`.
 
+### 3. Add A CN IRQ Enable Helper
 
-### 3. Consider A CN IRQ Enable Helper
-
-`docs/hal_gpio_event_design.md` currently says the application owns vector,
-priority, and interrupt enable bits. If the cleanup should also cover `_CNBIP`,
-`_CNBIF`, and `_CNBIE`, add a small API in `dspic33ak_gpio_event.*`, for example:
+Done. The application still owns the interrupt vector, but no longer names
+`_CNBIP`, `_CNBIF`, or `_CNBIE` directly. `dspic33ak_gpio_event.*` now provides:
 
 ```c
 bool dspic33ak_gpio_event_irq_enable(dspic33ak_gpio_pin_t pin, uint8_t priority);
 bool dspic33ak_gpio_event_irq_disable(dspic33ak_gpio_pin_t pin);
+
+bool dspic33ak_gpio_event_rp_irq_enable(dspic33ak_gpio_rp_t rp, uint8_t priority);
+bool dspic33ak_gpio_event_rp_irq_disable(dspic33ak_gpio_rp_t rp);
 ```
 
-This would keep the actual vector in `led_sw.c`, while moving priority/flag/IEC
-details into the event layer.
+SW3 uses the RP wrapper, so `BOARD_SW3_RP` is converted to `RB2` inside the GPIO
+HAL and then to the matching CNB interrupt line inside the event layer.
 
-### 4. Leave Peripheral HAL Internals Alone
+### 4. Add Small CAN/I2C Special-Register Helpers
+
+Done for the remaining simple app/board-level special registers:
+
+- `dspic33ak_canfd_module_enable()` hides `_C1MD` / `_C2MD` PMD bits in the CAN
+  device layer while keeping board code responsible for clock, PPS, and
+  transceiver pins.
+- `dspic33ak_i2c_set_interrupt_priority()` hides the `_I2CxIP` family in the
+  I2C device layer while keeping application vector functions explicit.
+
+### 5. Leave Peripheral HAL Internals Alone
 
 Direct register access inside `src/hal_uart/`, `src/hal_i2c/`, `src/hal_can/`,
 `src/hal_timer/`, `src/hal_gpio/`, and `src/clock/` is currently the intended
 implementation boundary. Refactoring those should be treated as separate HAL
 work, not part of the GPIO/PPS cleanup.
+
+### 6. Remaining Design-Sized Items
+
+`src/board_components/rgb_pot.c` still directly programs PWM generators and
+ADC5. Unlike CN, CAN PMD, and I2C priority, this is not a small ownership leak:
+it is effectively a minimal PWM/ADC board component with no existing HAL surface
+to target. This cleanup intentionally leaves it in place for now. Removing those
+SFR names cleanly should be handled later together with a real `hal_pwm` /
+`hal_adc` design, rather than hiding the same register sequence behind a thin
+one-off wrapper.
+
+`src/clock/dspic33ak_clock.c` also directly programs CLKGEN/PLL registers, but
+that file is already the clock abstraction boundary.
 
 ## Proposed Acceptance Criteria
 

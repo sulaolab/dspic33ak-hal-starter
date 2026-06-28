@@ -60,6 +60,9 @@ static uint32_t                           dspic33ak_gpio_event_mask(dspic33ak_gp
 static bool                               dspic33ak_gpio_event_trigger_valid(dspic33ak_gpio_event_edge_t trigger);
 static bool                               dspic33ak_gpio_event_trigger_matches(dspic33ak_gpio_event_edge_t trigger,
                                                                               dspic33ak_gpio_event_edge_t actual_edge);
+static bool                               dspic33ak_gpio_event_irq_set_priority(unsigned port_index, uint8_t priority);
+static bool                               dspic33ak_gpio_event_irq_clear_flag(unsigned port_index);
+static bool                               dspic33ak_gpio_event_irq_set_enable(unsigned port_index, bool enable);
 
 
 //===========================================================
@@ -180,6 +183,89 @@ bool dspic33ak_gpio_event_detach(dspic33ak_gpio_pin_t pin)
     return true;
 }
 
+bool dspic33ak_gpio_event_irq_enable(dspic33ak_gpio_pin_t pin, uint8_t priority)
+{
+    const dspic33ak_gpio_event_regs_t *regs = dspic33ak_gpio_event_regs_for(pin);
+    unsigned port_index = dspic33ak_gpio_event_port_index(pin);
+
+    if ((regs == 0) || (priority > 7u))
+    {
+        return false;
+    }
+    if (!dspic33ak_gpio_event_irq_set_priority(port_index, priority))
+    {
+        return false;
+    }
+    if (!dspic33ak_gpio_event_irq_clear_flag(port_index))
+    {
+        return false;
+    }
+    return dspic33ak_gpio_event_irq_set_enable(port_index, true);
+}
+
+bool dspic33ak_gpio_event_irq_disable(dspic33ak_gpio_pin_t pin)
+{
+    const dspic33ak_gpio_event_regs_t *regs = dspic33ak_gpio_event_regs_for(pin);
+    unsigned port_index = dspic33ak_gpio_event_port_index(pin);
+
+    if (regs == 0)
+    {
+        return false;
+    }
+    if (!dspic33ak_gpio_event_irq_set_enable(port_index, false))
+    {
+        return false;
+    }
+    return dspic33ak_gpio_event_irq_clear_flag(port_index);
+}
+
+bool dspic33ak_gpio_event_rp_attach(dspic33ak_gpio_rp_t rp,
+                                    dspic33ak_gpio_event_edge_t trigger,
+                                    dspic33ak_gpio_event_callback_t callback,
+                                    void *user_data)
+{
+    dspic33ak_gpio_pin_t pin;
+
+    if (!dspic33ak_gpio_pin_from_rp(rp, &pin))
+    {
+        return false;
+    }
+    return dspic33ak_gpio_event_attach(pin, trigger, callback, user_data);
+}
+
+bool dspic33ak_gpio_event_rp_detach(dspic33ak_gpio_rp_t rp)
+{
+    dspic33ak_gpio_pin_t pin;
+
+    if (!dspic33ak_gpio_pin_from_rp(rp, &pin))
+    {
+        return false;
+    }
+    return dspic33ak_gpio_event_detach(pin);
+}
+
+bool dspic33ak_gpio_event_rp_irq_enable(dspic33ak_gpio_rp_t rp, uint8_t priority)
+{
+    dspic33ak_gpio_pin_t pin;
+
+    if (!dspic33ak_gpio_pin_from_rp(rp, &pin))
+    {
+        return false;
+    }
+    return dspic33ak_gpio_event_irq_enable(pin, priority);
+}
+
+bool dspic33ak_gpio_event_rp_irq_disable(dspic33ak_gpio_rp_t rp)
+{
+    dspic33ak_gpio_pin_t pin;
+
+    if (!dspic33ak_gpio_pin_from_rp(rp, &pin))
+    {
+        return false;
+    }
+    return dspic33ak_gpio_event_irq_disable(pin);
+}
+
 void dspic33ak_gpio_event_process_isr(void)
 {
     uint8_t port_index;
@@ -290,4 +376,102 @@ static bool dspic33ak_gpio_event_trigger_matches(dspic33ak_gpio_event_edge_t tri
 {
     return ((trigger == DSPIC33AK_GPIO_EVENT_EDGE_EITHER) ||
             (trigger == actual_edge));
+}
+
+static bool dspic33ak_gpio_event_irq_set_priority(unsigned port_index, uint8_t priority)
+{
+    switch (port_index)
+    {
+#if defined(_CNAIP)
+    case DSPIC33AK_GPIO_PORT_A: _CNAIP = priority; return true;
+#endif
+#if defined(_CNBIP)
+    case DSPIC33AK_GPIO_PORT_B: _CNBIP = priority; return true;
+#endif
+#if defined(_CNCIP)
+    case DSPIC33AK_GPIO_PORT_C: _CNCIP = priority; return true;
+#endif
+#if defined(_CNDIP)
+    case DSPIC33AK_GPIO_PORT_D: _CNDIP = priority; return true;
+#endif
+#if defined(_CNEIP)
+    case DSPIC33AK_GPIO_PORT_E: _CNEIP = priority; return true;
+#endif
+#if defined(_CNFIP)
+    case DSPIC33AK_GPIO_PORT_F: _CNFIP = priority; return true;
+#endif
+#if defined(_CNGIP)
+    case DSPIC33AK_GPIO_PORT_G: _CNGIP = priority; return true;
+#endif
+#if defined(_CNHIP)
+    case DSPIC33AK_GPIO_PORT_H: _CNHIP = priority; return true;
+#endif
+    default: return false;
+    }
+}
+
+static bool dspic33ak_gpio_event_irq_clear_flag(unsigned port_index)
+{
+    switch (port_index)
+    {
+#if defined(_CNAIF)
+    case DSPIC33AK_GPIO_PORT_A: _CNAIF = 0u; return true;
+#endif
+#if defined(_CNBIF)
+    case DSPIC33AK_GPIO_PORT_B: _CNBIF = 0u; return true;
+#endif
+#if defined(_CNCIF)
+    case DSPIC33AK_GPIO_PORT_C: _CNCIF = 0u; return true;
+#endif
+#if defined(_CNDIF)
+    case DSPIC33AK_GPIO_PORT_D: _CNDIF = 0u; return true;
+#endif
+#if defined(_CNEIF)
+    case DSPIC33AK_GPIO_PORT_E: _CNEIF = 0u; return true;
+#endif
+#if defined(_CNFIF)
+    case DSPIC33AK_GPIO_PORT_F: _CNFIF = 0u; return true;
+#endif
+#if defined(_CNGIF)
+    case DSPIC33AK_GPIO_PORT_G: _CNGIF = 0u; return true;
+#endif
+#if defined(_CNHIF)
+    case DSPIC33AK_GPIO_PORT_H: _CNHIF = 0u; return true;
+#endif
+    default: return false;
+    }
+}
+
+static bool dspic33ak_gpio_event_irq_set_enable(unsigned port_index, bool enable)
+{
+    uint8_t v = enable ? 1u : 0u;
+
+    switch (port_index)
+    {
+#if defined(_CNAIE)
+    case DSPIC33AK_GPIO_PORT_A: _CNAIE = v; return true;
+#endif
+#if defined(_CNBIE)
+    case DSPIC33AK_GPIO_PORT_B: _CNBIE = v; return true;
+#endif
+#if defined(_CNCIE)
+    case DSPIC33AK_GPIO_PORT_C: _CNCIE = v; return true;
+#endif
+#if defined(_CNDIE)
+    case DSPIC33AK_GPIO_PORT_D: _CNDIE = v; return true;
+#endif
+#if defined(_CNEIE)
+    case DSPIC33AK_GPIO_PORT_E: _CNEIE = v; return true;
+#endif
+#if defined(_CNFIE)
+    case DSPIC33AK_GPIO_PORT_F: _CNFIE = v; return true;
+#endif
+#if defined(_CNGIE)
+    case DSPIC33AK_GPIO_PORT_G: _CNGIE = v; return true;
+#endif
+#if defined(_CNHIE)
+    case DSPIC33AK_GPIO_PORT_H: _CNHIE = v; return true;
+#endif
+    default: return false;
+    }
 }

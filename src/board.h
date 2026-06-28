@@ -39,7 +39,7 @@ bool board_spi4_sst26_pins_init(void);
 bool board_rgb_pins_init(void);
 
 /* Configure the CAN1 (CAN FD) pins: C1TX/RX via PPS, STBY driven low; also
- * enables CAN1 module (PMD3.C1MD = 0). Returns false if any step failed. */
+ * enables the CAN1 module. Returns false if any step failed. */
 bool board_can1_pins_init(void);
 
 /* Configure the MikroBUS-A SPI1 framed-mode (TDM8) smoke-demo pins for a self-clocked

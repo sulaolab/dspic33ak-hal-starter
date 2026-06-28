@@ -8,8 +8,7 @@
  * The CLKGEN clock routing is done separately in dspic33ak_clock_init().
  */
 
-#include <xc.h>
-
+#include "dspic33ak_canfd.h"
 #include "dspic33ak_gpio.h"
 #include "dspic33ak_pps.h"
 #include "board_pins.h"
@@ -54,8 +53,9 @@ bool board_uart1_pins_init(void)
 
 bool board_can1_pins_init(void)
 {
-    /* Enable the CAN1 module (clear its module-disable bit) before HAL init. */
-    PMD3bits.C1MD = 0;
+    /* Enable the CAN1 module before HAL init. */
+    if (dspic33ak_canfd_module_enable(DSPIC33AK_CANFD_INST_1, true) != DSPIC33AK_CANFD_OK)
+        return false;
 
     /* C1TX: idle-high output (CAN recessive state is high). */
     if (!dspic33ak_gpio_rp_config_digital_output(BOARD_CAN1_TX_RP, true))

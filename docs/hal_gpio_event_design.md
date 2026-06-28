@@ -30,6 +30,23 @@ bool dspic33ak_gpio_event_attach(dspic33ak_gpio_pin_t pin,
 
 bool dspic33ak_gpio_event_detach(dspic33ak_gpio_pin_t pin);
 
+bool dspic33ak_gpio_event_irq_enable(dspic33ak_gpio_pin_t pin,
+                                     uint8_t priority);
+
+bool dspic33ak_gpio_event_irq_disable(dspic33ak_gpio_pin_t pin);
+
+bool dspic33ak_gpio_event_rp_attach(dspic33ak_gpio_rp_t rp,
+                                    dspic33ak_gpio_event_edge_t trigger,
+                                    dspic33ak_gpio_event_callback_t callback,
+                                    void *user_data);
+
+bool dspic33ak_gpio_event_rp_detach(dspic33ak_gpio_rp_t rp);
+
+bool dspic33ak_gpio_event_rp_irq_enable(dspic33ak_gpio_rp_t rp,
+                                        uint8_t priority);
+
+bool dspic33ak_gpio_event_rp_irq_disable(dspic33ak_gpio_rp_t rp);
+
 void dspic33ak_gpio_event_process_isr(void);
 ```
 
@@ -51,7 +68,9 @@ void __attribute__((__interrupt__, __no_auto_psv__)) _CNBInterrupt(void)
 ```
 
 This keeps the HAL reusable for different applications that may choose different
-CN ports, priorities, nesting rules, or interrupt routing.
+CN ports, nesting rules, or interrupt routing. The vector remains application
+owned, while the event layer can optionally arm the matching CN port interrupt
+priority, flag, and enable bits.
 
 ## CN Flag Ownership
 
@@ -64,9 +83,11 @@ the event layer:
 - It clears the matching port interrupt flag, such as `CNBIF` through the port's
   `IFSx` register mask.
 
-The board component still owns interrupt setup for this validation path.
-`led_sw_init()` clears `_CNBIF`, sets `_CNBIP`, and enables `_CNBIE` after SW3 is
-configured and attached.
+The board component owns the vector and policy for this validation path, but it
+does not name the `_CNxIP`, `_CNxIF`, or `_CNxIE` symbols directly anymore.
+`led_sw_init()` attaches SW3 by RP number and calls
+`dspic33ak_gpio_event_rp_irq_enable(BOARD_SW3_RP, 4u)` after the switch is
+configured.
 
 ## Edge Detection
 
@@ -100,9 +121,10 @@ callback stays small and does not directly touch LED outputs.
 
 The integration layer must configure the pin as a digital input before attaching
 an event. In the current LED/SW board component, `led_sw_init()` calls
-`dspic33ak_gpio_config()` with a config struct (`dir=INPUT`, `pull=UP`,
+`dspic33ak_gpio_rp_config()` with a config struct (`dir=INPUT`, `pull=UP`,
 `analog=false`) for SW1, SW2, and SW3 in a single glitch-aware call before
-attaching the SW3 event.
+attaching the SW3 event. Interrupt priority and enable are a separate explicit
+step through `dspic33ak_gpio_event_rp_irq_enable()`.
 
 ## Current Validation Behavior
 
@@ -111,6 +133,8 @@ attaching the SW3 event.
 - SW3 uses the CN event layer and drives LED5.
 - SW3 is active-low.
 - `_CNBInterrupt()` is defined in `src/board_components/led_sw.c`, not in the HAL.
+- SW1, SW2, and SW3 are named as RP numbers in `board_pins.h`; SW3's CN line is
+  derived from `BOARD_SW3_RP`.
 
 Expected serial banner line:
 
@@ -153,6 +177,9 @@ Resolved decisions (no longer open):
   `(port, bit)` handle via `DSPIC33AK_GPIO_PIN()`.
 - **ANSEL management:** the caller is responsible for ANSEL. `dspic33ak_gpio_config()`
   and `dspic33ak_gpio_config_digital_output/input()` set `analog=false` explicitly.
+- **CN interrupt setup:** the vector remains application-owned, but CN port
+  priority / flag / enable symbols are hidden behind
+  `dspic33ak_gpio_event_irq_enable()` and the RP wrapper.
 
 Still open for a future wrapper layer:
 
