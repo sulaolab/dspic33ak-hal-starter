@@ -12,6 +12,12 @@
  */
 
 #include "tdm_smoke.h"
+#include "app_config.h"
+
+#if HAL_STARTER_ENABLE_TDM_SMOKE_DEMO
+/* When the demo is disabled (app_config.h) this whole translation unit compiles to
+ * nothing -- so the sinf/log10f and HAL dependencies are dropped from the OFF build.
+ * main.c also guards its calls on the same macro, so there is nothing to link. */
 
 #include <stdio.h>
 #include <stdint.h>
@@ -90,7 +96,11 @@ static void tdm_smoke_block_cb(const int32_t *src, int32_t *dst, void *user)
 //===========================================================
 static bool tdm_smoke_configure_pins(dspic33ak_spi_i2s_tdm_role_t role)
 {
-    (void)role;   // this demo is master-only; the board routine drives the master pinmux
+    // This demo is master-only; reject any other role rather than silently mis-routing.
+    if (role != DSPIC33AK_SPI_I2S_TDM_ROLE_MASTER)
+    {
+        return false;
+    }
     return board_spi1_tdm_smoke_pins_init();
 }
 
@@ -269,3 +279,5 @@ const char *tdm_smoke_last_error_str(void)
         default:                                           return "unknown";
     }
 }
+
+#endif /* HAL_STARTER_ENABLE_TDM_SMOKE_DEMO */
