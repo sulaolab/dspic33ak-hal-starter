@@ -114,3 +114,26 @@ bool board_rgb_pins_init(void)
 
     return true;
 }
+
+bool board_spi1_tdm_smoke_pins_init(void)
+{
+    /* MikroBUS-A SPI1 as a self-clocked framed-mode (TDM8) MASTER for the smoke demo:
+     * the dsPIC drives FS(SS1)/BCLK(SCK1)/SDO1 as outputs; SDI1 is the input (jumper
+     * DataOut->DataIn for a loopback check). Per-pin: GPIO attribute first (idle low,
+     * a known state before the SPI starts driving), then the PPS route. Fail-fast: a
+     * GPIO failure skips that pin's PPS route so no partial config is left behind.
+     * Pins/PPS only -- this does NOT touch the SPI/DMA module (the HAL owns that). */
+    if (!dspic33ak_gpio_rp_config_digital_output(BOARD_TDM_SPI1_FS_RP,   false)) return false;
+    if (!dspic33ak_pps_route_output(DSPIC33AK_PPS_OUTPUT_SS1,  BOARD_TDM_SPI1_FS_RP))   return false;
+
+    if (!dspic33ak_gpio_rp_config_digital_output(BOARD_TDM_SPI1_BCLK_RP, false)) return false;
+    if (!dspic33ak_pps_route_output(DSPIC33AK_PPS_OUTPUT_SCK1, BOARD_TDM_SPI1_BCLK_RP)) return false;
+
+    if (!dspic33ak_gpio_rp_config_digital_output(BOARD_TDM_SPI1_SDO_RP,  false)) return false;
+    if (!dspic33ak_pps_route_output(DSPIC33AK_PPS_OUTPUT_SDO1, BOARD_TDM_SPI1_SDO_RP))  return false;
+
+    if (!dspic33ak_gpio_rp_config_digital_input(BOARD_TDM_SPI1_SDI_RP))          return false;
+    if (!dspic33ak_pps_route_input(DSPIC33AK_PPS_INPUT_SDI1,  BOARD_TDM_SPI1_SDI_RP))   return false;
+
+    return true;
+}

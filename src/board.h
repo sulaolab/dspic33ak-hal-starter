@@ -41,6 +41,12 @@ bool board_rgb_pins_init(void);
  * enables CAN1 module (PMD3.C1MD = 0). Returns false if any step failed. */
 bool board_can1_pins_init(void);
 
+/* Configure the MikroBUS-A SPI1 framed-mode (TDM8) smoke-demo pins for a self-clocked
+ * MASTER: FS(SS1)/BCLK(SCK1)/SDO1 digital outputs (idle low) + SDI1 digital input, plus
+ * PPS routing. Pins/PPS only -- it does NOT touch the SPI/DMA module. Returns false if
+ * any step failed. (Used by the TDM smoke demo; see app_config.h.) */
+bool board_spi1_tdm_smoke_pins_init(void);
+
 #ifdef __cplusplus
 }
 #endif
