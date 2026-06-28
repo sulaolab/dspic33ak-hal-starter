@@ -51,13 +51,15 @@ already exists or should exist.
 
 ### GPIO/PPS-Related Direct Access Outside `src/hal_gpio/`
 
-These are the main remaining items that relate to GPIO/PPS ownership:
+The first app-only cleanup pass converted the direct ANSEL users that can be
+expressed with the existing GPIO HAL, without changing any `src/hal_xxx/`
+implementation files:
 
 | Location | Current direct access | Notes |
 |---|---|---|
-| `src/board.c` | `ANSELA = 0`, `ANSELB = 0`, `ANSELC = 0`, `ANSELD = 0` | Bulk digital default. Useful behavior, but currently outside the GPIO HAL. |
-| `src/board_pins.h` | `BOARD_POT_ANSEL_PORT ANSELA`, `BOARD_POT_ANSEL_BIT` | Board pin identity is expressed as an ANSEL register and bit instead of a GPIO pin handle. |
-| `src/board_components/rgb_pot.c` | `BOARD_POT_ANSEL_PORT |= (1UL << BOARD_POT_ANSEL_BIT)` | Pot RA7 analog enable can be expressed through `dspic33ak_gpio_config()` or `dspic33ak_gpio_set_analog()`. |
+| `src/board.c` | formerly `ANSELA = 0`, `ANSELB = 0`, `ANSELC = 0`, `ANSELD = 0` | Now calls `dspic33ak_gpio_set_analog(..., false)` across ports A..D. |
+| `src/board_pins.h` | formerly `BOARD_POT_ANSEL_PORT ANSELA`, `BOARD_POT_ANSEL_BIT` | Now names the pot as `BOARD_POT_PIN` using `DSPIC33AK_GPIO_PIN()`. |
+| `src/board_components/rgb_pot.c` | formerly `BOARD_POT_ANSEL_PORT |= ...` | Now configures RA7 through `dspic33ak_gpio_config()` with `analog = true`. |
 | `src/board_components/led_sw.c` | `_CNBIP`, `_CNBIF`, `_CNBIE` | CN vector setup is intentionally still owned by the component per `docs/hal_gpio_event_design.md`. A small event IRQ API could move this into `hal_gpio_event`. |
 
 No active `_RPnnR` / `_U1RXR` / `_SSxR` style PPS writes were found outside
@@ -117,9 +119,10 @@ the operation."
 
 ### 1. Convert Pot ANSEL Handling
 
-Low risk and directly aligned with the existing GPIO HAL.
+Done in the first app-only cleanup pass. This was low risk and directly aligned
+with the existing GPIO HAL.
 
-Proposed shape:
+Implemented shape:
 
 - Replace `BOARD_POT_ANSEL_PORT` and `BOARD_POT_ANSEL_BIT` with a board pin
   handle such as:
@@ -144,18 +147,12 @@ static const dspic33ak_gpio_config_t pot_cfg = {
 This removes the board-level ANSEL register name and keeps analog selection
 inside the GPIO HAL.
 
-### 2. Decide How To Handle Bulk Digital Default
+### 2. Handle Bulk Digital Default
 
-`board_ports_digital_default()` currently clears `ANSELA..D` directly. There are
-two reasonable options:
+Done in the first app-only cleanup pass for ports A..D, using the existing
+`dspic33ak_gpio_set_analog()` API. A future GPIO HAL helper could make this less
+verbose, but that would require changing `src/hal_gpio/`.
 
-- Add a GPIO HAL helper such as `dspic33ak_gpio_all_digital_default()` that
-  iterates supported ports and clears ANSEL inside `src/hal_gpio/`.
-- Keep the board function as-is but document it as a board-wide reset policy
-  exception.
-
-The first option better matches the cleanup goal. The second is simpler and
-matches the current reference repository.
 
 ### 3. Consider A CN IRQ Enable Helper
 
@@ -191,4 +188,3 @@ A first cleanup pass can be considered successful when:
   peripheral setup or a documented exception.
 - `board_pins.h` names pins as RP numbers or `DSPIC33AK_GPIO_PIN()` handles,
   not as raw register names.
-
