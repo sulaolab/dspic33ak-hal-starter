@@ -40,6 +40,9 @@
         <itemPath>../src/hal_can/dspic33ak_canfd_node.c</itemPath>
         <itemPath>../src/hal_can/dspic33ak_canfd_isr.c</itemPath>
       </logicalFolder>
+      <logicalFolder name="f20" displayName="hal_dma" projectFiles="true">
+        <itemPath>../src/hal_dma/dspic33ak_dma.c</itemPath>
+      </logicalFolder>
       <logicalFolder name="f3" displayName="hal_gpio" projectFiles="true">
         <itemPath>../src/hal_gpio/dspic33ak_gpio.c</itemPath>
         <itemPath>../src/hal_gpio/dspic33ak_gpio_event.c</itemPath>
@@ -54,6 +57,11 @@
       <logicalFolder name="f9" displayName="hal_spi" projectFiles="true">
         <itemPath>../src/hal_spi/dspic33ak_spi.c</itemPath>
       </logicalFolder>
+      <logicalFolder name="f21" displayName="hal_spi_i2s_tdm" projectFiles="true">
+        <itemPath>../src/hal_spi_i2s_tdm/dspic33ak_spi_i2s_tdm.c</itemPath>
+        <itemPath>../src/hal_spi_i2s_tdm/dspic33ak_spi_i2s_tdm_hw.c</itemPath>
+        <itemPath>../src/hal_spi_i2s_tdm/dspic33ak_spi_i2s_tdm_diag.c</itemPath>
+      </logicalFolder>
       <logicalFolder name="f7" displayName="hal_timer" projectFiles="true">
         <itemPath>../src/hal_timer/dspic33ak_tick_timer.c</itemPath>
         <itemPath>../src/hal_timer/dspic33ak_high_res_timer.c</itemPath>
@@ -66,6 +74,7 @@
       <logicalFolder name="f8" displayName="hal_udid" projectFiles="true">
         <itemPath>../src/hal_udid/dspic33ak_udid.c</itemPath>
       </logicalFolder>
+      <itemPath>../src/dspic33ak_spi_i2s_tdm_conf.h</itemPath>
       <itemPath>../src/board.c</itemPath>
       <itemPath>../src/main.c</itemPath>
     </logicalFolder>
@@ -134,7 +143,7 @@
         <property key="enable-unroll-loops" value="false"/>
         <property key="expand-pragma-config" value="false"/>
         <property key="extra-include-directories"
-                  value="..\src;..\src\clock;..\src\board_components;..\src\console;..\src\hal_gpio;..\src\hal_uart;..\src\hal_spi;..\src\hal_i2c;..\src\hal_can;..\src\hal_timer;..\src\hal_udid;..\src\app"/>
+                  value="..\src;..\src\clock;..\src\board_components;..\src\console;..\src\hal_gpio;..\src\hal_uart;..\src\hal_spi;..\src\hal_i2c;..\src\hal_can;..\src\hal_timer;..\src\hal_udid;..\src\app;..\src\hal_dma;..\src\hal_spi_i2s_tdm"/>
         <property key="isolate-each-function" value="false"/>
         <property key="keep-inline" value="false"/>
         <property key="oXC16gcc-cnsts-mauxflash" value="false"/>
