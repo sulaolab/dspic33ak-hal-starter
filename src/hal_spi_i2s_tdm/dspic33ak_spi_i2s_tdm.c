@@ -1336,17 +1336,12 @@ static bool tdm_config_is_supported( const tdm_spi_leg_t* leg, const dspic33ak_s
  */
 static inline bool tdm_rx_ie_disable( uint8_t rx_dma_ch )
 {
-    bool was_enabled = dspic33ak_dma_irq_is_enabled( rx_dma_ch );
-    dspic33ak_dma_irq_enable( rx_dma_ch, false );
-    return was_enabled;
+    return dspic33ak_dma_irq_disable_save( rx_dma_ch );
 }
 
 static inline void tdm_rx_ie_restore( uint8_t rx_dma_ch, bool was_enabled )
 {
-    if( was_enabled )
-    {
-        dspic33ak_dma_irq_enable( rx_dma_ch, true );
-    }
+    dspic33ak_dma_irq_restore( rx_dma_ch, was_enabled );
 }
 
 

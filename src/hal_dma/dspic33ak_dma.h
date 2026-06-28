@@ -142,15 +142,68 @@ bool dspic33ak_dma_channel_config(uint8_t ch, const dspic33ak_dma_channel_cfg_t 
  * an invalid channel index which returns false. */
 bool dspic33ak_dma_channel_enable(uint8_t ch, bool enable);
 
-/* Set/clear the channel's CPU interrupt enable (_DMAxIE), independently of CHEN.
+/* General IRQ control: set/clear the channel's CPU interrupt enable (_DMAxIE),
+ * independently of CHEN.
  * Needed by the TDM soft-stop path, which masks the DMA IRQ before stopping the
  * channel so the ISR cannot run during teardown. */
 void dspic33ak_dma_irq_enable(uint8_t ch, bool enable);
 
-/* Read the channel's CPU interrupt enable (_DMAxIE); false for an invalid channel.
+/* General IRQ control: read the channel's CPU interrupt enable (_DMAxIE);
+ * false for an invalid channel.
  * Lets a caller save/restore the IE state around a brief mask without hardcoding the
  * channel's SFR (used by the TDM core's per-instance RX-IE guard). */
 bool dspic33ak_dma_irq_is_enabled(uint8_t ch);
+
+/* Fast save/mask helper for short critical sections.
+ * Prefer this over open-coded irq_is_enabled()+irq_enable(false) sequences.
+ * static inline: compile-time-constant ch folds to direct _DMAxIE reads/writes,
+ * which is useful for short application critical sections on hot audio paths.
+ * The returned value is intended for dspic33ak_dma_irq_restore(). */
+static inline bool dspic33ak_dma_irq_disable_save(uint8_t ch)
+{
+    bool was_enabled;
+
+    switch (ch) {
+    case 0: was_enabled = (_DMA0IE != 0u); _DMA0IE = 0u; break;
+    case 1: was_enabled = (_DMA1IE != 0u); _DMA1IE = 0u; break;
+    case 2: was_enabled = (_DMA2IE != 0u); _DMA2IE = 0u; break;
+    case 3: was_enabled = (_DMA3IE != 0u); _DMA3IE = 0u; break;
+    case 4: was_enabled = (_DMA4IE != 0u); _DMA4IE = 0u; break;
+    case 5: was_enabled = (_DMA5IE != 0u); _DMA5IE = 0u; break;
+#if defined(_DMA6IF)
+    case 6: was_enabled = (_DMA6IE != 0u); _DMA6IE = 0u; break;
+#endif
+#if defined(_DMA7IF)
+    case 7: was_enabled = (_DMA7IE != 0u); _DMA7IE = 0u; break;
+#endif
+    default: was_enabled = false; break;
+    }
+    return was_enabled;
+}
+
+/* Fast restore helper for short critical sections.
+ * Restores a CPU interrupt enable state saved by dspic33ak_dma_irq_disable_save().
+ * static inline for the same compile-time-constant folding as the save helper. */
+static inline void dspic33ak_dma_irq_restore(uint8_t ch, bool was_enabled)
+{
+    const uint8_t v = was_enabled ? 1u : 0u;
+
+    switch (ch) {
+    case 0: _DMA0IE = v; break;
+    case 1: _DMA1IE = v; break;
+    case 2: _DMA2IE = v; break;
+    case 3: _DMA3IE = v; break;
+    case 4: _DMA4IE = v; break;
+    case 5: _DMA5IE = v; break;
+#if defined(_DMA6IF)
+    case 6: _DMA6IE = v; break;
+#endif
+#if defined(_DMA7IF)
+    case 7: _DMA7IE = v; break;
+#endif
+    default: break;
+    }
+}
 
 /* Clear DMAxSTAT (status flags). */
 void dspic33ak_dma_clear_status(uint8_t ch);
