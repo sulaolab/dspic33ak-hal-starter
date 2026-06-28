@@ -15,15 +15,24 @@
 #include "board_pins.h"
 #include "board.h"
 
+static void board_port_digital_default(dspic33ak_gpio_port_t port)
+{
+    uint8_t bit;
+
+    for (bit = 0u; bit < 16u; bit++) {
+        (void)dspic33ak_gpio_set_analog(DSPIC33AK_GPIO_PIN(port, bit), false);
+    }
+}
+
 void board_ports_digital_default(void)
 {
     /* 0 = digital, 1 = analog. Make every analog-capable pin digital at boot so
      * module-owned pins (I2C SDA/SCL) work; analog inputs set their ANSEL bit
      * again when configured. */
-    ANSELA = 0;
-    ANSELB = 0;
-    ANSELC = 0;
-    ANSELD = 0;
+    board_port_digital_default(DSPIC33AK_GPIO_PORT_A);
+    board_port_digital_default(DSPIC33AK_GPIO_PORT_B);
+    board_port_digital_default(DSPIC33AK_GPIO_PORT_C);
+    board_port_digital_default(DSPIC33AK_GPIO_PORT_D);
 }
 
 bool board_uart1_pins_init(void)

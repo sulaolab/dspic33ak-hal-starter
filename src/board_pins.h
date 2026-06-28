@@ -76,8 +76,7 @@
 #define BOARD_SW3_PIN             DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_B, 2)
 
 /* ---- Potentiometer -> ADC5 channel 0 (AD5AN0 on RA7) ---- */
-#define BOARD_POT_ANSEL_PORT      ANSELA
-#define BOARD_POT_ANSEL_BIT       (7u)     /* RA7 = AD5AN0 (analog input) */
+#define BOARD_POT_PIN             DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_A, 7)
 
 /* ---- CAN1 (CAN FD) -> on-board ATA6563 transceiver (bus on J21 CANH/CANL) ----
  *   C1TX = RD13 (RP62)   C1RX = RD11 (RP60)   STBY = RD14 (GPIO, low = normal)

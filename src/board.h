@@ -16,11 +16,12 @@
 extern "C" {
 #endif
 
-/* Set all GPIO pins to digital (clear ANSELA..D) as a clean power-on default.
+/* Set all GPIO pins on ports A..D to digital as a clean power-on default.
  * Pins owned directly by a peripheral module (e.g. the I2C SDA/SCL pins) are not
- * configured through the GPIO HAL, so their ANSEL must be cleared here or the
- * module cannot sense the line. Per-pin analog inputs (e.g. the pot ADC) re-enable
- * ANSEL where needed. Call once at the start of main(), before peripheral init. */
+ * otherwise configured pin-by-pin before peripheral init, so this helper clears
+ * their ANSEL through the GPIO HAL or the module cannot sense the line. Per-pin
+ * analog inputs (e.g. the pot ADC) re-enable ANSEL where needed. Call once at
+ * the start of main(), before peripheral init. */
 void board_ports_digital_default(void);
 
 /* Configure the UART1 console pins: U1TX digital output (idle high), U1RX

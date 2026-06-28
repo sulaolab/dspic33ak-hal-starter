@@ -76,7 +76,7 @@ static void led_sw_sw3_event_callback(dspic33ak_gpio_pin_t pin,
 
 void __attribute__((__interrupt__, __no_auto_psv__)) _CNBInterrupt(void)
 {
-    /* The event layer clears CNFB for owned pins and the CNB interrupt flag. */
+    /* The event layer clears owned per-pin flags and the CNB interrupt flag. */
     dspic33ak_gpio_event_process_isr();
 }
 
