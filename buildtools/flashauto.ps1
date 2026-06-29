@@ -88,12 +88,17 @@ function Resolve-FlashResetToolsDir {
         return (Resolve-Path -LiteralPath $RequestedToolsDir).Path
     }
 
+    $repoToolsDir = Join-Path $Root '_flash_reset_tools'
+    if (Test-Path -LiteralPath $repoToolsDir) {
+        return (Resolve-Path -LiteralPath $repoToolsDir).Path
+    }
+
     $siblingToolsDir = Join-Path (Split-Path -Parent $Root) '_flash_reset_tools'
     if (Test-Path -LiteralPath $siblingToolsDir) {
         return (Resolve-Path -LiteralPath $siblingToolsDir).Path
     }
 
-    throw "Flash/reset tools directory not found. Set FLASH_RESET_TOOLS or pass -ToolsDir."
+    throw "Flash/reset tools directory not found. Expected .\_flash_reset_tools, or set FLASH_RESET_TOOLS / pass -ToolsDir."
 }
 
 function Get-ConnectedPkob4Serials {

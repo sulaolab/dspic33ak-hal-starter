@@ -210,12 +210,12 @@ make and project-generator tools; the generated project makefiles invoke XC-DSC.
 .\buildtools\flashauto.ps1 -Serial 'YOUR_PKOB4_SERIAL' -Device dsPIC33AK512MPS512
 ```
 
-`flashauto.ps1` requires `flash_pkob4.exe` and `reset_pkob4.exe` from a
-`_flash_reset_tools/` sibling directory. These executables are **not included
-in this repository** — they are optional external tools. When they are present,
-the script auto-detects the serial number if only one PKOB4 is connected; pass
-`-Serial <PKOB4_SERIAL>` when multiple boards are attached. Without these tools,
-use MPLAB X or the standard `ipecmd` for programming.
+`flashauto.ps1` uses the `flash_pkob4.exe` and `reset_pkob4.exe` tools vendored
+under `./_flash_reset_tools`, so a fresh clone can flash and reset without a
+separate tool install. To use a different copy, set `FLASH_RESET_TOOLS` or pass
+`-ToolsDir`; the legacy sibling `../_flash_reset_tools` location is also checked
+as a fallback. The script auto-detects the serial number if only one PKOB4 is
+connected; pass `-Serial <PKOB4_SERIAL>` when multiple boards are attached.
 
 ## Expected serial output
 
