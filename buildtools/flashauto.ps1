@@ -4,6 +4,8 @@ param(
     [switch]$DryRun,
     [switch]$Verbose,
     [switch]$Quiet,
+    [Alias('clean-java')]
+    [switch]$CleanJava,
     [string]$Serial = $env:PKOB4_SERIAL,
     [string]$Device = 'dsPIC33AK512MPS512',
     [string]$ResetDevice,
@@ -192,6 +194,24 @@ function Invoke-CheckedExe {
     }
 }
 
+function Invoke-ResetJavaCleanup {
+    param(
+        [string]$ResetTool,
+        [bool]$DryRun
+    )
+
+    if ($DryRun) {
+        Write-Status "Dry-run: would clean PKOB4 Boost Java state before reset."
+        return
+    }
+
+    $cleanupArgs = @('--clean-java')
+    if (-not $Quiet) { $cleanupArgs += '--verbose' }
+
+    Write-Status "Cleaning PKOB4 Boost Java state before reset..."
+    Invoke-CheckedExe -Exe $ResetTool -Arguments $cleanupArgs
+}
+
 $repoRoot = Resolve-BuildRoot -RequestedRoot $Root
 $projectDir = Resolve-MplabProjectDir -Root $repoRoot -RequestedProjectDir $ProjectDir
 $toolsDir = Resolve-FlashResetToolsDir -RequestedToolsDir $ToolsDir -Root $repoRoot
@@ -235,6 +255,9 @@ if ($Reset) {
     if ($DryRun) { $resetArgs += '--dry-run' }
     Write-Status "Reset device token: $resetDeviceToken"
     Write-Status "Reset timeout: ${ResetTimeoutSec}s"
+    if ($CleanJava) {
+        Invoke-ResetJavaCleanup -ResetTool $resetTool -DryRun $DryRun
+    }
     Invoke-CheckedExe -Exe $resetTool -Arguments $resetArgs
     Write-Status "flashauto: reset completed"
     return
@@ -262,6 +285,9 @@ if ($DryRun) { $resetArgs += '--dry-run' }
 
 Write-Status "Running reset after successful flash..."
 Write-Status "Reset timeout: ${ResetTimeoutSec}s"
+if ($CleanJava) {
+    Invoke-ResetJavaCleanup -ResetTool $resetTool -DryRun $DryRun
+}
 $resetStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 Invoke-CheckedExe -Exe $resetTool -Arguments $resetArgs
 $resetStopwatch.Stop()

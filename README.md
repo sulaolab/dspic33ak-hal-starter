@@ -200,6 +200,9 @@ make and project-generator tools; the generated project makefiles invoke XC-DSC.
 # Reset the board without flashing
 .\buildtools\flashauto.ps1 -Reset
 
+# Clean Boost Java state before the reset step, then flash + reset
+.\buildtools\flashauto.ps1 -CleanJava
+
 # List connected PKOB4 serials
 .\buildtools\flashauto.ps1 -List
 
