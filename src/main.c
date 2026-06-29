@@ -26,6 +26,7 @@
 #include "i2c_loopback.h"
 #include "can_loopback.h"
 #include "can_bus_test.h"
+#include "can_rx_isr_selftest.h"
 #include "rgb_pot.h"
 #include "led_sw.h"
 #include "board.h"
@@ -257,6 +258,15 @@ int main(void)
     if (!board_can1_pins_init()) {
         printf(" WARNING: board_can1_pins_init failed\n");
     }
+#if !CAN_BUS_TEST
+    /* Single-board RX-interrupt self-test (INTERNAL loopback): proves the RX
+     * callback fires, a frame can be received, RX overflow is detected, and the
+     * TX interrupt line stays disabled - all without a bus or partner. Owns the
+     * CAN1 RX/general vectors for this build; leaves CAN1 quiesced afterwards. */
+    bool rx_isr_ok = can_rx_isr_selftest_run();
+    printf(" CAN1 RX-ISR self-check: %s.\n", rx_isr_ok ? "PASS" : "FAILED");
+    printf("==============================================\n");
+#endif
     bool can_ok = can_loopback_selftest();
     printf(" CAN1 FD @500k/2M live on the bus (HAL self-check: %s).\n",
            can_ok ? "PASS" : "FAILED");

@@ -2,8 +2,9 @@
  * @file    dspic33ak_canfd_reg.h
  * @brief   dsPIC33AK CAN FD HAL - register pointer table, bit definitions and
  *          message-object layout. Register-level only; never included by the
- *          public header. Only this file and dspic33ak_canfd_device.c know the
- *          raw MCU register names.
+ *          public header. CAN module SFR names are isolated here and in
+ *          dspic33ak_canfd_device.c; CPU interrupt vector/IFS/IEC/IP glue lives
+ *          in the optional ISR layer.
  *
  * Bit positions verified against DFP p33AK512MPS512.h (dsPIC33AK-MP_DFP 1.2.135)
  * and datasheet DS70005591 (CAN FD chapter 14).
