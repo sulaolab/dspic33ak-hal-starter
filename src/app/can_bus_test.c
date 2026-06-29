@@ -45,10 +45,9 @@ static void can_bus_test_event(dspic33ak_canfd_instance_t inst, uint32_t events,
     }
 }
 
-/* dsPIC33AK CAN raises separate RX / TX / general CPU vectors; forward all to the
- * one HAL handler (RX FIFO interrupts arrive on _C1RXInterrupt). */
+/* dsPIC33AK CAN raises separate RX / TX / general CPU vectors. This RX-focused
+ * layer uses only RX + general; the TX vector is intentionally not enabled. */
 void __attribute__((interrupt, no_auto_psv)) _C1RXInterrupt(void) { dspic33ak_canfd_irq_handler(DSPIC33AK_CANFD_INST_1); }
-void __attribute__((interrupt, no_auto_psv)) _C1TXInterrupt(void) { dspic33ak_canfd_irq_handler(DSPIC33AK_CANFD_INST_1); }
 void __attribute__((interrupt, no_auto_psv)) _C1Interrupt(void)   { dspic33ak_canfd_irq_handler(DSPIC33AK_CANFD_INST_1); }
 
 /* Log one frame in the same format as the can_loopback demo on the other board:
@@ -94,8 +93,7 @@ void can_bus_test_run(bool is_echo)
         printf(" CAN bus test: init FAILED\n");
         for (;;) { }
     }
-    (void)dspic33ak_canfd_isr_set_callback(DSPIC33AK_CANFD_INST_1, can_bus_test_event, NULL);
-    (void)dspic33ak_canfd_isr_enable(DSPIC33AK_CANFD_INST_1, 4u);
+    (void)dspic33ak_canfd_isr_enable(DSPIC33AK_CANFD_INST_1, can_bus_test_event, NULL, 4u);
 
     last_ms = dspic33ak_tick_timer_get_ms();
     for (;;) {
@@ -112,8 +110,7 @@ void can_bus_test_run(bool is_echo)
                  * config mode, then re-arm it afterwards. */
                 dspic33ak_canfd_isr_disable(DSPIC33AK_CANFD_INST_1);
                 (void)dspic33ak_canfd_init(DSPIC33AK_CANFD_INST_1, &cfg);
-                (void)dspic33ak_canfd_isr_set_callback(DSPIC33AK_CANFD_INST_1, can_bus_test_event, NULL);
-                (void)dspic33ak_canfd_isr_enable(DSPIC33AK_CANFD_INST_1, 4u);
+                (void)dspic33ak_canfd_isr_enable(DSPIC33AK_CANFD_INST_1, can_bus_test_event, NULL, 4u);
             }
             tx.id = CAN_BUS_TEST_ORIG_ID; tx.extended = false; tx.fd = true; tx.brs = true; tx.len = 8u;
             for (k = 0u; k < 8u; k++) {
