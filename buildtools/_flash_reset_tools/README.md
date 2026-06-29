@@ -1,4 +1,295 @@
-# PKOB4 Flash / Reset ツール
+# PKOB4 Flash / Reset Tools
+
+Command-line helper tools for flashing, resetting, and reading the UDID of a
+dsPIC33AK512MPS512 Curiosity-class board through its on-board PKOB4 debugger.
+They are intended for edit/build/flash/reset/observe loops without opening the
+MPLAB X IDE.
+
+The tools select the target board by **PKOB4 serial number**, so a specific board
+can be addressed safely even when several PKOB4 boards are connected.
+
+This directory contains three self-contained Windows x64 executables:
+
+| Tool | Purpose |
+| --- | --- |
+| `flash_pkob4.exe` | Programs a HEX file. It can also run reset after a successful flash with `--reset-after-flash`. |
+| `reset_pkob4.exe` | Reset only, using IPECMDBoost release-from-reset. It does not program flash. |
+| `read_udid_pkob4.exe` | Reads the target device's 128-bit Unique Device ID. It does not program flash or reset intentionally, but connecting briefly drops the CDC console. |
+
+The executables are published as self-contained .NET single-file apps, so a
+separate .NET runtime is **not** required. MPLAB X must be installed; the tools
+auto-detect the newest MPLAB X installation and use its bundled `mdb.bat`,
+`ipecmdboost.jar`, and Java runtime.
+
+Source is maintained in the `sulaolab/pkob4-flash-reset` repository
+(private, MIT-0). Rebuild from source with `dotnet publish -c Release` under
+`tools/flash_pkob4`, `tools/reset_pkob4`, or `tools/read_udid_pkob4`, then copy
+the published executables into this directory.
+
+---
+
+## Board Serials
+
+| Board | PKOB4 serial |
+| --- | --- |
+| Board A | `020085204RYN000318` |
+| Board B | `020085204RYN001164` |
+| Board C | `020085204RYN000057` |
+
+Only operate on the board you intend to use. Do not use index-based selection
+such as `hwtool ... -p <index>` when multiple boards are connected; connection
+order can change. Use serial selection.
+
+### List Connected Boards
+
+Both `flash_pkob4.exe` and `reset_pkob4.exe` support `--list`. This is a USB
+enumeration only; it is immediate and does not touch the target MCU.
+
+```powershell
+& "$dir\reset_pkob4.exe" --list
+# Connected PKOB4 serial(s): 1
+#   020085204RYN000057
+```
+
+`reset_pkob4.exe --list --probe` also connects to each board and reports the
+target device name and Device Id. This **resets each probed board** and briefly
+drops the CDC console. The default probe timeout is 60 seconds to allow cold
+IPECMDBoost startup.
+
+```powershell
+& "$dir\reset_pkob4.exe" --list --probe
+# Connected PKOB4: 1  (probing with device token '33AK512MPS512' -- this resets each board)
+#   020085204RYN000057   dsPIC33AK512MPS512   Device Id 0xa77c
+```
+
+---
+
+## Usage
+
+From the repository root:
+
+```powershell
+$dir = Join-Path (Get-Location) 'buildtools\_flash_reset_tools'
+```
+
+### Flash
+
+```powershell
+$hex = 'C:\path\to\your.production.hex'
+
+# Program Board C
+& "$dir\flash_pkob4.exe" --serial 020085204RYN000057 --hex $hex --verbose
+
+# Program, then reset after a successful flash
+& "$dir\flash_pkob4.exe" --serial 020085204RYN000057 --hex $hex --reset-after-flash --verbose
+```
+
+Main options:
+
+```text
+--list            list connected PKOB4 serials and exit
+--serial  <sn>    PKOB4 serial number (required)
+--hex     <path>  HEX file to program (required)
+--device  <dev>   device token (default dsPIC33AK512MPS512; MDB wants the long form)
+--reset-after-flash
+                  run reset_pkob4.exe for the same serial after a successful flash
+--reset-device <dev>
+                  reset_pkob4 device token; normally derived from --device
+--timeout <sec>   per-attempt timeout in seconds (default 120)
+--retry   <n>     retry count after failure (default 0)
+--verbose         print detected paths, MDB script, output, and exit code
+--dry-run         print what would run, without executing
+-h, --help        show help
+```
+
+Internally, `flash_pkob4.exe` runs MPLAB X `mdb.bat` with a script equivalent to:
+
+```text
+device dsPIC33AK512MPS512
+hwtool pkob4 -p <sn>020085204RYN000057
+program "C:\path\to\your.production.hex"
+quit
+```
+
+`--reset-after-flash` runs only after programming succeeds. If flashing fails,
+the reset step is skipped.
+
+### Reset
+
+```powershell
+& "$dir\reset_pkob4.exe" --serial 020085204RYN000057 --verbose
+```
+
+Main options:
+
+```text
+--list            list connected PKOB4 serials and exit
+--probe           with --list: connect to each board and report device name + Device Id
+                  (resets each board; confirms the --device token)
+--check-java      side-effect-free IPECMDBoost warm/cold/stale state check
+                  reports port 2012 owner and 2012.lock/ini; exit 0 = usable, 8 = stale/problem
+--shutdown-boost  ask IPECMDBoost to quit via /OQ /OY2012, then exit
+--clean-java      emergency cleanup: kill boost java, including port 2012 owner, and remove lock/ini
+--serial  <sn>    PKOB4 serial number (required)
+--device  <dev>   device token (default 33AK512MPS512; boost wants the short form)
+--warm-timeout <sec>
+                  timeout when boost java is already listening on port 2012 (default 5)
+--cold-timeout <sec>
+                  timeout for cold boost startup (default 60; 20+ seconds of silence can be normal)
+--timeout <sec>   compatibility option: use the same timeout for warm and cold
+--retry   <n>     recovery retry count after a warm failure (default 1)
+--verbose         print detected paths, command, and exit code
+--dry-run         print what would run, without executing
+```
+
+`reset_pkob4.exe` keeps a healthy IPECMDBoost Java server alive after successful
+resets. This makes the next reset fast via the warm path. Cleanup is targeted:
+when a timeout, decisive failure output, or non-zero exit occurs, the tool tries
+official shutdown (`/OQ`), kills the Java process that owns port 2012 if still
+alive, removes `2012.lock` / `2012.ini`, and retries cold once. If port 2012 is
+free before a cold start but stale `2012.lock` / `2012.ini` files remain, they
+are removed before starting boost.
+
+Device token forms differ by tool:
+
+- `flash_pkob4.exe` / MDB uses the long form: `dsPIC33AK512MPS512`
+- `reset_pkob4.exe` / IPECMDBoost uses the short form: `33AK512MPS512`
+
+Passing the long form to `reset_pkob4.exe` is rejected with a suggestion instead
+of running into the confusing `PICDSPIC...` failure.
+
+The reset operation pulses MCLR through IPECMDBoost release-from-reset. PKOB4 USB
+re-enumerates, so a CDC console such as Tera Term briefly disconnects and must
+reconnect. This is expected.
+
+### Read UDID
+
+```powershell
+& "$dir\read_udid_pkob4.exe" --serial 020085204RYN000318
+# UDID1=00D7794B
+# UDID2=56080004
+# UDID3=00EA010F
+# UDID4=FFFFFFFF
+# UDID128=FFFFFFFF00EA010F5608000400D7794B
+# Serial: 020085204RYN000318
+```
+
+Main options:
+
+```text
+--list            list connected PKOB4 serials and exit
+--serial  <sn>    PKOB4 serial number (required)
+--device  <dev>   device token (default dsPIC33AK512MPS512; MDB wants the long form)
+--timeout <sec>   per-attempt timeout in seconds (default 60)
+--retry   <n>     retry count after failure (default 1)
+--verbose         print detected paths, MDB script, output, and exit code
+--dry-run         print what would run, without executing
+```
+
+`UDID128` is the concatenation of UDID4..UDID1, highest word first, matching the
+firmware boot banner format. Use the full 128-bit value for board identity.
+
+`read_udid_pkob4.exe` parses the `UDIDn = 0x...` lines that MPLAB X MDB prints
+when connecting to the target. The documented `x /U4xw 0x7F2BE0` memory read path
+does not work with the tested `dsPIC33AK-MP_DFP` 1.3.185 pack; it returns
+garbage because `U` memory is not mapped for `x`. The connect-time output has
+been verified against firmware reading the on-chip UDID addresses.
+
+---
+
+## Typical Flow
+
+```powershell
+$dir = Join-Path (Get-Location) 'buildtools\_flash_reset_tools'
+$hex = 'C:\path\to\your.production.hex'
+
+& "$dir\flash_pkob4.exe" --serial 020085204RYN000057 --hex $hex --verbose
+& "$dir\reset_pkob4.exe"  --serial 020085204RYN000057 --verbose
+
+# Or program and reset in one command
+& "$dir\flash_pkob4.exe" --serial 020085204RYN000057 --hex $hex --reset-after-flash --verbose
+```
+
+The higher-level project wrapper `buildtools\flashauto.ps1` normally uses these
+vendored executables automatically, so direct tool invocation is mostly useful
+for diagnostics.
+
+---
+
+## Success Markers
+
+Flash succeeds when MDB output includes:
+
+```text
+Target device dsPIC33AK512MPS512 found.
+Programming/Verify complete
+Program succeeded.
+```
+
+MDB may print a Java `ChronicleHashClosedException` during shutdown. If
+`Program succeeded.` appeared before it, programming completed successfully.
+
+Reset succeeds when output includes:
+
+```text
+PKOB4 Boost reset succeeded.
+```
+
+Reset exit codes:
+
+```text
+0  success
+1  invalid arguments
+2  MPLAB X / Java / IPECMDBoost not found
+3  reset failed
+4  timeout after recovery
+5  unexpected exception
+6  PKOB4 wedged; USB unplug/replug required
+```
+
+`flash_pkob4.exe --reset-after-flash` returns exit code 6 when flashing succeeded
+but the reset step failed.
+
+---
+
+## Troubleshooting
+
+- **MPLAB X IDE / IPE is open**: close it first. The IDE can hold the PKOB4.
+- **Reset timeout / `Wait for current operation to complete`**: usually stale
+  IPECMDBoost Java state or stale `2012.ini` / `2012.lock`. `reset_pkob4.exe`
+  performs targeted cleanup automatically, but `--clean-java` is available as a
+  manual escape hatch.
+- **Exit 6 / `unloaded while still busy` / `unplug and reconnect`**: the PKOB4
+  firmware is wedged. Host-side cleanup cannot recover this; unplug and reconnect
+  the USB cable, then retry.
+- **Wrong board selected**: always pass `--serial`. Use `--list` if unsure.
+
+Manual cleanup, if needed:
+
+```powershell
+Get-CimInstance Win32_Process -Filter "Name='java.exe'" |
+  Where-Object { $_.ExecutablePath -like '*MPLABX*' } |
+  ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+Remove-Item "$env:USERPROFILE\.mchp_ipe\2012.ini" -Force -ErrorAction SilentlyContinue
+```
+
+---
+
+## Notes
+
+- These executables are build artifacts, approximately 68 MB each.
+- They are vendored here so a fresh firmware repository clone can flash/reset
+  without a separate install step.
+- They do not require a separate .NET runtime. Rebuilding them from source does
+  require the .NET 8 SDK.
+- Update these vendored binaries by rebuilding the `sulaolab/pkob4-flash-reset`
+  source projects and copying the published executables into this directory.
+
+---
+
+# Japanese
+
+## PKOB4 Flash / Reset ツール
 
 dsPIC33AK512MPS512 の Curiosity ボードを **コマンドライン**から素早く書き込み・リセットする
 ためのツール一式です。MPLAB X IDE を開かずに使えます。PKOB4 の **シリアル番号でボードを
