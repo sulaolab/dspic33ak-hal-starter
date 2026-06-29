@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT-0 */
 #ifndef DSPIC33AK_DMA_H
 #define DSPIC33AK_DMA_H
 
@@ -70,7 +71,11 @@ typedef enum {
 typedef struct {
     volatile void            *src;          /* -> DMAxSRC  */
     volatile void            *dst;          /* -> DMAxDST  */
-    uint32_t                  count;        /* -> DMAxCNT (current users pass ARRAY_SIZE()) */
+    /* Raw value written verbatim to DMAxCNT. On dsPIC33AK DMAxCNT is the number
+     * of elements (of `size` width) to transfer per repeat -- it is NOT an
+     * "elements - 1" register. Current users pass the element count of one
+     * ping-pong half (ARRAY_SIZE() of that half-buffer). */
+    uint32_t                  count;        /* -> DMAxCNT */
 
     dspic33ak_dma_addr_mode_t src_mode;     /* DMAxCHbits.SAMODE */
     dspic33ak_dma_addr_mode_t dst_mode;     /* DMAxCHbits.DAMODE */
@@ -126,13 +131,25 @@ bool dspic33ak_dma_global_is_ready(void);
 
 /* ---- Per channel ---- */
 
+/*
+ * Invalid-channel handling convention across this API (ch >= device channel
+ * count):
+ *   - config / enable          return false (and write nothing).
+ *   - void IRQ/status helpers  silently ignore the call (no register write).
+ *   - read helpers             return 0.
+ */
+
 /* Configure a channel (SRC/DST/CNT, CH fields, trigger, IRQ priority/enable).
  * Leaves the channel DISABLED. Call dspic33ak_dma_channel_enable(ch, true) to
  * start.
  * Returns false (and writes NO channel register) if cfg is NULL, the channel
- * index is invalid, or the DMA controller is not ready
- * (dspic33ak_dma_global_init() must have been called first). Returns true on
- * success. Never calls dspic33ak_dma_global_init() itself. */
+ * index is invalid, the DMA controller is not ready (dspic33ak_dma_global_init()
+ * must have been called first), or cfg holds an out-of-range enum / IRQ
+ * priority. Returns true on success. Never calls dspic33ak_dma_global_init()
+ * itself.
+ * Re-config safe: masks the channel's CPU IRQ and clears stale DMAxSTAT /
+ * _DMAxIF before and after programming, so a stale interrupt or leftover
+ * HALF/DONE status cannot disturb a stop -> re-config -> restart cycle. */
 bool dspic33ak_dma_channel_config(uint8_t ch, const dspic33ak_dma_channel_cfg_t *cfg);
 
 /* Set/clear DMAxCHbits.CHEN (start/stop the channel).
@@ -243,10 +260,18 @@ dspic33ak_dma_half_t dspic33ak_dma_half_from_status(uint32_t status);
 
 /* ---- ISR hot-path ---- */
 
-/* Atomically: clear CPU interrupt flag, snapshot DMAxSTAT, clear DMAxSTAT.
- * Returns the raw DMAxSTAT snapshot.  Call with a compile-time-constant ch;
- * the compiler folds the switch to exactly 3 register accesses with no branch
- * overhead.  Operation order: _DMAxIF=0, read DMAxSTAT, DMAxSTAT=0. */
+/* Ordered ISR snapshot sequence (NOT a single atomic instruction): clear the CPU
+ * interrupt flag, snapshot DMAxSTAT, then clear DMAxSTAT. Returns the raw
+ * DMAxSTAT snapshot. Call with a compile-time-constant ch; the compiler folds the
+ * switch to direct register accesses with no branch overhead. Operation order:
+ * _DMAxIF=0, read DMAxSTAT, DMAxSTAT=0.
+ *
+ * Order note (verify against the device data sheet for the trigger/repeat modes
+ * you use): clearing _DMAxIF before reading+clearing DMAxSTAT is intended so that
+ * a HALF/DONE event occurring between the STAT read and the STAT clear remains
+ * latched in DMAxSTAT (and re-asserts the flag) rather than being silently lost.
+ * This ordering has not been independently characterised against every DMA mode;
+ * confirm the DMAxSTAT/_DMAxIF latching behaviour if you rely on it. */
 static inline uint32_t dspic33ak_dma_isr_snapshot(uint8_t ch)
 {
     uint32_t stat;
