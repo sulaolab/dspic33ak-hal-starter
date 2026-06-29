@@ -8,15 +8,14 @@ high-resolution counter self-check, UART
 `printf()`, SPI flash verification, I2C scan, and then an alternating
 I2C-loopback / CAN FD bus demo with RGB LED control and heartbeat output.
 
-<img src="docs/images/serial-console.png" alt="Serial console from dspic33ak-hal-starter: a two-board CAN FD session with the I2C loopback and CAN FD frames interleaving" width="900">
+<img src="docs/images/serial-console.png" alt="Serial console from dspic33ak-hal-starter: full startup sequence including HRT self-check, SST26, I2C scan, TDM smoke demo, I2C loopback, and CAN FD with ACK partner" width="900">
 
-Captured from a live **two-board** session using Tera Term. This board (A) runs
-the starter; a second board (B) flashed in echo config is wired to it over CAN
-(J21 <-> J21, CANH/CANL/GND + termination). So the CAN1 frames are ACKed and
-echoed back — the log shows the `<[CAN1 Tx] id=0x123` transmits and the
-`>[CAN1 Rx] id=0x0B0` echoes from board B, interleaved with the I2C loopback. On
-a single board with no CAN partner, the CAN1 controller instead goes
-`error-passive` and retransmits (a burst you can see on a scope/CAN analyzer).
+Captured from a live session using Tera Term. The output shows the complete
+startup sequence: boot banner (including UDID), HRT self-check, SST26 verify,
+I2C scan, I2C loopback, CAN1 FD with an ACK partner (`state=active`), and the
+TDM8 smoke demo running on MikroBUS-A — all running together. On a single board
+with no CAN partner, the CAN1 controller instead goes `error-passive` and
+retransmits (a burst you can see on a scope/CAN analyzer).
 
 ## Required hardware
 
@@ -224,6 +223,7 @@ connected; pass `-Serial <PKOB4_SERIAL>` when multiple boards are attached.
  dspic33ak-hal-starter
  build  : ...
  device : dsPIC33AK512MPS512
+ udid   : ...
  sysclk : 200000000 Hz (FRC -> PLL1)
  uart   : UART1 @ 230400 8N1
 ==============================================
@@ -238,8 +238,7 @@ connected; pass `-Serial <PKOB4_SERIAL>` when multiple boards are attached.
  SST26 sector verify @0x000000: OK
 ==============================================
  I2C scan (MikroBUS A/B, I2C2): probing 0x08..0x77 ...
-   device ACK at 0x1A
-   1 device(s) found
+   no devices found
 ==============================================
  I2C loopback: I2C2 master <-> I2C3 slave @0x55 (ready); per beat below.
 ==============================================
@@ -249,28 +248,30 @@ connected; pass `-Serial <PKOB4_SERIAL>` when multiple boards are attached.
 ==============================================
  RGB LED follows the potentiometer; LED0 blinks with the heartbeat.
 ==============================================
- <[CAN1 Tx] id=0x123 len=64 data=05060708...4344
- [CAN1] state=error-passive TEC=128 REC=0
+ [TDM1] SPI1 TDM8 master smoke demo started (MikroBUS-A; jumper DataOut->DataIn for loopback).
 
+ [TDM1] TDM8 master exp_fs~48.8kHz exp_bclk~12.5MHz block=... miss=0 rx=... dB rel
  <[I2C2 Wr] size=8 1122334455667788
  >[I2C3 Rd] size=8 1122334455667788
  >[I2C2 Rd] size=8 1122334455667788
  <[I2C3 Wr] size=8 1122334455667788
 
- <[CAN1 Tx] transmit queue full / timeout
- [CAN1] state=error-passive TEC=128 REC=0
+ <[CAN1 Tx] id=0x123 len=64 data=05060708...4344
+ [CAN1] state=active TEC=0 REC=0
+
+ <[I2C2 Wr] size=8 ...
  ...
 ```
 
 The two peripheral demos alternate once per second (CAN FD on one beat, the I2C
-master/slave round trip on the next), separated by a blank line.
+master/slave round trip on the next), separated by a blank line. The TDM smoke
+demo runs in the background and prints one status line every ~5 s.
 
-(The I2C addresses found depend on what is attached. In the screenshot above,
-the scan finds a device at `0x1A`; the I2C loopback slave itself runs at `0x55`.
-Turning the potentiometer sweeps the RGB LED green -> blue -> white -> red. With
-no CAN ACK partner the CAN1 controller is `error-passive` and retransmits — the
-TX queue fills (`queue full / timeout`); connect another CAN node to ACK it and
-it returns to `state=active`.)
+(I2C scan results depend on what is attached; the loopback slave itself runs at
+`0x55`. Turning the potentiometer sweeps the RGB LED. With no CAN ACK partner
+the CAN1 controller is `error-passive` and retransmits — the TX queue fills
+(`queue full / timeout`); connect another CAN node to ACK it and it returns to
+`state=active`.)
 
 ## Layout
 
