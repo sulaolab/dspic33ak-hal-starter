@@ -322,9 +322,9 @@ src/
                         (demo toggles); tdm_smoke (SPI1 TDM8 smoke demo)
 docs/
   images/
-    serial-console.png   live two-board CAN FD + I2C session screenshot
-    tdm8-smoke-waveform.svg
-                         expected TDM8 smoke-demo waveform reference
+    serial-console.png        live full startup serial-console screenshot
+    tdm8-scope-mikrobus-a.png oscilloscope capture of the MikroBUS-A TDM8 smoke demo
+    tdm8-smoke-waveform.svg   expected TDM8 smoke-demo waveform reference
   source_layout.md       source-tree ownership and vendored-HAL layout notes
   hal_gpio_event_design.md
                          GPIO CN event usage and current limitations
