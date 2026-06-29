@@ -212,11 +212,12 @@ make and project-generator tools; the generated project makefiles invoke XC-DSC.
 ```
 
 `flashauto.ps1` uses the `flash_pkob4.exe` and `reset_pkob4.exe` tools vendored
-under `./_flash_reset_tools`, so a fresh clone can flash and reset without a
-separate tool install. To use a different copy, set `FLASH_RESET_TOOLS` or pass
-`-ToolsDir`; the legacy sibling `../_flash_reset_tools` location is also checked
-as a fallback. The script auto-detects the serial number if only one PKOB4 is
-connected; pass `-Serial <PKOB4_SERIAL>` when multiple boards are attached.
+under `buildtools/_flash_reset_tools`, so a fresh clone can flash and reset
+without a separate tool install. To use a different copy, set `FLASH_RESET_TOOLS`
+or pass `-ToolsDir`; the legacy root `./_flash_reset_tools` and sibling
+`../_flash_reset_tools` locations are also checked as fallbacks. The script
+auto-detects the serial number if only one PKOB4 is connected; pass
+`-Serial <PKOB4_SERIAL>` when multiple boards are attached.
 
 ## Expected serial output
 
