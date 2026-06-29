@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT-0 */
 #ifndef DSPIC33AK_DMA_REG_H
 #define DSPIC33AK_DMA_REG_H
 

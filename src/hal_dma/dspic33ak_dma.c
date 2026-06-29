@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT-0 */
 /*
  * Low-level DMA HAL (dsPIC33AK) - implementation.
  *
@@ -206,12 +207,42 @@ bool dspic33ak_dma_channel_config(uint8_t ch, const dspic33ak_dma_channel_cfg_t 
         return false;
     }
 
-    /* Start from a known-disabled state (matches "DMAxCH = 0; CHEN = 0;"). */
-    *r->CH = 0u;
+    /* Reject out-of-range enum / priority values rather than letting them mask
+     * silently into the register fields (channel_config is allowed to fail). */
+    if (cfg->size > DSPIC33AK_DMA_SIZE_WORD) {
+        return false;
+    }
+    if (cfg->src_mode > DSPIC33AK_DMA_ADDR_DECREMENT) {
+        return false;
+    }
+    if (cfg->dst_mode > DSPIC33AK_DMA_ADDR_DECREMENT) {
+        return false;
+    }
+    if (cfg->tr_mode > DSPIC33AK_DMA_TRMODE_REPEAT_CONTINUOUS) {
+        return false;
+    }
+    if (cfg->irq_priority_set && (cfg->irq_priority > 7u)) {
+        return false;
+    }
 
-    /* Addresses and element count. */
-    *r->SRC = (uint32_t)cfg->src;
-    *r->DST = (uint32_t)cfg->dst;
+    /* Mask this channel's CPU IRQ before reconfiguring. If the channel ran
+     * before, its _DMAxIE may still be enabled and a _DMAxIF may still be
+     * pending; masking first prevents a stale DMA interrupt from firing while
+     * the channel is being reprogrammed (re-config / restart safety). */
+    dma_irq_enable(ch, false);
+
+    /* Start from a known-disabled state (matches "DMAxCH = 0; CHEN = 0;") and
+     * clear stale channel-side status + pending CPU flag before programming.
+     * HALF/DONE left over from a previous run must not leak into the next run's
+     * ping-pong half decision. */
+    *r->CH   = 0u;
+    *r->STAT = 0u;
+    dma_irq_clear_flag(ch);
+
+    /* Addresses and element count. Cast via uintptr_t (pointer -> integer) before
+     * narrowing to the 32-bit register width. */
+    *r->SRC = (uint32_t)(uintptr_t)cfg->src;
+    *r->DST = (uint32_t)(uintptr_t)cfg->dst;
     *r->CNT = cfg->count;
 
     /* DMAxCH fields (CHEN intentionally left 0 here). */
@@ -235,12 +266,17 @@ bool dspic33ak_dma_channel_config(uint8_t ch, const dspic33ak_dma_channel_cfg_t 
     dspic33ak_dma_reg_write_field(r->SEL, DSPIC33AK_DMA_SEL_CHSEL_MASK,
                                   DSPIC33AK_DMA_SEL_CHSEL_POS, (uint32_t)cfg->trigger_sel);
 
+    /* Clear stale channel status + pending CPU flag again after programming and
+     * before (re-)enabling the IRQ, so the first post-config interrupt reflects
+     * only the newly started transfer. */
+    *r->STAT = 0u;
+    dma_irq_clear_flag(ch);
+
     /* CPU interrupt: priority only if requested (preserves PWM's untouched IP),
-     * then clear pending flag, then enable per cfg. */
+     * then enable per cfg. */
     if (cfg->irq_priority_set) {
         dma_irq_set_priority(ch, cfg->irq_priority);
     }
-    dma_irq_clear_flag(ch);
     dma_irq_enable(ch, cfg->irq_enable);
 
     return true;
