@@ -113,13 +113,6 @@ This is intended as a quick oscilloscope-visible bring-up check and a showcase
 that the dsPIC33AK SPI framed-mode path can generate TDM-style audio timing
 without a codec attached.
 
-<img src="docs/images/tdm8-smoke-waveform.svg" alt="Expected TDM8 smoke-demo waveform on mikroBUS-A: frame sync, bit clock, and eight data slots" width="900">
-
-The snapshot above is an expected waveform reference for the default
-configuration: FS around 48.8 kHz, BCLK around 12.5 MHz, 8 slots per frame, and
-SPI1 DataOut carrying a test tone pattern. For a loopback check, jumper
-DataOut -> DataIn and watch the `[TDM1]` status line move toward `0 dB rel`.
-
 To use mikroBUS-A as a normal SPI Click interface, set
 `HAL_STARTER_ENABLE_TDM_SMOKE_DEMO` to `0` in `src/app/app_config.h`. That frees
 the mikroBUS-A SPI pins; the I2C pins on the same mikroBUS header are separate
@@ -324,7 +317,6 @@ docs/
   images/
     serial-console.png        live full startup serial-console screenshot
     tdm8-scope-mikrobus-a.png oscilloscope capture of the MikroBUS-A TDM8 smoke demo
-    tdm8-smoke-waveform.svg   expected TDM8 smoke-demo waveform reference
   source_layout.md       source-tree ownership and vendored-HAL layout notes
   hal_gpio_event_design.md
                          GPIO CN event usage and current limitations
