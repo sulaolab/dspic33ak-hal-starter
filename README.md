@@ -24,7 +24,7 @@ running: BCLK (~12.5 MHz, yellow), frame sync FS (~49 kHz, blue), and DataOut
 carrying the eight-slot TDM8 pattern (red). This is the raw signal that appears
 on the MikroBUS-A header when the demo is active; no codec is required. The FS
 period (~20 µs) spans most of the 2 µs/div window, and each FS pulse frames the
-8 × 16-bit data slots that follow it on DataOut.
+8 × 32-bit data slots that follow it on DataOut.
 
 ## Required hardware
 
