@@ -129,13 +129,12 @@ This pairs with the standalone HALs:
 - [dspic33ak-i2c-hal](https://github.com/sulaolab/dspic33ak-i2c-hal)
 - [dspic33ak-can-hal](https://github.com/sulaolab/dspic33ak-can-hal)
 - [dspic33ak-timer-hal](https://github.com/sulaolab/dspic33ak-timer-hal)
+- [dspic33ak-spi-i2s-tdm-hal](https://github.com/sulaolab/dspic33ak-spi-i2s-tdm-hal)
 
-This starter also currently vendors candidate or integration HAL folders that
-are exercised by the app but may still be published separately or folded into an
-existing HAL family: `hal_dma`, `hal_spi_i2s_tdm`, and the `hal_gpio_event`
-change-notification layer inside `hal_gpio`. The starter's active HAL surface
-therefore includes GPIO/PPS/CN events, UART, SPI, I2C, CAN FD, Timer, DMA, and
-SPI framed-mode I2S/TDM.
+This starter also currently vendors integration HAL folders such as `hal_dma`
+and the `hal_gpio_event` change-notification layer inside `hal_gpio`. The
+starter's active HAL surface therefore includes GPIO/PPS/CN events, UART, SPI,
+I2C, CAN FD, Timer, DMA, and SPI framed-mode I2S/TDM.
 
 The reusable HAL implementations are maintained in the standalone repositories
 above. This starter vendors validated snapshots under matching `src/hal_xxx/`
