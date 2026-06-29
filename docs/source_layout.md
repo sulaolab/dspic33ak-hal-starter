@@ -3,8 +3,7 @@
 This starter keeps reusable HAL code and board-specific integration code in
 separate folders. The goal is that each public HAL can be compared with, copied
 from, or updated from its standalone repository without rediscovering which
-files are part of the HAL and which files are starter glue. The upstream
-snapshot commits are recorded in `docs/vendor_manifest.md`.
+files are part of the HAL and which files are starter glue.
 
 ## Vendored HAL folders
 
@@ -18,6 +17,8 @@ Reusable HAL snapshots live in module-specific `src/hal_xxx/` folders:
 | `src/hal_i2c/` | I2C HAL common, master, slave, and device abstraction. |
 | `src/hal_can/` | CAN FD HAL node/device/common code and optional ISR layer. |
 | `src/hal_timer/` | Timer1 tick and Timer2 high-resolution timer HAL. |
+| `src/hal_dma/` | DMA HAL for low-level channel setup and small IRQ helpers used by higher-level drivers. |
+| `src/hal_spi_i2s_tdm/` | SPI framed-mode I2S/TDM transport HAL candidate using DMA ping-pong buffers and a project-supplied config header. |
 
 These folders may contain generic, reusable HAL implementations. The distinction
 for `src/hal_gpio/` specifically: `dspic33ak_pps.*` provides generic PPS register
@@ -38,6 +39,7 @@ Code that binds the HALs to this board stays outside the HAL folders:
 | `src/clock/` | PLL and clock-generator setup for this board/demo. |
 | `src/app/` | Bus validation demos and application-level orchestration. |
 | `src/hal_udid/` | Local UDID boot-banner helper; not currently a standalone public HAL. |
+| `src/dspic33ak_spi_i2s_tdm_conf.h` | Project-supplied TDM HAL configuration, intentionally kept near the top of `src/` for MPLAB X visibility. |
 
 The root-level `board.*` files are intentionally not folded into
 `src/board_components/`: they name the board's fixed wiring and PPS routes,

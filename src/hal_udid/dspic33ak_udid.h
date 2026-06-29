@@ -6,10 +6,11 @@
 //
 // The UDID is a 128-bit, factory-programmed, read-only value that is UNIQUE per
 // physical die. It is NOT the device type (DEVID, same for every part of a given
-// variant) and NOT a debugger / USB serial number -- it identifies the individual
-// dsPIC33AK, so it can be used to tell one physical board apart from another.
+// variant) and NOT the PKOB4 debugger USB serial number -- it identifies the
+// individual dsPIC33AK on the board, so it can be used to tell one physical board
+// apart from another (board individual ID).
 //
-// It is four 32-bit read-only words. On dsPIC33A the program / UDID space is in the
+// It is four 32-bit read-only words. On dsPIC33A the program/UDID space is in the
 // unified (linear) address space, so the words are read with a plain volatile
 // pointer -- no PSV / table-read setup (those are for classic dsPIC33C/E/F).
 //
@@ -21,7 +22,7 @@
 //
 // Same addresses across the dsPIC33AK128MC106 and dsPIC33AK512MC510 /
 // dsPIC33AK512MPS512 families. Reference: the device Programming Specification,
-// "Unique Device ID" (Section 1.3). See also docs/hal_udid.md.
+// "Unique Device ID" (Section 1.3).
 //===========================================================
 
 #include <stdbool.h>

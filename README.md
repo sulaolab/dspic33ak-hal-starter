@@ -8,15 +8,23 @@ high-resolution counter self-check, UART
 `printf()`, SPI flash verification, I2C scan, and then an alternating
 I2C-loopback / CAN FD bus demo with RGB LED control and heartbeat output.
 
-<img src="docs/images/serial-console.png" alt="Serial console from dspic33ak-hal-starter: a two-board CAN FD session with the I2C loopback and CAN FD frames interleaving" width="900">
+<img src="docs/images/serial-console.png" alt="Serial console from dspic33ak-hal-starter: full startup sequence including HRT self-check, SST26, I2C scan, TDM smoke demo, I2C loopback, and CAN FD with ACK partner" width="900">
 
-Captured from a live **two-board** session using Tera Term. This board (A) runs
-the starter; a second board (B) flashed in echo config is wired to it over CAN
-(J21 <-> J21, CANH/CANL/GND + termination). So the CAN1 frames are ACKed and
-echoed back — the log shows the `<[CAN1 Tx] id=0x123` transmits and the
-`>[CAN1 Rx] id=0x0B0` echoes from board B, interleaved with the I2C loopback. On
-a single board with no CAN partner, the CAN1 controller instead goes
-`error-passive` and retransmits (a burst you can see on a scope/CAN analyzer).
+Captured from a live session using Tera Term. The output shows the complete
+startup sequence: boot banner (including UDID), HRT self-check, SST26 verify,
+I2C scan, I2C loopback, CAN1 FD with an ACK partner (`state=active`), and the
+TDM8 smoke demo running on MikroBUS-A — all running together. On a single board
+with no CAN partner, the CAN1 controller instead goes `error-passive` and
+retransmits (a burst you can see on a scope/CAN analyzer).
+
+<img src="docs/images/tdm8-scope-mikrobus-a.png" alt="Oscilloscope capture of MikroBUS-A SPI pins during the TDM8 smoke demo: BCLK (~12.5 MHz, yellow), FS (~49 kHz, blue), and DataOut carrying the TDM8 slot data (red)" width="900">
+
+Oscilloscope capture of the MikroBUS-A SPI pins with the TDM8 smoke demo
+running: BCLK (~12.5 MHz, yellow), frame sync FS (~49 kHz, blue), and DataOut
+carrying the eight-slot TDM8 pattern (red). This is the raw signal that appears
+on the MikroBUS-A header when the demo is active; no codec is required. The FS
+period (~20 µs) spans most of the 2 µs/div window, and each FS pulse frames the
+8 × 32-bit data slots that follow it on DataOut.
 
 ## Required hardware
 
@@ -38,8 +46,10 @@ connected, its ACK address is printed.
 For the I2C master/slave loopback demo, I2C2 and I2C3 are used as a shared-bus
 loopback on the starter board setup.
 
-This starter is intentionally board- and device-specific (single device, no
-`__dsPIC33AK128MC106__` branches) to stay small and obvious.
+The starter application target is intentionally board- and device-specific:
+EV74H48A + EV80L65A with a dsPIC33AK512MPS512 DIM. Some vendored HAL candidate
+folders also contain dsPIC33AK512 / dsPIC33AK128 silicon facts so the HAL code
+can remain reusable, but the starter board path shown here is the AK512 setup.
 
 ## What runs after programming?
 
@@ -82,6 +92,32 @@ The firmware demonstrates:
 8. **GPIO / ADC / PWM demo**
    LEDs, switches, potentiometer input, RGB LED output, and heartbeat blinking
 
+9. **SPI1 TDM8 smoke demo (codec-less, MikroBUS-A)** — default ON
+   SPI1 runs as a self-clocked framed-mode (TDM8) master on MikroBUS-A
+   (FS=RP70, BCLK=RP75, DataOut=RP101, DataIn=RP106), driving all 8 slots with a
+   ~800 Hz-class sine, so a scope on DataOut shows a TDM8 frame (BCLK ~12.5 MHz,
+   FS ~48.8 kHz — these are expected design values, not measurements). Jumper
+   DataOut->DataIn to read the RX level near `0 dB rel`; with no jumper it floors near
+   `-140 dB rel`. The stream runs on DMA/ISR and prints one status line every ~5 s:
+   `[TDM1] TDM8 master exp_fs~48.8kHz exp_bclk~12.5MHz block=... miss=0 rx=... dB rel`.
+   **This demo holds the MikroBUS-A SPI pins** — to use a real SPI Click board there, set
+   `HAL_STARTER_ENABLE_TDM_SMOKE_DEMO 0` in `src/app/app_config.h`. A start failure is
+   reported but does not stop the other demos. (The MikroBUS-A I2C SDA/SCL pins are
+   different and are unaffected either way.)
+
+### TDM8 smoke demo on mikroBUS-A
+
+The starter firmware enables the TDM smoke demo by default. When the board is
+running, the mikroBUS-A SPI pins output a TDM8-style framed serial waveform.
+This is intended as a quick oscilloscope-visible bring-up check and a showcase
+that the dsPIC33AK SPI framed-mode path can generate TDM-style audio timing
+without a codec attached.
+
+To use mikroBUS-A as a normal SPI Click interface, set
+`HAL_STARTER_ENABLE_TDM_SMOKE_DEMO` to `0` in `src/app/app_config.h`. That frees
+the mikroBUS-A SPI pins; the I2C pins on the same mikroBUS header are separate
+and remain usable either way.
+
 In short: this is a known-good hardware starter project for checking that the
 board, toolchain, programmer, UART console, and basic HAL drivers are working
 together.
@@ -94,6 +130,12 @@ This pairs with the standalone HALs:
 - [dspic33ak-i2c-hal](https://github.com/sulaolab/dspic33ak-i2c-hal)
 - [dspic33ak-can-hal](https://github.com/sulaolab/dspic33ak-can-hal)
 - [dspic33ak-timer-hal](https://github.com/sulaolab/dspic33ak-timer-hal)
+- [dspic33ak-spi-i2s-tdm-hal](https://github.com/sulaolab/dspic33ak-spi-i2s-tdm-hal)
+
+This starter also currently vendors integration HAL folders such as `hal_dma`
+and the `hal_gpio_event` change-notification layer inside `hal_gpio`. The
+starter's active HAL surface therefore includes GPIO/PPS/CN events, UART, SPI,
+I2C, CAN FD, Timer, DMA, and SPI framed-mode I2S/TDM.
 
 The reusable HAL implementations are maintained in the standalone repositories
 above. This starter vendors validated snapshots under matching `src/hal_xxx/`
@@ -159,6 +201,9 @@ make and project-generator tools; the generated project makefiles invoke XC-DSC.
 # Reset the board without flashing
 .\buildtools\flashauto.ps1 -Reset
 
+# Clean Boost Java state before the reset step, then flash + reset
+.\buildtools\flashauto.ps1 -CleanJava
+
 # List connected PKOB4 serials
 .\buildtools\flashauto.ps1 -List
 
@@ -166,12 +211,13 @@ make and project-generator tools; the generated project makefiles invoke XC-DSC.
 .\buildtools\flashauto.ps1 -Serial 'YOUR_PKOB4_SERIAL' -Device dsPIC33AK512MPS512
 ```
 
-`flashauto.ps1` requires `flash_pkob4.exe` and `reset_pkob4.exe` from a
-`_flash_reset_tools/` sibling directory. These executables are **not included
-in this repository** — they are optional external tools. When they are present,
-the script auto-detects the serial number if only one PKOB4 is connected; pass
-`-Serial <PKOB4_SERIAL>` when multiple boards are attached. Without these tools,
-use MPLAB X or the standard `ipecmd` for programming.
+`flashauto.ps1` uses the `flash_pkob4.exe` and `reset_pkob4.exe` tools vendored
+under `buildtools/_flash_reset_tools`, so a fresh clone can flash and reset
+without a separate tool install. To use a different copy, set `FLASH_RESET_TOOLS`
+or pass `-ToolsDir`; the legacy root `./_flash_reset_tools` and sibling
+`../_flash_reset_tools` locations are also checked as fallbacks. The script
+auto-detects the serial number if only one PKOB4 is connected; pass
+`-Serial <PKOB4_SERIAL>` when multiple boards are attached.
 
 ## Expected serial output
 
@@ -180,6 +226,7 @@ use MPLAB X or the standard `ipecmd` for programming.
  dspic33ak-hal-starter
  build  : ...
  device : dsPIC33AK512MPS512
+ udid   : ...
  sysclk : 200000000 Hz (FRC -> PLL1)
  uart   : UART1 @ 230400 8N1
 ==============================================
@@ -194,8 +241,7 @@ use MPLAB X or the standard `ipecmd` for programming.
  SST26 sector verify @0x000000: OK
 ==============================================
  I2C scan (MikroBUS A/B, I2C2): probing 0x08..0x77 ...
-   device ACK at 0x1A
-   1 device(s) found
+   no devices found
 ==============================================
  I2C loopback: I2C2 master <-> I2C3 slave @0x55 (ready); per beat below.
 ==============================================
@@ -205,28 +251,30 @@ use MPLAB X or the standard `ipecmd` for programming.
 ==============================================
  RGB LED follows the potentiometer; LED0 blinks with the heartbeat.
 ==============================================
- <[CAN1 Tx] id=0x123 len=64 data=05060708...4344
- [CAN1] state=error-passive TEC=128 REC=0
+ [TDM1] SPI1 TDM8 master smoke demo started (MikroBUS-A; jumper DataOut->DataIn for loopback).
 
+ [TDM1] TDM8 master exp_fs~48.8kHz exp_bclk~12.5MHz block=... miss=0 rx=... dB rel
  <[I2C2 Wr] size=8 1122334455667788
  >[I2C3 Rd] size=8 1122334455667788
  >[I2C2 Rd] size=8 1122334455667788
  <[I2C3 Wr] size=8 1122334455667788
 
- <[CAN1 Tx] transmit queue full / timeout
- [CAN1] state=error-passive TEC=128 REC=0
+ <[CAN1 Tx] id=0x123 len=64 data=05060708...4344
+ [CAN1] state=active TEC=0 REC=0
+
+ <[I2C2 Wr] size=8 ...
  ...
 ```
 
 The two peripheral demos alternate once per second (CAN FD on one beat, the I2C
-master/slave round trip on the next), separated by a blank line.
+master/slave round trip on the next), separated by a blank line. The TDM smoke
+demo runs in the background and prints one status line every ~5 s.
 
-(The I2C addresses found depend on what is attached. In the screenshot above,
-the scan finds a device at `0x1A`; the I2C loopback slave itself runs at `0x55`.
-Turning the potentiometer sweeps the RGB LED green -> blue -> white -> red. With
-no CAN ACK partner the CAN1 controller is `error-passive` and retransmits — the
-TX queue fills (`queue full / timeout`); connect another CAN node to ACK it and
-it returns to `state=active`.)
+(I2C scan results depend on what is attached; the loopback slave itself runs at
+`0x55`. Turning the potentiometer sweeps the RGB LED. With no CAN ACK partner
+the CAN1 controller is `error-passive` and retransmits — the TX queue fills
+(`queue full / timeout`); connect another CAN node to ACK it and it returns to
+`state=active`.)
 
 ## Layout
 
@@ -249,22 +297,31 @@ src/
                         dspic33ak_pps.*     peripheral signal routing (PPS)
                         dspic33ak_gpio_event.*  CN change-notification events
   hal_uart/             vendored UART HAL
-  hal_spi/              vendored SPI HAL
+  hal_spi/              vendored SPI HAL (blocking master; SST26 flash on SPI4)
   hal_i2c/              vendored I2C HAL
   hal_can/              vendored CAN FD HAL: dspic33ak_canfd_* (node + optional ISR layer)
   hal_timer/            vendored Timer HAL
                         (Timer1 1 ms tick, default IRQ priority macro,
                         and Timer2 high-resolution counter)
   hal_udid/             local UDID helper used by the boot banner
+  hal_dma/              vendored DMA HAL (low-level channel config; used by the TDM HAL)
+  hal_spi_i2s_tdm/      vendored SPI framed-mode I2S/TDM transport HAL
+                        (DMA ping-pong + per-instance block callback; board-free
+                        via a port hook). See its own README.md.
+  dspic33ak_spi_i2s_tdm_conf.h  project-supplied (self-contained) config for the
+                        TDM HAL: single SPI1 TDM8 stream, DMA0/1. It is kept
+                        near the top of src/ so it is easy to find in MPLAB X.
   app/                  bus validation samples: i2c_scan, i2c_loopback,
-                        can_loopback, can_bus_test (two-board)
+                        can_loopback, can_bus_test (two-board); app_config.h
+                        (demo toggles); tdm_smoke (SPI1 TDM8 smoke demo)
 docs/
   images/
-    serial-console.png   live two-board CAN FD + I2C session screenshot
+    serial-console.png        live full startup serial-console screenshot
+    tdm8-scope-mikrobus-a.png oscilloscope capture of the MikroBUS-A TDM8 smoke demo
   source_layout.md       source-tree ownership and vendored-HAL layout notes
-  vendor_manifest.md     upstream commit recorded for each vendored HAL snapshot
   hal_gpio_event_design.md
-                         GPIO CN event design notes
+                         GPIO CN event usage and current limitations
+  hal_udid.md           UDID helper notes
   touch-addon.md        optional capacitive-touch add-on (QTM; not bundled)
 ```
 

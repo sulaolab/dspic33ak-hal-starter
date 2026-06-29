@@ -60,7 +60,8 @@
 /* ---- User LEDs and switches on the Curiosity motherboard ----
  *   LED0..LED7 = RC8..RC15  (active-high)
  *   SW1 = RF3, SW2 = RF0, SW3 = RB2  (active-low, pulled up)
- * Non-PPS: packed pin.
+ * LEDs use packed pins here. Switches are RP-capable, so name them by RP number
+ * and use the RP-first GPIO/CN APIs in board component code.
  */
 #define BOARD_LED0_PIN            DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C,  8)
 #define BOARD_LED1_PIN            DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C,  9)
@@ -71,13 +72,12 @@
 #define BOARD_LED6_PIN            DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C, 14)
 #define BOARD_LED7_PIN            DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C, 15)
 
-#define BOARD_SW1_PIN             DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_F, 3)
-#define BOARD_SW2_PIN             DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_F, 0)
-#define BOARD_SW3_PIN             DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_B, 2)
+#define BOARD_SW1_RP              ((dspic33ak_gpio_rp_t)84u)  /* RF3 */
+#define BOARD_SW2_RP              ((dspic33ak_gpio_rp_t)81u)  /* RF0 */
+#define BOARD_SW3_RP              ((dspic33ak_gpio_rp_t)19u)  /* RB2 */
 
 /* ---- Potentiometer -> ADC5 channel 0 (AD5AN0 on RA7) ---- */
-#define BOARD_POT_ANSEL_PORT      ANSELA
-#define BOARD_POT_ANSEL_BIT       (7u)     /* RA7 = AD5AN0 (analog input) */
+#define BOARD_POT_PIN             DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_A, 7)
 
 /* ---- CAN1 (CAN FD) -> on-board ATA6563 transceiver (bus on J21 CANH/CANL) ----
  *   C1TX = RD13 (RP62)   C1RX = RD11 (RP60)   STBY = RD14 (GPIO, low = normal)
@@ -88,5 +88,19 @@
 #define BOARD_CAN1_TX_RP          (62u)    /* C1TX output -> RP62 (RD13) */
 #define BOARD_CAN1_RX_RP          (60u)    /* C1RX input  <- RP60 (RD11) */
 #define BOARD_CAN1_PIN_STBY       DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_D, 14)
+
+/* ---- MikroBUS-A SPI1 framed-mode (TDM8) smoke demo: self-clocked MASTER ----
+ *   FS/CS   = RE5  (RP70)    BCLK/SCK = RE10 (RP75)
+ *   DataOut = RG4  (RP101)   DataIn   = RG9  (RP106)
+ * All PPS-capable (RP number only). As a master the dsPIC drives FS(SS1) / BCLK(SCK1) /
+ * SDO1 as outputs; SDI1 is the input. Jumper DataOut->DataIn for a loopback check.
+ * NOTE: these MikroBUS-A SPI pins are held by the TDM smoke demo when it is enabled
+ * (app_config.h: HAL_STARTER_ENABLE_TDM_SMOKE_DEMO) -- disable it to use a real SPI
+ * Click in MikroBUS-A. (MikroBUS-A I2C SDA/SCL are different pins, unaffected.)
+ */
+#define BOARD_TDM_SPI1_FS_RP      (70u)    /* SS1  output -> RP70  (RE5)  FS/CS    */
+#define BOARD_TDM_SPI1_BCLK_RP    (75u)    /* SCK1 output -> RP75  (RE10) BCLK/SCK */
+#define BOARD_TDM_SPI1_SDO_RP     (101u)   /* SDO1 output -> RP101 (RG4)  DataOut  */
+#define BOARD_TDM_SPI1_SDI_RP     (106u)   /* SDI1 input  <- RP106 (RG9)  DataIn   */
 
 #endif /* BOARD_PINS_H */

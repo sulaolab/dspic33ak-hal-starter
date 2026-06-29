@@ -93,10 +93,10 @@ bool i2c_loopback_init(void)
     };
 
     /* The slave HAL enables the interrupt sources; the application owns the
-     * vectors and their priority (0 would leave them masked). */
-    _I2C3IP   = 4;
-    _I2C3RXIP = 4;
-    _I2C3TXIP = 4;
+     * vectors and asks the HAL to set the matching line priorities. */
+    if (dspic33ak_i2c_set_interrupt_priority(LB_SLAVE_INST, 4u) != DSPIC33AK_I2C_OK) {
+        return false;
+    }
 
     return (dspic33ak_i2c_slave_init(LB_SLAVE_INST, &scfg) == DSPIC33AK_I2C_OK);
 }

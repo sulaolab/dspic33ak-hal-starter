@@ -8,22 +8,30 @@
  * The CLKGEN clock routing is done separately in dspic33ak_clock_init().
  */
 
-#include <xc.h>
-
+#include "dspic33ak_canfd.h"
 #include "dspic33ak_gpio.h"
 #include "dspic33ak_pps.h"
 #include "board_pins.h"
 #include "board.h"
+
+static void board_port_digital_default(dspic33ak_gpio_port_t port)
+{
+    uint8_t bit;
+
+    for (bit = 0u; bit < 16u; bit++) {
+        (void)dspic33ak_gpio_set_analog(DSPIC33AK_GPIO_PIN(port, bit), false);
+    }
+}
 
 void board_ports_digital_default(void)
 {
     /* 0 = digital, 1 = analog. Make every analog-capable pin digital at boot so
      * module-owned pins (I2C SDA/SCL) work; analog inputs set their ANSEL bit
      * again when configured. */
-    ANSELA = 0;
-    ANSELB = 0;
-    ANSELC = 0;
-    ANSELD = 0;
+    board_port_digital_default(DSPIC33AK_GPIO_PORT_A);
+    board_port_digital_default(DSPIC33AK_GPIO_PORT_B);
+    board_port_digital_default(DSPIC33AK_GPIO_PORT_C);
+    board_port_digital_default(DSPIC33AK_GPIO_PORT_D);
 }
 
 bool board_uart1_pins_init(void)
@@ -45,8 +53,9 @@ bool board_uart1_pins_init(void)
 
 bool board_can1_pins_init(void)
 {
-    /* Enable the CAN1 module (clear its module-disable bit) before HAL init. */
-    PMD3bits.C1MD = 0;
+    /* Enable the CAN1 module before HAL init. */
+    if (dspic33ak_canfd_module_enable(DSPIC33AK_CANFD_INST_1, true) != DSPIC33AK_CANFD_OK)
+        return false;
 
     /* C1TX: idle-high output (CAN recessive state is high). */
     if (!dspic33ak_gpio_rp_config_digital_output(BOARD_CAN1_TX_RP, true))
@@ -111,6 +120,29 @@ bool board_rgb_pins_init(void)
 
     if (!dspic33ak_gpio_rp_config_digital_output(BOARD_RGB_RED_RP,   false)) return false;
     if (!dspic33ak_pps_route_output(DSPIC33AK_PPS_OUTPUT_PWM3H, BOARD_RGB_RED_RP))   return false;
+
+    return true;
+}
+
+bool board_spi1_tdm_smoke_pins_init(void)
+{
+    /* MikroBUS-A SPI1 as a self-clocked framed-mode (TDM8) MASTER for the smoke demo:
+     * the dsPIC drives FS(SS1)/BCLK(SCK1)/SDO1 as outputs; SDI1 is the input (jumper
+     * DataOut->DataIn for a loopback check). Per-pin: GPIO attribute first (idle low,
+     * a known state before the SPI starts driving), then the PPS route. Fail-fast: a
+     * GPIO failure skips that pin's PPS route so no partial config is left behind.
+     * Pins/PPS only -- this does NOT touch the SPI/DMA module (the HAL owns that). */
+    if (!dspic33ak_gpio_rp_config_digital_output(BOARD_TDM_SPI1_FS_RP,   false)) return false;
+    if (!dspic33ak_pps_route_output(DSPIC33AK_PPS_OUTPUT_SS1,  BOARD_TDM_SPI1_FS_RP))   return false;
+
+    if (!dspic33ak_gpio_rp_config_digital_output(BOARD_TDM_SPI1_BCLK_RP, false)) return false;
+    if (!dspic33ak_pps_route_output(DSPIC33AK_PPS_OUTPUT_SCK1, BOARD_TDM_SPI1_BCLK_RP)) return false;
+
+    if (!dspic33ak_gpio_rp_config_digital_output(BOARD_TDM_SPI1_SDO_RP,  false)) return false;
+    if (!dspic33ak_pps_route_output(DSPIC33AK_PPS_OUTPUT_SDO1, BOARD_TDM_SPI1_SDO_RP))  return false;
+
+    if (!dspic33ak_gpio_rp_config_digital_input(BOARD_TDM_SPI1_SDI_RP))          return false;
+    if (!dspic33ak_pps_route_input(DSPIC33AK_PPS_INPUT_SDI1,  BOARD_TDM_SPI1_SDI_RP))   return false;
 
     return true;
 }

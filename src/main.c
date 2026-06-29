@@ -29,6 +29,8 @@
 #include "rgb_pot.h"
 #include "led_sw.h"
 #include "board.h"
+#include "app_config.h"
+#include "tdm_smoke.h"
 
 /* The optional two-board CAN FD bus test is controlled by CAN_BUS_TEST /
  * CAN_BUS_TEST_ECHO, both defined (default 0) in can_bus_test.h. With
@@ -270,6 +272,23 @@ int main(void)
     printf(" RGB LED follows the potentiometer; LED0 blinks with the heartbeat.\n");
     printf("==============================================\n");
 
+#if HAL_STARTER_ENABLE_TDM_SMOKE_DEMO
+    /* ---- SPI1 framed-mode TDM8 smoke demo (codec-less self-clocked master, MikroBUS-A) ----
+     * Drives all 8 TDM slots with a ~800 Hz-class sine so a scope on DataOut shows a TDM8
+     * frame. Jumper DataOut(RP101)->DataIn(RP106) to see the RX level near 0 dB rel. The
+     * stream runs on DMA/ISR; the main loop only prints a status line every 5 s. A start
+     * failure is reported but does NOT stop the rest of the starter. Disable in
+     * app_config.h (HAL_STARTER_ENABLE_TDM_SMOKE_DEMO 0) to free the MikroBUS-A SPI pins. */
+    if (tdm_smoke_init()) {
+        printf(" [TDM1] SPI1 TDM8 master smoke demo started (MikroBUS-A;"
+               " jumper DataOut->DataIn for loopback).\n");
+    } else {
+        printf(" [TDM1] start FAILED (%s) -- existing starter demos continue.\n",
+               tdm_smoke_last_error_str());
+    }
+    printf("==============================================\n");
+#endif
+
     /* Main loop: update the LED color from the pot continuously, toggle LED0 once
      * per second (visible liveness without a serial port), and on each 1 s beat
      * run ONE peripheral demo, alternating between them: even beats run the I2C
@@ -278,6 +297,9 @@ int main(void)
     uint32_t beat      = 0u;
     uint32_t last_beat = dspic33ak_tick_timer_get_ms();
     uint32_t last_term_reset = dspic33ak_tick_timer_get_ms();
+#if HAL_STARTER_ENABLE_TDM_SMOKE_DEMO
+    uint32_t last_tdm  = dspic33ak_tick_timer_get_ms() - 5000u;
+#endif
     while (1)
     {
         rgb_pot_update();
@@ -301,6 +323,13 @@ int main(void)
             }
             beat++;
         }
+
+#if HAL_STARTER_ENABLE_TDM_SMOKE_DEMO
+        if ((uint32_t)(now - last_tdm) >= 5000u) {   /* TDM status line every ~5 s */
+            last_tdm = now;
+            tdm_smoke_status_print();
+        }
+#endif
     }
 
     return 0;

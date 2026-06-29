@@ -32,10 +32,10 @@ static const dspic33ak_gpio_pin_t LED_PINS[LED_SW_LED_COUNT] = {
 };
 
 /* SW1..SW3, active-low (reads 0 while pressed). */
-static const dspic33ak_gpio_pin_t SW_PINS[LED_SW_SW_COUNT] = {
-    BOARD_SW1_PIN,
-    BOARD_SW2_PIN,
-    BOARD_SW3_PIN,
+static const dspic33ak_gpio_rp_t SW_RPS[LED_SW_SW_COUNT] = {
+    BOARD_SW1_RP,
+    BOARD_SW2_RP,
+    BOARD_SW3_RP,
 };
 
 #define LED_SW_SW3_INDEX      2u
@@ -76,7 +76,7 @@ static void led_sw_sw3_event_callback(dspic33ak_gpio_pin_t pin,
 
 void __attribute__((__interrupt__, __no_auto_psv__)) _CNBInterrupt(void)
 {
-    /* The event layer clears CNFB for owned pins and the CNB interrupt flag. */
+    /* The event layer clears owned per-pin flags and the CNB interrupt flag. */
     dspic33ak_gpio_event_process_isr();
 }
 
@@ -97,18 +97,15 @@ void led_sw_init(void)
         .analog = false, .open_drain = false, .initial_high = false,
     };
     for (i = 0u; i < LED_SW_SW_COUNT; i++) {
-        (void)dspic33ak_gpio_config(SW_PINS[i], &sw_cfg);
+        (void)dspic33ak_gpio_rp_config(SW_RPS[i], &sw_cfg);
     }
 
     s_sw3_pressed = led_sw_pressed(LED_SW_SW3_NUMBER);
-    (void)dspic33ak_gpio_event_attach(SW_PINS[LED_SW_SW3_INDEX],
-                                      DSPIC33AK_GPIO_EVENT_EDGE_EITHER,
-                                      led_sw_sw3_event_callback,
-                                      0);
-
-    _CNBIP = 4u;
-    _CNBIF = 0u;
-    _CNBIE = 1u;
+    (void)dspic33ak_gpio_event_rp_attach(SW_RPS[LED_SW_SW3_INDEX],
+                                         DSPIC33AK_GPIO_EVENT_EDGE_EITHER,
+                                         led_sw_sw3_event_callback,
+                                         0);
+    (void)dspic33ak_gpio_event_rp_irq_enable(SW_RPS[LED_SW_SW3_INDEX], 4u);
 }
 
 void led_sw_set(uint8_t led, bool on)
@@ -138,7 +135,7 @@ bool led_sw_pressed(uint8_t sw)
     if (sw >= 1u && sw <= LED_SW_SW_COUNT) {
         /* Active-low: a pressed switch pulls the pin to 0. read() returns a
          * 3-state level; treat only a genuine LOW as pressed (ERROR -> not). */
-        return (dspic33ak_gpio_read(SW_PINS[sw - 1u]) == DSPIC33AK_GPIO_LEVEL_LOW);
+        return (dspic33ak_gpio_rp_read(SW_RPS[sw - 1u]) == DSPIC33AK_GPIO_LEVEL_LOW);
     }
     return false;
 }
