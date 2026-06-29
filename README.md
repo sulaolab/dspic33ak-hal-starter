@@ -17,6 +17,15 @@ TDM8 smoke demo running on MikroBUS-A — all running together. On a single boar
 with no CAN partner, the CAN1 controller instead goes `error-passive` and
 retransmits (a burst you can see on a scope/CAN analyzer).
 
+<img src="docs/images/tdm8-scope-mikrobus-a.png" alt="Oscilloscope capture of MikroBUS-A SPI pins during the TDM8 smoke demo: BCLK (~12.5 MHz, yellow), FS (~49 kHz, blue), and DataOut carrying the TDM8 slot data (red)" width="900">
+
+Oscilloscope capture of the MikroBUS-A SPI pins with the TDM8 smoke demo
+running: BCLK (~12.5 MHz, yellow), frame sync FS (~49 kHz, blue), and DataOut
+carrying the eight-slot TDM8 pattern (red). This is the raw signal that appears
+on the MikroBUS-A header when the demo is active; no codec is required. The FS
+period (~20 µs) spans most of the 2 µs/div window, and each FS pulse frames the
+8 × 16-bit data slots that follow it on DataOut.
+
 ## Required hardware
 
 This project targets the following Microchip hardware - just two parts:
