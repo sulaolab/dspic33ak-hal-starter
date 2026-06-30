@@ -33,74 +33,30 @@
 #define FS_CLC_RPV8_RP             (137u)     // RPV8 == RP137R  (FRMSYNC marker -> CLC input)
 #define FS_CLC_RP_PHYS_MAX         (128u)     // scan physical RP1..RP128 (RP129.. are virtual)
 
-// ---- Ownership (single CLC10) ----
+//===========================================================
+// Variables  (ownership of the single CLC10)
+//===========================================================
 static bool           s_claimed;
 static tdm_spi_inst_t s_owner;
 static uint32_t       s_fs_rp;     // physical FS pin repointed to CLC10OUT (to restore on release)
 static uint8_t        s_ss_code;   // the FRMSYNC (SSx) code that pin carried before (to restore)
 
-//===========================================================
-// PPS helpers (self-contained; RPORx bank via &RPOR0)
-//===========================================================
-static inline void fs_clc_pps_unlock(void) { RPCONbits.IOLOCK = 0u; }
-static inline void fs_clc_pps_lock(void)   { RPCONbits.IOLOCK = 1u; }
-
-// &RPOR0 indexes the contiguous RPORx bank; RPORx holds RP[4x+1..4x+4] in 7-bit fields.
-static volatile uint32_t* fs_clc_rpor(uint32_t rp) { return (&RPOR0) + ((rp - 1u) / 4u); }
-static uint32_t           fs_clc_rpor_pos(uint32_t rp) { return ((rp - 1u) % 4u) * 8u; }
-
-// Read the 7-bit output-function code currently routed to physical pin RPn.
-static uint8_t fs_clc_read_rp(uint32_t rp)
-{
-    return (uint8_t)((*fs_clc_rpor(rp) >> fs_clc_rpor_pos(rp)) & 0x7Fu);
-}
-
-// Write a 7-bit output-function code onto pin RPn (caller holds the PPS unlock).
-static void fs_clc_write_rp(uint32_t rp, uint8_t code)
-{
-    volatile uint32_t *reg = fs_clc_rpor(rp);
-    const uint32_t     pos = fs_clc_rpor_pos(rp);
-    *reg = (*reg & ~(0x7FuL << pos)) | ((uint32_t)code << pos);
-}
-
-// Reverse-lookup: first PHYSICAL pin whose RPnR == code, or 0 if none.
-static uint32_t fs_clc_find_rp_with_code(uint8_t code)
-{
-    for (uint32_t rp = 1u; rp <= FS_CLC_RP_PHYS_MAX; ++rp)
-    {
-        if (fs_clc_read_rp(rp) == code)
-        {
-            return rp;
-        }
-    }
-    return 0u;
-}
 
 //===========================================================
-// CLC10 J-K flip-flop toggle config
+// Function Prototype (private)
 //===========================================================
-static void fs_clc_configure_clc10(void)
-{
-    CLC10CON = 0u;                                 // ON=0 while configuring; all bits known-0
-    CLC10SELbits.DS1   = FS_CLC_DS1_VIRTUAL_PIN_8; // Data1 = RPV8 (the FRMSYNC marker)
-    CLC10GLS           = 0u;
-    CLC10GLSbits.G1D1T = 1u;                       // Gate1 = Data1 (true) = CLK
+static void               fs_clc_pps_unlock(void);
+static void               fs_clc_pps_lock(void);
+static volatile uint32_t* fs_clc_rpor(uint32_t rp);
+static uint32_t           fs_clc_rpor_pos(uint32_t rp);
+static uint8_t            fs_clc_read_rp(uint32_t rp);
+static void               fs_clc_write_rp(uint32_t rp, uint8_t code);
+static uint32_t           fs_clc_find_rp_with_code(uint8_t code);
+static void               fs_clc_configure_clc10(void);
 
-    CLC10CONbits.MODE  = FS_CLC_MODE_JK_FF_WITH_R; // 0b110 : J-K flip-flop with R
-    CLC10CONbits.G1POL = 0u;                       // CLK   : non-inverted (toggle on marker edge)
-    CLC10CONbits.G2POL = 1u;                       // J = 1 (empty gate 0 -> inverted to 1)
-    CLC10CONbits.G4POL = 1u;                       // K = 1 (empty gate 0 -> inverted to 1)
-    CLC10CONbits.G3POL = 1u;                       // R = 1 (assert reset for a known initial Q)
-    // LCPOL=0: FS starts Low after reset, so the first marker (frame start) drives it High
-    // -> FS-High spans the first half-frame (active-high, matches the TDM FRMPOL convention).
-    CLC10CONbits.LCPOL = 0u;
-    CLC10CONbits.LCOE  = 1u;                        // drive CLC10OUT onto the (PPS-routed) pin
-    CLC10CONbits.ON    = 1u;                        // enable: R still asserted -> FF held reset
-    CLC10CONbits.G3POL = 0u;                        // release R: J=K=1 -> FF toggles each edge
-}
 
 //===========================================================
-// Public
+// Global Function
 //===========================================================
 dspic33ak_spi_i2s_tdm_fs_clc_result_t
     dspic33ak_spi_i2s_tdm_fs_clc_engage( tdm_spi_inst_t owner )
@@ -167,6 +123,67 @@ void dspic33ak_spi_i2s_tdm_fs_clc_release( tdm_spi_inst_t owner )
     fs_clc_pps_lock();
 
     s_claimed = false;
+}
+
+
+//===========================================================
+// Local Function
+//===========================================================
+
+// PPS lock gate (RPCON.IOLOCK): self-contained, no gpio/pps HAL dependency.
+static void fs_clc_pps_unlock(void) { RPCONbits.IOLOCK = 0u; }
+static void fs_clc_pps_lock(void)   { RPCONbits.IOLOCK = 1u; }
+
+// &RPOR0 indexes the contiguous RPORx bank; RPORx holds RP[4x+1..4x+4] in 7-bit fields.
+static volatile uint32_t* fs_clc_rpor(uint32_t rp) { return (&RPOR0) + ((rp - 1u) / 4u); }
+static uint32_t           fs_clc_rpor_pos(uint32_t rp) { return ((rp - 1u) % 4u) * 8u; }
+
+// Read the 7-bit output-function code currently routed to physical pin RPn.
+static uint8_t fs_clc_read_rp(uint32_t rp)
+{
+    return (uint8_t)((*fs_clc_rpor(rp) >> fs_clc_rpor_pos(rp)) & 0x7Fu);
+}
+
+// Write a 7-bit output-function code onto pin RPn (caller holds the PPS unlock).
+static void fs_clc_write_rp(uint32_t rp, uint8_t code)
+{
+    volatile uint32_t *reg = fs_clc_rpor(rp);
+    const uint32_t     pos = fs_clc_rpor_pos(rp);
+    *reg = (*reg & ~(0x7FuL << pos)) | ((uint32_t)code << pos);
+}
+
+// Reverse-lookup: first PHYSICAL pin whose RPnR == code, or 0 if none.
+static uint32_t fs_clc_find_rp_with_code(uint8_t code)
+{
+    for (uint32_t rp = 1u; rp <= FS_CLC_RP_PHYS_MAX; ++rp)
+    {
+        if (fs_clc_read_rp(rp) == code)
+        {
+            return rp;
+        }
+    }
+    return 0u;
+}
+
+// CLC10 as a J-K flip-flop toggled by the RPV8 marker (gate roles: see file header).
+static void fs_clc_configure_clc10(void)
+{
+    CLC10CON = 0u;                                 // ON=0 while configuring; all bits known-0
+    CLC10SELbits.DS1   = FS_CLC_DS1_VIRTUAL_PIN_8; // Data1 = RPV8 (the FRMSYNC marker)
+    CLC10GLS           = 0u;
+    CLC10GLSbits.G1D1T = 1u;                       // Gate1 = Data1 (true) = CLK
+
+    CLC10CONbits.MODE  = FS_CLC_MODE_JK_FF_WITH_R; // 0b110 : J-K flip-flop with R
+    CLC10CONbits.G1POL = 0u;                       // CLK   : non-inverted (toggle on marker edge)
+    CLC10CONbits.G2POL = 1u;                       // J = 1 (empty gate 0 -> inverted to 1)
+    CLC10CONbits.G4POL = 1u;                       // K = 1 (empty gate 0 -> inverted to 1)
+    CLC10CONbits.G3POL = 1u;                       // R = 1 (assert reset for a known initial Q)
+    // LCPOL=0: FS starts Low after reset, so the first marker (frame start) drives it High
+    // -> FS-High spans the first half-frame (active-high, matches the TDM FRMPOL convention).
+    CLC10CONbits.LCPOL = 0u;
+    CLC10CONbits.LCOE  = 1u;                        // drive CLC10OUT onto the (PPS-routed) pin
+    CLC10CONbits.ON    = 1u;                        // enable: R still asserted -> FF held reset
+    CLC10CONbits.G3POL = 0u;                        // release R: J=K=1 -> FF toggles each edge
 }
 
 #else  // device without CLC10
