@@ -28,6 +28,9 @@
 #include "dspic33ak_spi_i2s_tdm.h"         // transport HAL public API
 #include "dspic33ak_spi_i2s_tdm_conf.h"    // DSPIC33AK_TDM_SLOTS_PER_FS / _BLOCK_FRAMES
 #include "board.h"                         // board_spi1_tdm_smoke_pins_init()
+#if (APP_TDM_MASTER_FS50_BY_CLC10 && APP_TDM_FS_RUNTIME_SWITCH_TEST)
+#include <xc.h>                            // RPOR17bits.RP70R readback for the FS-pin restore self-test
+#endif
 
 //===========================================================
 // Demo constants
@@ -170,7 +173,13 @@ bool tdm_smoke_init(void)
         .block_frames                 = (uint16_t)DSPIC33AK_TDM_BLOCK_FRAMES,
         .brg                          = TDM_SMOKE_SPI_BRG,
         .mclk_enable                  = true,    // MCLKEN=1 (CLKGEN9 reference)
-        .fs_one_word_wide             = true,    // FRMSYPW=1
+#if APP_TDM_MASTER_FS50_BY_CLC10
+        // 50%-duty FS: for this TDM8 master the HAL emits a half-frame marker and engages
+        // CLC10 to toggle it into a ~50%-duty FS on the FS pin (all hidden in the HAL).
+        .fs_shape                     = DSPIC33AK_SPI_I2S_TDM_FS_50PCT,
+#else
+        .fs_shape                     = DSPIC33AK_SPI_I2S_TDM_FS_PULSE,  // short 1-BCLK frame sync
+#endif
         .fs_coincides_first_bclk      = true,    // SPIFE=1 : no 1-bit delay (TDM8)
         .bclk_idle_high               = true,    // CKP=1
         .bclk_change_on_active_to_idle = false,  // CKE=0
@@ -196,6 +205,8 @@ bool tdm_smoke_init(void)
     }
 
     // Arm DMA + enable SPI1: the stream now runs autonomously on DMA/ISR.
+    // (For the FS_50PCT config the HAL's inst_start() engages CLC10 internally just before
+    // the module turns on -- no app/CLC code here.)
     if (!dspic33ak_spi_i2s_tdm_inst_start(inst))
     {
         s_init_error = dspic33ak_spi_i2s_tdm_get_last_error();
@@ -203,6 +214,30 @@ bool tdm_smoke_init(void)
     }
 
     s_started = true;
+
+#if APP_TDM_MASTER_FS50_BY_CLC10
+    printf(" [TDM1] FS shape: 50%% duty (HAL CLC10 generated) on the FS pin\n");
+#else
+    printf(" [TDM1] FS shape: short 1-BCLK frame sync\n");
+#endif
+
+#if (APP_TDM_MASTER_FS50_BY_CLC10 && APP_TDM_FS_RUNTIME_SWITCH_TEST)
+    // Runtime FS-pin restore proof (opt-in): read back the external FS pin's PPS output code
+    // (RP70 -> RPOR17.RP70R) across a start -> stop -> start cycle. With CLC10 engaged for
+    // FS_50PCT the pin reads CLC10OUT (78); inst_stop() releases CLC10 and MUST restore the
+    // pin to SS1 (27); the next start re-engages (78 again). Proves the release-restore path
+    // that makes a runtime FS_50PCT -> stop -> FS_PULSE -> start switch correct.
+    printf(" [FS-SW] RP70R after FS_50PCT start = %u (expect 78=CLC10OUT)\n", (unsigned)RPOR17bits.RP70R);
+    dspic33ak_spi_i2s_tdm_inst_stop(inst);
+    printf(" [FS-SW] RP70R after stop(release)  = %u (expect 27=SS1 restored)\n", (unsigned)RPOR17bits.RP70R);
+    if (!dspic33ak_spi_i2s_tdm_inst_start(inst))
+    {
+        s_init_error = dspic33ak_spi_i2s_tdm_get_last_error();
+        printf(" [FS-SW] re-start FAILED: %s\n", tdm_smoke_last_error_str());
+    }
+    printf(" [FS-SW] RP70R after re-start       = %u (expect 78=CLC10OUT)\n", (unsigned)RPOR17bits.RP70R);
+#endif
+
     return true;
 }
 

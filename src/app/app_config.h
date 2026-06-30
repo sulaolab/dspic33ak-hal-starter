@@ -28,4 +28,33 @@
 #define HAL_STARTER_ENABLE_TDM_SMOKE_DEMO 1
 #endif
 
+/*
+ * TDM8 smoke demo FS waveform: select the demo's frame-sync shape.
+ *
+ * The 50%-duty FS is a FEATURE of the SPI/I2S/TDM HAL (config field `fs_shape`); the HAL
+ * emits a half-frame marker and engages CLC10 internally, the app just asks for the shape.
+ * This switch only chooses what the smoke demo requests:
+ *   1 (DEFAULT) : cfg.fs_shape = FS_50PCT -> ~50%-duty FS on the FS pin (RP70), 256 BCLK,
+ *                 BCLK/FS ~256 (HAL CLC10 generated).
+ *   0           : cfg.fs_shape = FS_PULSE -> short 1-BCLK frame sync (one pulse/frame).
+ * Either way BCLK/DATA/DMA are identical; only the FS waveform differs.
+ *
+ * MAIN DECISION: the default is 1 (FS_50PCT). The starter demo showcases the CLC10-generated
+ * 50%-duty FS (an I2S-LRCLK-style frame sync) as the headline of this build. Set to 0 for the
+ * conventional short 1-BCLK frame sync. Requires HAL_STARTER_ENABLE_TDM_SMOKE_DEMO.
+ */
+#ifndef APP_TDM_MASTER_FS50_BY_CLC10
+#define APP_TDM_MASTER_FS50_BY_CLC10 1   /* 1 = FS_50PCT (HAL CLC10, default) ; 0 = FS_PULSE */
+#endif
+
+/*
+ * OPT-IN self-test (default off): exercise the runtime FS-pin restore. Requires
+ * APP_TDM_MASTER_FS50_BY_CLC10 = 1. After the demo starts in FS_50PCT, it reads back the
+ * external FS pin's PPS code across start -> stop -> start and prints them, proving CLC10
+ * release restores the pin from CLC10OUT(78) to SS1(27). For bring-up verification only.
+ */
+#ifndef APP_TDM_FS_RUNTIME_SWITCH_TEST
+#define APP_TDM_FS_RUNTIME_SWITCH_TEST 0
+#endif
+
 #endif /* APP_CONFIG_H */
