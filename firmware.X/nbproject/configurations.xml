@@ -24,7 +24,6 @@
         <itemPath>../src/app/can_bus_test.c</itemPath>
         <itemPath>../src/app/can_rx_isr_selftest.c</itemPath>
         <itemPath>../src/app/tdm_smoke.c</itemPath>
-        <itemPath>../src/app/tdm_fs50_clc10.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f11" displayName="board_components" projectFiles="true">
         <itemPath>../src/board_components/led_sw.c</itemPath>
@@ -63,6 +62,7 @@
       <logicalFolder name="f21" displayName="hal_spi_i2s_tdm" projectFiles="true">
         <itemPath>../src/hal_spi_i2s_tdm/dspic33ak_spi_i2s_tdm.c</itemPath>
         <itemPath>../src/hal_spi_i2s_tdm/dspic33ak_spi_i2s_tdm_hw.c</itemPath>
+        <itemPath>../src/hal_spi_i2s_tdm/dspic33ak_spi_i2s_tdm_fs_clc.c</itemPath>
         <itemPath>../src/hal_spi_i2s_tdm/dspic33ak_spi_i2s_tdm_diag.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f7" displayName="hal_timer" projectFiles="true">

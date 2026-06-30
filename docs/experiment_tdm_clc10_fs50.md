@@ -51,7 +51,7 @@ frame-sync marker. Waveform observation is the objective — audio fidelity is s
 | CLC function | `CLC10CON.MODE = 0b110` = **J-K flip-flop with R** | DS Figure 28-3 |
 | J = K = 1 | empty gates 2/4 inverted via `G2POL=G4POL=1` (J=Gate2, K=Gate4) | — |
 | Reset to known state | `G3POL=1` (R=Gate3 asserted) at enable, then `G3POL=0` (released) | — |
-| External FS pin | `RP70 = _RPOUT_CLC10OUT(78)` (was `SS1`) | device header |
+| External FS pin | auto-detected (RPORx reverse-scan for `SSx`) then `= _RPOUT_CLC10OUT(78)`; RP70 on this board | device header |
 | FS polarity | `CLC10CON.LCPOL` (`APP_TDM_MASTER_FS50_CLC10_INVERT`) | — |
 
 `MODE32=1`, `FRMEN=1`, `AUDEN=0` (framed SPI, **not** Audio mode) are unchanged from the
@@ -67,26 +67,34 @@ a known state, then 0). It toggles on the marker's rising edge.
 > flip-flop permanently in reset → a **static** CLC output. This was the first-cut bug,
 > caught on the bench (CLC bypass passthrough proved the routing, isolating it to the FF).
 
-## Enabling
+## Now a HAL feature (not an app experiment)
 
-`src/app/app_config.h`:
+The 50%-duty FS is a **feature of the SPI/I2S/TDM HAL**, selected by the config field
+`fs_shape`. The application never touches CLC/PPS:
 
 ```c
-#define APP_TDM_MASTER_FS50_BY_CLC10      1   /* 0 = normal direct-SS1 FS (default) */
-#define APP_TDM_MASTER_FS50_CLC10_INVERT  0   /* 1 = invert FS phase (CLC10 LCPOL)  */
+cfg.fs_shape = DSPIC33AK_SPI_I2S_TDM_FS_50PCT;  // 50%-duty FS (I2S: native; TDM master: CLC10)
+cfg.fs_shape = DSPIC33AK_SPI_I2S_TDM_FS_PULSE;  // short 1-BCLK frame sync
 ```
 
-`0` restores the exact original behavior (FS = SS1 direct on RP70). The data path
-(DMA geometry, block callback, BCLK/DATA) is identical in both modes; only the FS-pulse
-cadence and the RP70 PPS source change.
+For a TDM **master** with `FS_50PCT`, the HAL derives `FRMSYPW=0` + the half-frame `FRMCNT`,
+then `inst_start()` engages CLC10 internally: it **reverse-scans the RPORx registers** to
+find whichever physical pin the board routed FRMSYNC (`SSx`) to (so no pin number is passed
+in — the HAL stays board-free), routes `SSx`→RPV8, configures the J-K flip-flop, and
+repoints that FS pin to `CLC10OUT`. `inst_stop()` releases it. CLC10 is a single owned
+resource (`ERR_CLC` if a second independent domain requests it). Implementation:
+`src/hal_spi_i2s_tdm/dspic33ak_spi_i2s_tdm_fs_clc.c` (self-contained, xc.h only).
+
+The smoke-demo switch `APP_TDM_MASTER_FS50_BY_CLC10` (app_config.h) just chooses which
+shape the demo asks for: `1` → `FS_50PCT`, `0` → `FS_PULSE`. The data path
+(DMA geometry, block callback, BCLK/DATA) is identical either way.
 
 ## Startup banner (UART console)
 
 ```
- [FS50] TDM Master FS mode: CLC10 50% experiment
-        SPI1: framed master, MODE32=1 FRMEN=1 FRMCNT=2(=>FS/4words=128BCLK) FRMSYPW=0 AUDEN=0
-        CLC10: J-K FF toggle (MODE=6) clk=SS1 marker via RPV8(RP137R), ON=1 LCPOL=0
-        FS source = CLC10OUT -> RP70 (was SS1); BCLK/FS ~256, FS duty ~50%
+ [TDM1] FS shape: 50% duty (HAL CLC10 generated) on the FS pin
+ [TDM1] SPI1 TDM8 master smoke demo started ...
+ [TDM1] TDM8 master exp_fs~48.8kHz exp_bclk~12.5MHz block=N miss=0 rx=... dB rel
 ```
 
 ## Oscilloscope checklist
@@ -117,8 +125,9 @@ debug pin (in addition to RPV8) and confirm a 128-BCLK-spaced pulse.
   shift/DMA is driven by buffer (RBF/TBE) events, so the data stream should be unaffected.
   This is the main thing to confirm on the scope (DATA continuity + `miss=0`).
 - **Initial phase:** the CLC output is a separate signal from SS1, so it may start one
-  half-frame out of phase. Flip `APP_TDM_MASTER_FS50_CLC10_INVERT` (→ `LCPOL`) if the
-  receiver expects the opposite LRCK phase.
+  half-frame out of phase. The HAL resets the flip-flop at engage for a known start; a
+  user-facing FS-invert (CLC10 `LCPOL`) knob is a possible future config field if a
+  receiver needs the opposite LRCK phase.
 - **Slot mapping:** with FRMPOL active-high TDM framing and the init reset, FS-Low spans
   slots 0..3 and FS-High spans slots 4..7 (one half-frame offset from SS1). Confirm the
   1-bit delay / slot alignment if a real codec consumes this as I2S LRCK.
