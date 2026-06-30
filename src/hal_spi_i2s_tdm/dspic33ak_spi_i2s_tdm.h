@@ -113,10 +113,13 @@ typedef enum {
 //   FS_50PCT   : 50%-duty FS, I2S LRCLK style.
 //                - I2S (2 slots): native -- FRMSYPW=1 (a one-word pulse IS 50% of a 2-word
 //                  frame). No CLC.
-//                - TDM (>=4 slots, MASTER only): the SPI emits a 1-BCLK half-frame marker
+//                - TDM (>=4 slots), MASTER: the SPI emits a 1-BCLK half-frame marker
 //                  (FRMSYPW=0, FRMCNT=slots_per_fs/2) that CLC10 toggles into a 50%-duty FS
 //                  on the same FS pin. The HAL owns CLC10 + virtual pin RPV8 (see
-//                  dspic33ak_spi_i2s_tdm_fs_clc.*). SLAVE ignores this (FS is an input).
+//                  dspic33ak_spi_i2s_tdm_fs_clc.*).
+//                - TDM SLAVE: FS is an INPUT, so fs_shape is accepted but has no
+//                  generated-waveform effect (treated as normal slave framing). The CLC10
+//                  50%-duty FS is generated only in master mode.
 // NOTE: there is intentionally no "one-word-wide TDM" shape -- a word-wide TDM pulse is a
 // niche non-50% long-frame sync and was dropped in favor of these two common intents.
 typedef enum {

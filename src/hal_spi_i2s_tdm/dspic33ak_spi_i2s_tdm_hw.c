@@ -178,10 +178,10 @@ void dspic33ak_spi_i2s_tdm_hw_apply_config( tdm_spi_inst_t inst,
         frmsypw  = false;                      // 1-BCLK marker (CLC10 makes the 50% duty)
         fs_words = (uint8_t)(cfg->slots_per_fs / 2u);
     }
-    else                                        // FS_PULSE, or a (forced-)slave: normal framing.
-    {                                           // configure() rejects an explicit TDM FS_50PCT
-        frmsypw  = false;                      // slave; a follower forced to slave lands here too
-        fs_words = cfg->slots_per_fs;          // (FS is an input -> do NOT halve FRMCNT).
+    else                                        // FS_PULSE, or ANY slave (incl. an FS_50PCT slave):
+    {                                           // a slave receives FS as an INPUT, so fs_shape has
+        frmsypw  = false;                      // no generated-waveform effect -> normal framing.
+        fs_words = cfg->slots_per_fs;          // (do NOT halve FRMCNT; CLC 50% is master-only.)
     }
     dspic33ak_spi_i2s_tdm_reg_set_or_clear(con1, DSPIC33AK_SPI_I2S_TDM_CON1_FRMSYPW, frmsypw);
 
