@@ -127,17 +127,20 @@ dspic33ak_spi_i2s_tdm_fs_clc_result_t
         fs_clc_write_rp(fs_rp, (uint8_t)_RPOUT_CLC10OUT);    // external FS pin <- CLC10OUT
         fs_clc_pps_lock();
     }
-    else if (fs_clc_find_rp_with_code((uint8_t)_RPOUT_CLC10OUT) != 0u)
-    {
-        // Re-start: the pin is already on CLC10OUT from a previous engage. Just make sure
-        // the marker still reaches RPV8, then reconfigure the flip-flop below.
-        fs_clc_pps_unlock();
-        fs_clc_write_rp(FS_CLC_RPV8_RP, ss_code);
-        fs_clc_pps_lock();
-    }
     else
     {
-        return DSPIC33AK_SPI_I2S_TDM_FS_CLC_NO_FS_PIN;   // FS not on any physical pin
+        // Re-engage (idempotent for the current owner): FRMSYNC is no longer on a physical
+        // pin because a previous engage already repointed it to CLC10OUT. Find that pin and
+        // keep it AS fs_rp -- otherwise s_fs_rp would stay 0 and release() would write rp=0.
+        const uint32_t clc_rp = fs_clc_find_rp_with_code((uint8_t)_RPOUT_CLC10OUT);
+        if (clc_rp == 0u)
+        {
+            return DSPIC33AK_SPI_I2S_TDM_FS_CLC_NO_FS_PIN;   // FS not on any physical pin
+        }
+        fs_rp = clc_rp;                                      // ensure release() restores SSx here
+        fs_clc_pps_unlock();
+        fs_clc_write_rp(FS_CLC_RPV8_RP, ss_code);            // keep the marker reaching RPV8
+        fs_clc_pps_lock();
     }
 
     fs_clc_configure_clc10();

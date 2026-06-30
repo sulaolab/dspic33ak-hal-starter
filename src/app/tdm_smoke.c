@@ -230,7 +230,11 @@ bool tdm_smoke_init(void)
     printf(" [FS-SW] RP70R after FS_50PCT start = %u (expect 78=CLC10OUT)\n", (unsigned)RPOR17bits.RP70R);
     dspic33ak_spi_i2s_tdm_inst_stop(inst);
     printf(" [FS-SW] RP70R after stop(release)  = %u (expect 27=SS1 restored)\n", (unsigned)RPOR17bits.RP70R);
-    (void)dspic33ak_spi_i2s_tdm_inst_start(inst);
+    if (!dspic33ak_spi_i2s_tdm_inst_start(inst))
+    {
+        s_init_error = dspic33ak_spi_i2s_tdm_get_last_error();
+        printf(" [FS-SW] re-start FAILED: %s\n", tdm_smoke_last_error_str());
+    }
     printf(" [FS-SW] RP70R after re-start       = %u (expect 78=CLC10OUT)\n", (unsigned)RPOR17bits.RP70R);
 #endif
 
