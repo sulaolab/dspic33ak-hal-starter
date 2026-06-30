@@ -42,6 +42,12 @@
 #define TDM_SMOKE_TARGET_FS_HZ   (48000u)
 #define TDM_SMOKE_SPI_BRG \
     ((uint32_t)((DSPIC33AK_CLOCK_SYS_HZ / (2u * (uint32_t)DSPIC33AK_TDM_SLOTS_PER_FS * 32u * TDM_SMOKE_TARGET_FS_HZ)) - 1u))
+// Expected (design) BCLK and frame rate from the resolved BRG/geometry -- printed in the
+// status line so it stays correct across TDM8 (BRG=7, ~12.5 MHz) and TDM16 (BRG=3, ~25 MHz).
+#define TDM_SMOKE_EXP_BCLK_HZ \
+    (DSPIC33AK_CLOCK_SYS_HZ / (2u * (TDM_SMOKE_SPI_BRG + 1u)))
+#define TDM_SMOKE_EXP_FS_HZ \
+    (TDM_SMOKE_EXP_BCLK_HZ / ((uint32_t)DSPIC33AK_TDM_SLOTS_PER_FS * 32u))
 
 // Sine lookup table: power-of-two length so the per-frame index step is a cheap mask.
 // 64 samples/cycle at fs ~48.8 kHz -> ~763 Hz (an "~800 Hz class" tone).
@@ -289,7 +295,10 @@ void tdm_smoke_status_print(void)
     if (frac < 0) { frac = -frac; }
     sign = ((db10 < 0) && (whole == 0)) ? "-" : "";   // preserve sign for -0.x
 
-    printf(" [TDM1] TDM8 master exp_fs~48.8kHz exp_bclk~12.5MHz block=%lu miss=%lu rx=%s%ld.%ld dB rel\n",
+    printf(" [TDM1] TDM%lu master exp_fs~%lukHz exp_bclk~%lukHz block=%lu miss=%lu rx=%s%ld.%ld dB rel\n",
+           (unsigned long)DSPIC33AK_TDM_SLOTS_PER_FS,
+           (unsigned long)(TDM_SMOKE_EXP_FS_HZ / 1000u),
+           (unsigned long)(TDM_SMOKE_EXP_BCLK_HZ / 1000u),
            (unsigned long)st.block_count,
            (unsigned long)st.block_deadline_miss_count,
            sign, (long)whole, (long)frac);
