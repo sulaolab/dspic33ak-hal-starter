@@ -163,8 +163,9 @@ void dspic33ak_spi_i2s_tdm_hw_apply_config( tdm_spi_inst_t inst,
     //   FS_50PCT + TDM    : FRMSYPW=0 + a HALF-frame marker (fs_words=slots/2); CLC10 toggles
     //                       it into a 50%-duty FS on the FS pin (engaged by the core, master
     //                       only). The DMA/buffer geometry stays sized by slots_per_fs.
-    const bool fs_50pct = ( cfg->fs_shape == DSPIC33AK_SPI_I2S_TDM_FS_50PCT );
-    const bool is_i2s   = ( cfg->format   == DSPIC33AK_SPI_I2S_TDM_FORMAT_I2S );
+    const bool fs_50pct  = ( cfg->fs_shape == DSPIC33AK_SPI_I2S_TDM_FS_50PCT );
+    const bool is_i2s    = ( cfg->format   == DSPIC33AK_SPI_I2S_TDM_FORMAT_I2S );
+    const bool is_master = ( cfg->role     == DSPIC33AK_SPI_I2S_TDM_ROLE_MASTER );
     bool    frmsypw;
     uint8_t fs_words;
     if( fs_50pct && is_i2s )
@@ -172,15 +173,15 @@ void dspic33ak_spi_i2s_tdm_hw_apply_config( tdm_spi_inst_t inst,
         frmsypw  = true;                       // one word wide == 50% of the 2-word I2S frame
         fs_words = cfg->slots_per_fs;
     }
-    else if( fs_50pct )                         // FS_50PCT + TDM: half-frame marker for CLC10
+    else if( fs_50pct && is_master )            // FS_50PCT + TDM MASTER: half-frame marker for CLC10
     {
         frmsypw  = false;                      // 1-BCLK marker (CLC10 makes the 50% duty)
         fs_words = (uint8_t)(cfg->slots_per_fs / 2u);
     }
-    else                                        // FS_PULSE
-    {
-        frmsypw  = false;                      // short 1-BCLK frame sync
-        fs_words = cfg->slots_per_fs;
+    else                                        // FS_PULSE, or a (forced-)slave: normal framing.
+    {                                           // configure() rejects an explicit TDM FS_50PCT
+        frmsypw  = false;                      // slave; a follower forced to slave lands here too
+        fs_words = cfg->slots_per_fs;          // (FS is an input -> do NOT halve FRMCNT).
     }
     dspic33ak_spi_i2s_tdm_reg_set_or_clear(con1, DSPIC33AK_SPI_I2S_TDM_CON1_FRMSYPW, frmsypw);
 

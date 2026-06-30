@@ -52,7 +52,7 @@ frame-sync marker. Waveform observation is the objective — audio fidelity is s
 | J = K = 1 | empty gates 2/4 inverted via `G2POL=G4POL=1` (J=Gate2, K=Gate4) | — |
 | Reset to known state | `G3POL=1` (R=Gate3 asserted) at enable, then `G3POL=0` (released) | — |
 | External FS pin | auto-detected (RPORx reverse-scan for `SSx`) then `= _RPOUT_CLC10OUT(78)`; RP70 on this board | device header |
-| FS polarity | `CLC10CON.LCPOL` (`APP_TDM_MASTER_FS50_CLC10_INVERT`) | — |
+| FS polarity | `CLC10CON.LCPOL = 0` (active-high, matches TDM FRMPOL); a user-facing invert is a possible future config field | — |
 
 `MODE32=1`, `FRMEN=1`, `AUDEN=0` (framed SPI, **not** Audio mode) are unchanged from the
 normal TDM8 master.

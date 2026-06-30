@@ -28,6 +28,9 @@
 #include "dspic33ak_spi_i2s_tdm.h"         // transport HAL public API
 #include "dspic33ak_spi_i2s_tdm_conf.h"    // DSPIC33AK_TDM_SLOTS_PER_FS / _BLOCK_FRAMES
 #include "board.h"                         // board_spi1_tdm_smoke_pins_init()
+#if (APP_TDM_MASTER_FS50_BY_CLC10 && APP_TDM_FS_RUNTIME_SWITCH_TEST)
+#include <xc.h>                            // RPOR17bits.RP70R readback for the FS-pin restore self-test
+#endif
 
 //===========================================================
 // Demo constants
@@ -216,6 +219,19 @@ bool tdm_smoke_init(void)
     printf(" [TDM1] FS shape: 50%% duty (HAL CLC10 generated) on the FS pin\n");
 #else
     printf(" [TDM1] FS shape: short 1-BCLK frame sync\n");
+#endif
+
+#if (APP_TDM_MASTER_FS50_BY_CLC10 && APP_TDM_FS_RUNTIME_SWITCH_TEST)
+    // Runtime FS-pin restore proof (opt-in): read back the external FS pin's PPS output code
+    // (RP70 -> RPOR17.RP70R) across a start -> stop -> start cycle. With CLC10 engaged for
+    // FS_50PCT the pin reads CLC10OUT (78); inst_stop() releases CLC10 and MUST restore the
+    // pin to SS1 (27); the next start re-engages (78 again). Proves the release-restore path
+    // that makes a runtime FS_50PCT -> stop -> FS_PULSE -> start switch correct.
+    printf(" [FS-SW] RP70R after FS_50PCT start = %u (expect 78=CLC10OUT)\n", (unsigned)RPOR17bits.RP70R);
+    dspic33ak_spi_i2s_tdm_inst_stop(inst);
+    printf(" [FS-SW] RP70R after stop(release)  = %u (expect 27=SS1 restored)\n", (unsigned)RPOR17bits.RP70R);
+    (void)dspic33ak_spi_i2s_tdm_inst_start(inst);
+    printf(" [FS-SW] RP70R after re-start       = %u (expect 78=CLC10OUT)\n", (unsigned)RPOR17bits.RP70R);
 #endif
 
     return true;

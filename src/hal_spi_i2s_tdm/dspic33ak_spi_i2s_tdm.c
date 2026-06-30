@@ -1350,6 +1350,24 @@ static bool tdm_config_is_supported( const tdm_spi_leg_t* leg, const dspic33ak_s
         return false;
     }
 
+    // fs_shape must be a known value -- otherwise a garbage value would be silently
+    // treated as FS_PULSE by hw_apply_config (shape == FS_50PCT ? ... : ...).
+    if( ( cfg->fs_shape != DSPIC33AK_SPI_I2S_TDM_FS_PULSE ) &&
+        ( cfg->fs_shape != DSPIC33AK_SPI_I2S_TDM_FS_50PCT ) )
+    {
+        return false;
+    }
+
+    // A 50%-duty FS on TDM is built by CLC10 toggling the master's FRMSYNC marker, so it is
+    // MASTER-only. A TDM slave receives FS as an INPUT -- reject FS_50PCT there (rather than
+    // silently halving FRMCNT). I2S FS_50PCT is native (FRMSYPW=1) and is allowed either role.
+    if( ( cfg->format  == DSPIC33AK_SPI_I2S_TDM_FORMAT_TDM ) &&
+        ( cfg->fs_shape == DSPIC33AK_SPI_I2S_TDM_FS_50PCT )  &&
+        ( cfg->role    != DSPIC33AK_SPI_I2S_TDM_ROLE_MASTER ) )
+    {
+        return false;
+    }
+
     // Note: sample rate is NOT part of the transport envelope -- the core is
     // rate-agnostic (runs at the configured BRG / external clock). The product's
     // supported-rate policy lives in the app layer (APP_SAMPLE_RATE_IS_SUPPORTED), not here.

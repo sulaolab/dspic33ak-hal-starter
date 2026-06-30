@@ -46,9 +46,10 @@ typedef enum {
 dspic33ak_spi_i2s_tdm_fs_clc_result_t
     dspic33ak_spi_i2s_tdm_fs_clc_engage( tdm_spi_inst_t owner );
 
-// Release CLC10 if `owner` holds it (disables the flip-flop; PPS routes are left in place,
-// matching the HAL's no-PPS-teardown policy -- a later engage() by the same owner reuses
-// them). No-op if `owner` is not the current holder.
+// Release CLC10 if `owner` holds it: disables the flip-flop AND restores the external FS pin
+// from CLC10OUT back to its original FRMSYNC (SSx) output, so a runtime reconfigure
+// (FS_50PCT -> stop -> FS_PULSE -> start) leaves the SPI driving the FS pin directly again.
+// No-op if `owner` is not the current holder.
 void dspic33ak_spi_i2s_tdm_fs_clc_release( tdm_spi_inst_t owner );
 
 #endif // DSPIC33AK_SPI_I2S_TDM_FS_CLC_H

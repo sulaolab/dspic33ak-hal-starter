@@ -31,18 +31,32 @@
 /*
  * TDM8 smoke demo FS waveform: select the demo's frame-sync shape.
  *
- * The 50%-duty FS is now a FEATURE of the SPI/I2S/TDM HAL (config field `fs_shape`), not an
- * app-level experiment -- the HAL emits a half-frame marker and engages CLC10 internally;
- * the app just asks for the shape. This switch only chooses what the smoke demo requests:
- *   1 (default on this branch): cfg.fs_shape = FS_50PCT
- *        -> ~50%-duty FS on the FS pin (RP70), period 256 BCLK, BCLK/FS ~256.
- *   0 : cfg.fs_shape = FS_PULSE
- *        -> short 1-BCLK frame sync (one pulse per 8-word frame).
- * Either way BCLK/DATA/DMA are identical; only the FS waveform differs. Requires
- * HAL_STARTER_ENABLE_TDM_SMOKE_DEMO.
+ * The 50%-duty FS is a FEATURE of the SPI/I2S/TDM HAL (config field `fs_shape`); the HAL
+ * emits a half-frame marker and engages CLC10 internally, the app just asks for the shape.
+ * This switch only chooses what the smoke demo requests:
+ *   0 (DEFAULT) : cfg.fs_shape = FS_PULSE -> short 1-BCLK frame sync (one pulse/frame).
+ *   1           : cfg.fs_shape = FS_50PCT -> ~50%-duty FS on the FS pin (RP70), 256 BCLK,
+ *                 BCLK/FS ~256 (HAL CLC10 generated).
+ * Either way BCLK/DATA/DMA are identical; only the FS waveform differs.
+ *
+ * MAIN DECISION (review item 4): the default is 0 (FS_PULSE) so merging this branch does NOT
+ * change the standard demo's externally-visible FS -- a short frame sync, the conventional
+ * TDM/DSP default. The CLC10 50%-FS is opt-in (set to 1). (The pre-feature demo used a
+ * one-word-wide TDM pulse, which was intentionally dropped; FS_PULSE is the closest standard
+ * shape.) Requires HAL_STARTER_ENABLE_TDM_SMOKE_DEMO.
  */
 #ifndef APP_TDM_MASTER_FS50_BY_CLC10
-#define APP_TDM_MASTER_FS50_BY_CLC10 1   /* 1 = FS_50PCT (HAL CLC10) ; 0 = FS_PULSE */
+#define APP_TDM_MASTER_FS50_BY_CLC10 0   /* 0 = FS_PULSE (default) ; 1 = FS_50PCT (HAL CLC10) */
+#endif
+
+/*
+ * OPT-IN self-test (default off): exercise the runtime FS-pin restore. Requires
+ * APP_TDM_MASTER_FS50_BY_CLC10 = 1. After the demo starts in FS_50PCT, it reads back the
+ * external FS pin's PPS code across start -> stop -> start and prints them, proving CLC10
+ * release restores the pin from CLC10OUT(78) to SS1(27). For bring-up verification only.
+ */
+#ifndef APP_TDM_FS_RUNTIME_SWITCH_TEST
+#define APP_TDM_FS_RUNTIME_SWITCH_TEST 0
 #endif
 
 #endif /* APP_CONFIG_H */

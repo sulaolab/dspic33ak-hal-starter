@@ -36,6 +36,8 @@
 // ---- Ownership (single CLC10) ----
 static bool           s_claimed;
 static tdm_spi_inst_t s_owner;
+static uint32_t       s_fs_rp;     // physical FS pin repointed to CLC10OUT (to restore on release)
+static uint8_t        s_ss_code;   // the FRMSYNC (SSx) code that pin carried before (to restore)
 
 //===========================================================
 // PPS helpers (self-contained; RPORx bank via &RPOR0)
@@ -139,6 +141,8 @@ dspic33ak_spi_i2s_tdm_fs_clc_result_t
     }
 
     fs_clc_configure_clc10();
+    s_fs_rp   = fs_rp;       // remembered so release() can restore SSx onto this pin
+    s_ss_code = ss_code;
     s_owner   = owner;
     s_claimed = true;
     return DSPIC33AK_SPI_I2S_TDM_FS_CLC_OK;
@@ -150,7 +154,15 @@ void dspic33ak_spi_i2s_tdm_fs_clc_release( tdm_spi_inst_t owner )
     {
         return;
     }
-    CLC10CONbits.ON = 0u;    // disable the flip-flop; PPS routes left as-is (no PPS teardown)
+    CLC10CONbits.ON = 0u;    // disable the flip-flop
+
+    // Restore the external FS pin from CLC10OUT back to its original FRMSYNC (SSx) output, so
+    // a runtime switch FS_50PCT -> stop -> FS_PULSE -> start leaves the pin driven by the SPI
+    // directly again (RPV8 is an internal virtual pin; harmless to leave pointed at SSx).
+    fs_clc_pps_unlock();
+    fs_clc_write_rp(s_fs_rp, s_ss_code);
+    fs_clc_pps_lock();
+
     s_claimed = false;
 }
 
