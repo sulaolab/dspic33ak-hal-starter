@@ -39,16 +39,26 @@
 //===========================================================
 
 // --- HAL geometry / topology (literals; -D wins) ---
-// TDM frame width = slots per FS: 8 = TDM8 (default), 16 = TDM16 (experiment), 2 = I2S.
-// This is the SINGLE geometry source seen by BOTH the app and the HAL core -- it sizes the
-// static DMA ping-pong buffers (2*SLOTS*BLOCK) and the per-instance leg table -- so it MUST
-// be selected here (or via -D), NOT in app_config.h (the HAL core does not include that).
-// TDM16 note: tdm_smoke targets fs~48.8 kHz, so BCLK = slots*32*fs -> ~25 MHz at 16 slots
-// (BRG=3 from the 200 MHz system clock). 25 MHz is the SPI SCK max for PPS-routed pins
-// (datasheet SP10), so TDM16 runs the PPS SCK right at its ceiling -- fine for this
-// codec-less scope demo; lower the target fs for margin. (TDM8 stays ~12.5 MHz, BRG=7.)
+// Frame width is the SINGLE geometry source seen by BOTH the app and the HAL core (it sizes
+// the static DMA ping-pong buffers 2*SLOTS*BLOCK and the per-instance leg table), so it MUST
+// live HERE (or via -D), NOT in app_config.h -- the HAL core does not include app config.
+//
+// TDM8 is the DEFAULT. Opt into TDM16 by setting DSPIC33AK_TDM_USE_TDM16 to 1 (here or -D):
+//   TDM8  :  8 slots, BCLK ~12.5 MHz (BRG=7), BCLK/FS = 256.
+//   TDM16 : 16 slots, BCLK ~25   MHz (BRG=3), BCLK/FS = 512. 25 MHz = the SPI SCK max for
+//           PPS-routed pins (datasheet SP10), i.e. right at the ceiling -- fine for this
+//           codec-less scope demo; lower the target fs for margin. HW-verified, including the
+//           50%-duty FS via CLC10.
+// (For I2S use 2 slots: define DSPIC33AK_TDM_SLOTS_PER_FS=2 directly via -D.)
+#ifndef DSPIC33AK_TDM_USE_TDM16
+#define DSPIC33AK_TDM_USE_TDM16       0     // 0 = TDM8 (default) ; 1 = TDM16
+#endif
 #ifndef DSPIC33AK_TDM_SLOTS_PER_FS
-#define DSPIC33AK_TDM_SLOTS_PER_FS    16    // TDM16 experiment  (8 = TDM8 ; 2 = I2S)
+#  if DSPIC33AK_TDM_USE_TDM16
+#    define DSPIC33AK_TDM_SLOTS_PER_FS 16   // TDM16 (opt-in)
+#  else
+#    define DSPIC33AK_TDM_SLOTS_PER_FS 8    // TDM8 (default)
+#  endif
 #endif
 #ifndef DSPIC33AK_TDM_BLOCK_FRAMES
 #define DSPIC33AK_TDM_BLOCK_FRAMES    32    // frames per ping/pong half
