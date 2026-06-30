@@ -188,12 +188,17 @@ void dspic33ak_spi_i2s_tdm_hw_apply_config( tdm_spi_inst_t inst,
     dspic33ak_spi_i2s_tdm_reg_set_or_clear( con1, DSPIC33AK_SPI_I2S_TDM_CON1_FRMPOL,
                                             cfg->format != DSPIC33AK_SPI_I2S_TDM_FORMAT_I2S );
 
-    // FRMCNT: FS pulse every slots_per_fs words. Encoding = log2(slots):
+    // FRMCNT: FS pulse every N words. Encoding = log2(N):
     //   000 each word / 001 every 2 / 010 every 4 / 011 every 8 / 100 every 16 / 101 every 32.
-    // So I2S(2)->1, TDM4->2, TDM8->3, TDM16->4, TDM32->5. slots_per_fs is validated by
+    // So I2S(2)->1, TDM4->2, TDM8->3, TDM16->4, TDM32->5. Normally N = slots_per_fs (one
+    // pulse per audio frame). cfg->fs_pulse_words (when non-zero) OVERRIDES the cadence
+    // WITHOUT touching the DMA buffer geometry -- the CLC10 50%-FS experiment uses N=4 to
+    // get a half-frame marker while the data path stays TDM8. slots_per_fs is validated by
     // the core's configure() against this set; default to TDM8 framing defensively.
+    const uint8_t fs_words = ( cfg->fs_pulse_words != 0u ) ? cfg->fs_pulse_words
+                                                           : cfg->slots_per_fs;
     uint32_t frmcnt;
-    switch( cfg->slots_per_fs )
+    switch( fs_words )
     {
     case 2u:  frmcnt = 1u; break;
     case 4u:  frmcnt = 2u; break;

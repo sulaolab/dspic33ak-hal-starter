@@ -28,6 +28,7 @@
 #include "dspic33ak_spi_i2s_tdm.h"         // transport HAL public API
 #include "dspic33ak_spi_i2s_tdm_conf.h"    // DSPIC33AK_TDM_SLOTS_PER_FS / _BLOCK_FRAMES
 #include "board.h"                         // board_spi1_tdm_smoke_pins_init()
+#include "tdm_fs50_clc10.h"                // EXPERIMENT: CLC10 50%-FS (no-op when disabled)
 
 //===========================================================
 // Demo constants
@@ -170,7 +171,16 @@ bool tdm_smoke_init(void)
         .block_frames                 = (uint16_t)DSPIC33AK_TDM_BLOCK_FRAMES,
         .brg                          = TDM_SMOKE_SPI_BRG,
         .mclk_enable                  = true,    // MCLKEN=1 (CLKGEN9 reference)
+#if APP_TDM_MASTER_FS50_BY_CLC10
+        // EXPERIMENT: emit a 1-SCK-wide FSYNC marker every 4 words (128 BCLK). The DMA
+        // geometry stays TDM8 (slots_per_fs=8); only the FS-pulse cadence changes so CLC10
+        // can toggle it into a 50%-duty FS. See tdm_fs50_clc10.c.
+        .fs_one_word_wide             = false,   // FRMSYPW=0 : one-clock-wide marker
+        .fs_pulse_words               = 4u,      // FRMCNT=2 : FS every 4 words (128 BCLK)
+#else
         .fs_one_word_wide             = true,    // FRMSYPW=1
+        .fs_pulse_words               = 0u,      // 0 : FRMCNT from slots_per_fs (one FS/frame)
+#endif
         .fs_coincides_first_bclk      = true,    // SPIFE=1 : no 1-bit delay (TDM8)
         .bclk_idle_high               = true,    // CKP=1
         .bclk_change_on_active_to_idle = false,  // CKE=0
@@ -195,6 +205,14 @@ bool tdm_smoke_init(void)
         return false;
     }
 
+#if APP_TDM_MASTER_FS50_BY_CLC10
+    // EXPERIMENT: after the SPI1 pins are routed but BEFORE the module is enabled, build
+    // the 50%-duty external FS from CLC10 (SS1 marker -> RPV8 -> J-K FF toggle -> CLC10OUT
+    // -> RP70). Arming CLC10 before start() means it captures the very first marker. This
+    // touches only FS routing/CLC -- not BCLK/DATA/DMA.
+    (void)tdm_fs50_clc10_apply();
+#endif
+
     // Arm DMA + enable SPI1: the stream now runs autonomously on DMA/ISR.
     if (!dspic33ak_spi_i2s_tdm_inst_start(inst))
     {
@@ -203,6 +221,13 @@ bool tdm_smoke_init(void)
     }
 
     s_started = true;
+
+#if APP_TDM_MASTER_FS50_BY_CLC10
+    // One-shot banner: the CLC10 FS settings are static, so print once here rather than in
+    // the periodic status line.
+    tdm_fs50_clc10_print_status();
+#endif
+
     return true;
 }
 

@@ -111,6 +111,13 @@ typedef struct {
     dspic33ak_spi_i2s_tdm_role_t   role;            // master vs slave (MSTEN/FRMSYNC)
     uint8_t  slots_per_fs;                          // DSPIC33AK_TDM_SLOTS_PER_FS: I2S=2 / TDM8=8
     uint8_t  word_bits;                             // 32 (MODE32); only 32 validated
+    // Optional FRMCNT override (FS-pulse cadence) DECOUPLED from slots_per_fs.
+    //   0       = default: FRMCNT derived from slots_per_fs (one FS pulse per audio frame).
+    //   2/4/8/  = emit the FS/FSYNC pulse every N serial words WITHOUT changing the DMA
+    //   16/32     buffer geometry (which stays sized by slots_per_fs). Used by the CLC10
+    //             50%-FS experiment to get a half-frame marker (N=4 -> 128 BCLK) that an
+    //             external CLC toggles into a 50%-duty FS. Leave 0 for normal operation.
+    uint8_t  fs_pulse_words;                        // FRMCNT cadence override (0 = from slots_per_fs)
     uint16_t block_frames;                          // DSPIC33AK_TDM_BLOCK_FRAMES: frames per ping/pong half
     uint32_t brg;                                   // SPIxBRG (master only; ignored as slave)
     bool     mclk_enable;                           // MCLKEN (CLKGEN9 reference)
