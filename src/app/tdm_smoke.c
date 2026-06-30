@@ -1,5 +1,8 @@
 /*
- * tdm_smoke.c  --  codec-less SPI1 TDM8 master smoke demo (see tdm_smoke.h)
+ * tdm_smoke.c  --  codec-less SPI1 TDM master smoke demo (see tdm_smoke.h)
+ *
+ * Default geometry is TDM8. A hidden project config (conf.h) may opt into wider
+ * experimental framing for scope checks; this file is slots-generic and follows it.
  *
  * Design notes:
  *  - The block callback runs in DMA-ISR context. It does ONLY the TX block fill and a
@@ -36,7 +39,7 @@
 // Demo constants
 //===========================================================
 // Target TDM frame rate (Hz). Exact value is not important -- the demo only needs a
-// visible TDM8 waveform. BCLK = SYS / (2*(BRG+1)); target BCLK = slots * 32 * fs.
+// visible TDM waveform. BCLK = SYS / (2*(BRG+1)); target BCLK = slots * 32 * fs.
 //   BRG = SYS / (2 * slots * 32 * fs) - 1.
 //   200 MHz / (2*8*32*48000) - 1 = 7  -> BCLK 12.5 MHz, fs ~48.8 kHz (expected, not exact).
 #define TDM_SMOKE_TARGET_FS_HZ   (48000u)
@@ -168,7 +171,7 @@ bool tdm_smoke_init(void)
         return false;
     }
 
-    // TDM8 self-clocked master config. Geometry comes from the same conf.h constants that
+    // TDM self-clocked master config (TDM8 by default). Geometry comes from the same conf.h constants that
     // sized the HAL's static DMA buffers; BRG sets the master BCLK from the system clock.
     const dspic33ak_spi_i2s_tdm_config_t cfg =
     {

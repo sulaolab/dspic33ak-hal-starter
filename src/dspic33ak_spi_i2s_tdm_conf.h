@@ -43,19 +43,17 @@
 // the static DMA ping-pong buffers 2*SLOTS*BLOCK and the per-instance leg table), so it MUST
 // live HERE (or via -D), NOT in app_config.h -- the HAL core does not include app config.
 //
-// TDM8 is the DEFAULT. Opt into TDM16 by setting DSPIC33AK_TDM_USE_TDM16 to 1 (here or -D):
-//   TDM8  :  8 slots, BCLK ~12.5 MHz (BRG=7), BCLK/FS = 256.
-//   TDM16 : 16 slots, BCLK ~25   MHz (BRG=3), BCLK/FS = 512. 25 MHz = the SPI SCK max for
-//           PPS-routed pins (datasheet SP10), i.e. right at the ceiling -- fine for this
-//           codec-less scope demo; lower the target fs for margin. HW-verified, including the
-//           50%-duty FS via CLC10.
+// TDM8 is the default smoke-demo geometry. TDM16 can be enabled as a hidden/experimental
+// framing check (DSPIC33AK_TDM_USE_TDM16 = 1, here or via -D): it increases BCLK and DMA
+// traffic substantially and is intended for scope-level investigation, not as a public
+// starter-board feature. Keep TDM8 as the normal default.
 // (For I2S use 2 slots: define DSPIC33AK_TDM_SLOTS_PER_FS=2 directly via -D.)
 #ifndef DSPIC33AK_TDM_USE_TDM16
-#define DSPIC33AK_TDM_USE_TDM16       0     // 0 = TDM8 (default) ; 1 = TDM16
+#define DSPIC33AK_TDM_USE_TDM16       0     // 0 = TDM8 (default) ; 1 = TDM16 (hidden experimental)
 #endif
 #ifndef DSPIC33AK_TDM_SLOTS_PER_FS
 #  if DSPIC33AK_TDM_USE_TDM16
-#    define DSPIC33AK_TDM_SLOTS_PER_FS 16   // TDM16 (opt-in)
+#    define DSPIC33AK_TDM_SLOTS_PER_FS 16   // TDM16 (hidden experimental geometry)
 #  else
 #    define DSPIC33AK_TDM_SLOTS_PER_FS 8    // TDM8 (default)
 #  endif
