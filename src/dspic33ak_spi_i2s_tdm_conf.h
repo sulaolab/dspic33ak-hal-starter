@@ -39,8 +39,24 @@
 //===========================================================
 
 // --- HAL geometry / topology (literals; -D wins) ---
+// Frame width is the SINGLE geometry source seen by BOTH the app and the HAL core (it sizes
+// the static DMA ping-pong buffers 2*SLOTS*BLOCK and the per-instance leg table), so it MUST
+// live HERE (or via -D), NOT in app_config.h -- the HAL core does not include app config.
+//
+// TDM8 is the default smoke-demo geometry. TDM16 can be enabled as a hidden/experimental
+// framing check (DSPIC33AK_TDM_USE_TDM16 = 1, here or via -D): it increases BCLK and DMA
+// traffic substantially and is intended for scope-level investigation, not as a public
+// starter-board feature. Keep TDM8 as the normal default.
+// (For I2S use 2 slots: define DSPIC33AK_TDM_SLOTS_PER_FS=2 directly via -D.)
+#ifndef DSPIC33AK_TDM_USE_TDM16
+#define DSPIC33AK_TDM_USE_TDM16       0     // 0 = TDM8 (default) ; 1 = TDM16 (hidden experimental)
+#endif
 #ifndef DSPIC33AK_TDM_SLOTS_PER_FS
-#define DSPIC33AK_TDM_SLOTS_PER_FS    8     // TDM8 (I2S = 2)
+#  if DSPIC33AK_TDM_USE_TDM16
+#    define DSPIC33AK_TDM_SLOTS_PER_FS 16   // TDM16 (hidden experimental geometry)
+#  else
+#    define DSPIC33AK_TDM_SLOTS_PER_FS 8    // TDM8 (default)
+#  endif
 #endif
 #ifndef DSPIC33AK_TDM_BLOCK_FRAMES
 #define DSPIC33AK_TDM_BLOCK_FRAMES    32    // frames per ping/pong half
