@@ -57,4 +57,15 @@
 #define APP_TDM_FS_RUNTIME_SWITCH_TEST 0
 #endif
 
+/*
+ * OPT-IN UART async TX/RX self-test -- default OFF.
+ *
+ * When 1: after UART1 console init and before the normal boot banner, exercise
+ * interrupt-driven UART TX completion, active RX abort, and interactive async
+ * RX completion ("RXOK"), then continue the normal starter application.
+ */
+#ifndef HAL_STARTER_ENABLE_UART_ASYNC_SELFTEST
+#define HAL_STARTER_ENABLE_UART_ASYNC_SELFTEST 0
+#endif
+
 #endif /* APP_CONFIG_H */

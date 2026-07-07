@@ -32,6 +32,9 @@
 #include "board.h"
 #include "app_config.h"
 #include "tdm_smoke.h"
+#if HAL_STARTER_ENABLE_UART_ASYNC_SELFTEST
+#include "uart_async_selftest.h"
+#endif
 
 /* The optional two-board CAN FD bus test is controlled by CAN_BUS_TEST /
  * CAN_BUS_TEST_ECHO, both defined (default 0) in can_bus_test.h. With
@@ -187,6 +190,9 @@ int main(void)
     }
     high_res_status = dspic33ak_high_res_timer_init(&high_res_cfg);
     console_uart_init();               /* UART1 pins + 230400 8N1, printf retargeted */
+#if HAL_STARTER_ENABLE_UART_ASYNC_SELFTEST
+    bool uart_async_ok = uart_async_selftest_run();
+#endif
 
     printf("\n\n");
     printf("==============================================\n");
@@ -210,6 +216,9 @@ int main(void)
     }
     printf(" sysclk : %lu Hz (FRC -> PLL1)\n", (unsigned long)DSPIC33AK_CLOCK_SYS_HZ);
     printf(" uart   : UART1 @ 230400 8N1, RX ISR-ring echo active\n");
+#if HAL_STARTER_ENABLE_UART_ASYNC_SELFTEST
+    printf(" uart async self-test: %s\n", uart_async_ok ? "PASS" : "FAIL");
+#endif
     printf("==============================================\n");
     high_res_timer_boot_test(high_res_status);
 
