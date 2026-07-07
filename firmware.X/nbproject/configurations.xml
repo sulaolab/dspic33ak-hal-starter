@@ -34,6 +34,7 @@
         <itemPath>../src/clock/dspic33ak_clock.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f12" displayName="console" projectFiles="true">
+        <itemPath>../src/console/uart_irq.c</itemPath>
         <itemPath>../src/console/uart_stdio.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f6" displayName="hal_can" projectFiles="true">

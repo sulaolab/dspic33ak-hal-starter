@@ -44,6 +44,8 @@
  * then feed into PLL1). Alternate-I2C2 pin mapping is selected for this board. */
 #pragma config FDEVOPT_ALTI2C2 = ON   /* I2C2 on its alternate (board) pins */
 
+static uint8_t s_console_uart_rx_ring[256u];
+
 static void console_uart_init(void)
 {
     const dspic33ak_uart_config_t cfg = {
@@ -55,8 +57,12 @@ static void console_uart_init(void)
         .stop_bits   = 1u,
         .parity      = DSPIC33AK_UART_PARITY_NONE,
         .enable_tx   = true,
-        .enable_rx   = false,                    /* TX-only console for now */
-        .rx_mode     = DSPIC33AK_UART_RX_MODE_POLLING,
+        .enable_rx   = true,
+        .rx_mode     = DSPIC33AK_UART_RX_MODE_ISR_RING,
+        .rx_ring_buffer = s_console_uart_rx_ring,
+        .rx_ring_buffer_size = sizeof(s_console_uart_rx_ring),
+        .rx_irq_priority = 5u,
+        .tx_irq_priority = 5u,
     };
 
     /* If pin init fails the UART is not yet up -- can't printf. Proceed anyway;
@@ -142,6 +148,23 @@ static void high_res_timer_boot_test(dspic33ak_high_res_timer_status_t init_stat
     printf("==============================================\n");
 }
 
+static void console_uart_echo_poll(void)
+{
+    enum { MAX_ECHO_BYTES_PER_LOOP = 16 };
+
+    for (uint8_t count = 0u; count < MAX_ECHO_BYTES_PER_LOOP; count++) {
+        uint8_t data;
+
+        if (!dspic33ak_uart_rx_ready(DSPIC33AK_UART_INST_1)) {
+            break;
+        }
+        if (dspic33ak_uart_read_byte(DSPIC33AK_UART_INST_1, &data) != DSPIC33AK_UART_OK) {
+            break;
+        }
+        (void)dspic33ak_uart_write_byte(DSPIC33AK_UART_INST_1, data);
+    }
+}
+
 int main(void)
 {
     const dspic33ak_tick_timer_config_t tick_cfg = {
@@ -186,7 +209,7 @@ int main(void)
         }
     }
     printf(" sysclk : %lu Hz (FRC -> PLL1)\n", (unsigned long)DSPIC33AK_CLOCK_SYS_HZ);
-    printf(" uart   : UART1 @ 230400 8N1\n");
+    printf(" uart   : UART1 @ 230400 8N1, RX ISR-ring echo active\n");
     printf("==============================================\n");
     high_res_timer_boot_test(high_res_status);
 
@@ -314,6 +337,7 @@ int main(void)
     {
         rgb_pot_update();
         led_sw_update();      /* SW1/2 polled; SW3 event state mirrored on LED5 */
+        console_uart_echo_poll();
 
         uint32_t now = dspic33ak_tick_timer_get_ms();
         if ((uint32_t)(now - last_term_reset) >= 3000u) {
