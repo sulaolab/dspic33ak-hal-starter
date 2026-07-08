@@ -66,8 +66,11 @@ The firmware demonstrates:
    Timer2 is also initialized as a free-running high-resolution counter and
    checked after the boot banner.
 
-3. **UART console output**
-   `printf()` through UART1 at 230400 8N1
+3. **UART console and RX IRQ path**
+   `printf()` through UART1 at 230400 8N1. UART1 RX uses the ISR-ring
+   backend and echoes received bytes in the foreground loop. An opt-in boot
+   self-test validates async TX/RX, completion callbacks, counts, abort, and
+   recovery to normal echo mode.
 
 4. **SPI flash access**
    Reads the SST26 JEDEC ID and verifies sector erase/write/read-back
@@ -142,7 +145,8 @@ above. This starter vendors validated snapshots under matching `src/hal_xxx/`
 directories so the complete project builds without external source dependencies.
 Starter-only glue intentionally stays outside those HAL folders: board pin/PPS
 wiring lives in `src/board.*` and `src/board_pins.h`, board component helpers
-live in `src/board_components/`, and the `printf()` UART retarget lives in
+live in `src/board_components/`, and starter UART glue (`printf()` retargeting
+plus application-owned UART1 RX/TX interrupt-vector forwarding) lives in
 `src/console/`.
 
 This repository serves as the hardware integration and regression-validation
@@ -291,7 +295,8 @@ src/
   board_components/     board-specific component helpers built on HALs
                         or minimal device-level code
                         (LED/SW, RGB/POT, SST26 SPI-NOR)
-  console/              starter glue: printf write() retarget to UART1
+  console/              starter UART glue: printf write() retarget plus
+                        application-owned UART1 RX/TX interrupt-vector forwarding
   hal_gpio/             vendored GPIO+PPS HAL family:
                         dspic33ak_gpio.*    GPIO electrical attributes
                         dspic33ak_pps.*     peripheral signal routing (PPS)
