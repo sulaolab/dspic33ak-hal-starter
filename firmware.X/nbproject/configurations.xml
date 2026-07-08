@@ -24,6 +24,7 @@
         <itemPath>../src/app/can_bus_test.c</itemPath>
         <itemPath>../src/app/can_rx_isr_selftest.c</itemPath>
         <itemPath>../src/app/tdm_smoke.c</itemPath>
+        <itemPath>../src/app/uart_async_selftest.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f11" displayName="board_components" projectFiles="true">
         <itemPath>../src/board_components/led_sw.c</itemPath>
@@ -34,6 +35,7 @@
         <itemPath>../src/clock/dspic33ak_clock.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f12" displayName="console" projectFiles="true">
+        <itemPath>../src/console/uart_irq.c</itemPath>
         <itemPath>../src/console/uart_stdio.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f6" displayName="hal_can" projectFiles="true">
