@@ -35,7 +35,7 @@ Code that binds the HALs to this board stays outside the HAL folders:
 |---|---|
 | `src/board.c`, `src/board.h`, `src/board_pins.h` | Curiosity board pin names, PPS wiring, and board bring-up entry points. |
 | `src/board_components/` | Board-specific component helpers built on HALs or minimal device-level code, such as `led_sw.*`, `rgb_pot.*`, and `sst26_min.*`. |
-| `src/console/` | Starter glue that retargets `printf()` to UART1. |
+| `src/console/` | Starter UART integration glue: `printf()` retargeting and application-owned UART1 RX/TX interrupt-vector forwarding to the UART HAL handlers. |
 | `src/clock/` | PLL and clock-generator setup for this board/demo. |
 | `src/app/` | Bus validation demos and application-level orchestration. |
 | `src/hal_udid/` | Local UDID boot-banner helper; not currently a standalone public HAL. |
