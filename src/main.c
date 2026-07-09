@@ -183,26 +183,31 @@ static void console_tee_write(uint8_t c)
     (void)dspic33ak_uart_write_byte(DSPIC33AK_UART_INST_2, c);
 }
 
-/* Filter + tee one received byte. Accept ASCII printable (0x20-0x7E) and ENTER
- * (CR or LF); drop everything else (ESC, other control, non-ASCII). Escape
- * sequences are NOT interpreted -- this is a per-byte filter. A CR+LF pair is
- * collapsed to a single line break so one Enter key press yields one newline. */
-static void console_tee_feed(uint8_t c)
+/* Input port index for per-port tee state. */
+enum { CONSOLE_SRC_UART1 = 0u, CONSOLE_SRC_UART2 = 1u, CONSOLE_SRC_COUNT = 2u };
+
+/* Filter + tee one received byte from port `src`. Accept ASCII printable
+ * (0x20-0x7E) and ENTER (CR or LF); drop everything else (ESC, other control,
+ * non-ASCII). Escape sequences are NOT interpreted -- this is a per-byte filter.
+ * A CR+LF pair is collapsed to a single line break so one Enter key press yields
+ * one newline. The CRLF coalescing state is PER PORT (indexed by src): a CR on
+ * one port must not swallow a later LF that is a genuine Enter on the other. */
+static void console_tee_feed(uint8_t src, uint8_t c)
 {
-    static bool s_last_was_cr = false;
+    static bool s_last_was_cr[CONSOLE_SRC_COUNT] = { false, false };
 
     if ((c == (uint8_t)'\r') || (c == (uint8_t)'\n')) {
-        if ((c == (uint8_t)'\n') && s_last_was_cr) {
-            s_last_was_cr = false;   /* second half of CRLF -- already echoed */
+        if ((c == (uint8_t)'\n') && s_last_was_cr[src]) {
+            s_last_was_cr[src] = false;   /* second half of this port's CRLF */
             return;
         }
-        s_last_was_cr = (c == (uint8_t)'\r');
+        s_last_was_cr[src] = (c == (uint8_t)'\r');
         console_tee_write((uint8_t)'\r');
         console_tee_write((uint8_t)'\n');
         return;
     }
 
-    s_last_was_cr = false;
+    s_last_was_cr[src] = false;
 
     if ((c >= 0x20u) && (c <= 0x7Eu)) {
         console_tee_write(c);   /* printable ASCII -> both ports */
@@ -230,7 +235,7 @@ static void console_input_tee_poll(void)
         if (dspic33ak_uart_read_byte(DSPIC33AK_UART_INST_1, &data) != DSPIC33AK_UART_OK) {
             break;
         }
-        console_tee_feed(data);
+        console_tee_feed(CONSOLE_SRC_UART1, data);
     }
 
     for (n = 0u; n < MAX_BYTES_PER_LOOP; n++) {
@@ -240,7 +245,7 @@ static void console_input_tee_poll(void)
         if (dspic33ak_uart_read_byte(DSPIC33AK_UART_INST_2, &data) != DSPIC33AK_UART_OK) {
             break;
         }
-        console_tee_feed(data);
+        console_tee_feed(CONSOLE_SRC_UART2, data);
     }
 }
 
