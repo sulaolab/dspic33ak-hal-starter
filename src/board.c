@@ -51,6 +51,25 @@ bool board_uart1_pins_init(void)
     return true;
 }
 
+bool board_uart2_pins_init(void)
+{
+    /* PKOB4 "USB Serial Device": output mirror + Phase 2 tee input.
+     * U2TX: idle-high output (UART idle line is high); GPIO before PPS. */
+    if (!dspic33ak_gpio_rp_config_digital_output(BOARD_UART2_TX_RP, true))
+        return false;
+    if (!dspic33ak_pps_route_output(DSPIC33AK_PPS_OUTPUT_U2TX, BOARD_UART2_TX_RP))
+        return false;
+
+    /* U2RX: digital input; GPIO before PPS. Phase 2 -- keystrokes on this port
+     * are teed alongside UART1. */
+    if (!dspic33ak_gpio_rp_config_digital_input(BOARD_UART2_RX_RP))
+        return false;
+    if (!dspic33ak_pps_route_input(DSPIC33AK_PPS_INPUT_U2RX, BOARD_UART2_RX_RP))
+        return false;
+
+    return true;
+}
+
 bool board_can1_pins_init(void)
 {
     /* Enable the CAN1 module before HAL init. */

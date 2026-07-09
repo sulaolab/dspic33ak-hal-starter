@@ -28,6 +28,10 @@ void board_ports_digital_default(void);
  * digital input, plus PPS routing. Returns false if any step failed. */
 bool board_uart1_pins_init(void);
 
+/* Configure the UART2 PKOB4 console pins: U2TX digital output (idle high) and
+ * U2RX digital input, plus PPS routing. Returns false if any step failed. */
+bool board_uart2_pins_init(void);
+
 /* Configure the SST26 SPI4 pins: SDO/SCK digital outputs (idle low), SDI digital
  * input, CS/WP idle high (deasserted), RST asserted low; plus PPS routing.
  * RST is left asserted; the SST26 driver completes the reset pulse.

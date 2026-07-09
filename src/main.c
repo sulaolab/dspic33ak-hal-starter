@@ -68,10 +68,34 @@ static void console_uart_init(void)
         .tx_irq_priority = 5u,
     };
 
+    /* UART2: PKOB4 "USB Serial Device". Output mirror (stdio write() retarget
+     * copies console output here) + Phase 2 input: RX enabled so keystrokes on
+     * this port are teed like UART1 (see console_input_tee_poll). RX is polling
+     * (drained in the main loop) -- no ring buffer / RX IRQ. */
+    const dspic33ak_uart_config_t cfg2 = {
+        .uart_clk_hz = STARTER_CLOCK_SYS_HZ,   /* CLKGEN8 <- PLL1, divide-by-1 */
+        .baudrate    = 230400u,
+        .timeout_ms  = 0u,
+        .get_ms      = NULL,
+        .data_bits   = 8u,
+        .stop_bits   = 1u,
+        .parity      = DSPIC33AK_UART_PARITY_NONE,
+        .enable_tx   = true,
+        .enable_rx   = true,
+        .rx_mode     = DSPIC33AK_UART_RX_MODE_POLLING,
+        .rx_ring_buffer = NULL,
+        .rx_ring_buffer_size = 0u,
+        .rx_irq_priority = 0u,
+        .tx_irq_priority = 5u,
+    };
+
     /* If pin init fails the UART is not yet up -- can't printf. Proceed anyway;
      * a wrong PPS config will be visible as garbled / no output. */
     (void)board_uart1_pins_init();
     (void)dspic33ak_uart_init(DSPIC33AK_UART_INST_1, &cfg);
+
+    (void)board_uart2_pins_init();
+    (void)dspic33ak_uart_init(DSPIC33AK_UART_INST_2, &cfg2);
 }
 
 static void term_init_safe(void)
@@ -151,20 +175,77 @@ static void high_res_timer_boot_test(dspic33ak_high_res_timer_status_t init_stat
     printf("==============================================\n");
 }
 
-static void console_uart_echo_poll(void)
+/* Write one byte to BOTH console ports (echo to the sender + mirror to the
+ * other -- for a byte that is equivalent to writing both). */
+static void console_tee_write(uint8_t c)
 {
-    enum { MAX_ECHO_BYTES_PER_LOOP = 16 };
+    (void)dspic33ak_uart_write_byte(DSPIC33AK_UART_INST_1, c);
+    (void)dspic33ak_uart_write_byte(DSPIC33AK_UART_INST_2, c);
+}
 
-    for (uint8_t count = 0u; count < MAX_ECHO_BYTES_PER_LOOP; count++) {
-        uint8_t data;
+/* Input port index for per-port tee state. */
+enum { CONSOLE_SRC_UART1 = 0u, CONSOLE_SRC_UART2 = 1u, CONSOLE_SRC_COUNT = 2u };
 
+/* Filter + tee one received byte from port `src`. Accept ASCII printable
+ * (0x20-0x7E) and ENTER (CR or LF); drop everything else (ESC, other control,
+ * non-ASCII). Escape sequences are NOT interpreted -- this is a per-byte filter.
+ * A CR+LF pair is collapsed to a single line break so one Enter key press yields
+ * one newline. The CRLF coalescing state is PER PORT (indexed by src): a CR on
+ * one port must not swallow a later LF that is a genuine Enter on the other. */
+static void console_tee_feed(uint8_t src, uint8_t c)
+{
+    static bool s_last_was_cr[CONSOLE_SRC_COUNT] = { false, false };
+
+    if ((c == (uint8_t)'\r') || (c == (uint8_t)'\n')) {
+        if ((c == (uint8_t)'\n') && s_last_was_cr[src]) {
+            s_last_was_cr[src] = false;   /* second half of this port's CRLF */
+            return;
+        }
+        s_last_was_cr[src] = (c == (uint8_t)'\r');
+        console_tee_write((uint8_t)'\r');
+        console_tee_write((uint8_t)'\n');
+        return;
+    }
+
+    s_last_was_cr[src] = false;
+
+    if ((c >= 0x20u) && (c <= 0x7Eu)) {
+        console_tee_write(c);   /* printable ASCII -> both ports */
+    }
+    /* else: control / ESC / non-ASCII -> dropped */
+}
+
+/*
+ * Console input tee (Phase 2): drain BOTH command ports and tee each accepted
+ * byte to both, so "USB Serial Port" (UART1) and "USB Serial Device" (UART2)
+ * show one shared session (output + both ports' echoed input). No source lock:
+ * the tee is per-byte and stateless (aside from CRLF coalescing), so there is no
+ * shared line buffer to corrupt. Intended use is one port at a time.
+ */
+static void console_input_tee_poll(void)
+{
+    enum { MAX_BYTES_PER_LOOP = 32 };
+    uint8_t data;
+    uint8_t n;
+
+    for (n = 0u; n < MAX_BYTES_PER_LOOP; n++) {
         if (!dspic33ak_uart_rx_ready(DSPIC33AK_UART_INST_1)) {
             break;
         }
         if (dspic33ak_uart_read_byte(DSPIC33AK_UART_INST_1, &data) != DSPIC33AK_UART_OK) {
             break;
         }
-        (void)dspic33ak_uart_write_byte(DSPIC33AK_UART_INST_1, data);
+        console_tee_feed(CONSOLE_SRC_UART1, data);
+    }
+
+    for (n = 0u; n < MAX_BYTES_PER_LOOP; n++) {
+        if (!dspic33ak_uart_rx_ready(DSPIC33AK_UART_INST_2)) {
+            break;
+        }
+        if (dspic33ak_uart_read_byte(DSPIC33AK_UART_INST_2, &data) != DSPIC33AK_UART_OK) {
+            break;
+        }
+        console_tee_feed(CONSOLE_SRC_UART2, data);
     }
 }
 
@@ -356,7 +437,7 @@ int main(void)
     {
         rgb_pot_update();
         led_sw_update();      /* SW1/2 polled; SW3 event state mirrored on LED5 */
-        console_uart_echo_poll();
+        console_input_tee_poll();
 
         uint32_t now = dspic33ak_tick_timer_get_ms();
         if ((uint32_t)(now - last_term_reset) >= 3000u) {
