@@ -13,7 +13,7 @@
  *   is_echo = true  : ECHO        - re-sends each received frame under id 0x0B0.
  *
  * Two boards, J21<->J21 (CANH/CANL/GND), 120 ohm termination (J22/J23) on BOTH.
- * Never returns. Call after dspic33ak_clock_can_init() + board_can1_pins_init();
+ * Never returns. Call after starter_clock_can_init() + board_can1_pins_init();
  * forward the CAN vectors (defined in can_bus_test.c) to the HAL handler.
  */
 

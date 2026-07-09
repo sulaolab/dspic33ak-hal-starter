@@ -24,6 +24,7 @@
 #include "dspic33ak_canfd_node.h"
 #include "dspic33ak_canfd_isr.h"
 #include "dspic33ak_tick_timer.h"
+#include "starter_clock.h"
 
 #define RXISR_TEST_ID        0x222u
 #define RXISR_OVERFLOW_TX    24u    /* >> RX FIFO depth, so the FIFO must overflow */
@@ -85,7 +86,7 @@ static bool rxisr_bringup(void)
 {
     dspic33ak_canfd_config_t cfg = {0};
 
-    cfg.can_clk_hz   = 20000000u;
+    cfg.can_clk_hz   = STARTER_CLOCK_CAN_FCAN_HZ;
     cfg.nominal_bps  = 500000u;
     cfg.data_bps     = 2000000u;
     cfg.sample_pct   = 80u;

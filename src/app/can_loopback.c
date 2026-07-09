@@ -22,6 +22,7 @@
 #include "dspic33ak_canfd_node.h"
 #include "dspic33ak_canfd_isr.h"   /* dspic33ak_canfd_get_status() */
 #include "dspic33ak_tick_timer.h"
+#include "starter_clock.h"
 
 /* Caller-owned CAN message RAM (TX queue + RX FIFO 1), 4-byte aligned, sized by
  * the HAL's compile-time geometry constant (= dspic33ak_canfd_msg_ram_size()).
@@ -60,7 +61,7 @@ static bool can_bringup(dspic33ak_canfd_mode_t mode)
 {
     dspic33ak_canfd_config_t cfg = {0};
 
-    cfg.can_clk_hz   = 20000000u;   /* FCAN from dspic33ak_clock_can_init()   */
+    cfg.can_clk_hz   = STARTER_CLOCK_CAN_FCAN_HZ;   /* FCAN from starter_clock_can_init() */
     cfg.nominal_bps  = 500000u;
     cfg.data_bps     = 2000000u;
     cfg.sample_pct   = 80u;

@@ -5,7 +5,7 @@
  * PPS-capable pins are configured via the RP-first GPIO API and the PPS HAL,
  * using the RP number as the single identifier for both GPIO attributes and
  * signal routing. Non-PPS pins (CS, WP, RST, STBY) use the packed-pin API.
- * The CLKGEN clock routing is done separately in dspic33ak_clock_init().
+ * The CLKGEN clock routing is done separately in starter_clock_init().
  */
 
 #include "dspic33ak_canfd.h"

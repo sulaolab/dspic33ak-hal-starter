@@ -14,6 +14,7 @@
 #include "dspic33ak_canfd_node.h"
 #include "dspic33ak_canfd_isr.h"
 #include "dspic33ak_tick_timer.h"
+#include "starter_clock.h"
 
 #define CAN_BUS_TEST_ORIG_ID  0x0A0u
 #define CAN_BUS_TEST_ECHO_ID  0x0B0u
@@ -75,7 +76,7 @@ void can_bus_test_run(bool is_echo)
     uint32_t last_ms;
     uint8_t  k;
 
-    cfg.can_clk_hz   = 20000000u;
+    cfg.can_clk_hz   = STARTER_CLOCK_CAN_FCAN_HZ;
     cfg.nominal_bps  = 500000u;
     cfg.data_bps     = 2000000u;
     cfg.sample_pct   = 80u;

@@ -26,7 +26,7 @@
 #include <stdint.h>
 #include <math.h>
 
-#include "dspic33ak_clock.h"               // DSPIC33AK_CLOCK_SYS_HZ (SPI1 baud clock src)
+#include "starter_clock.h"                 // STARTER_CLOCK_SYS_HZ (SPI1 baud clock src)
 #include "dspic33ak_dma.h"                 // dspic33ak_dma_global_init()
 #include "dspic33ak_spi_i2s_tdm.h"         // transport HAL public API
 #include "dspic33ak_spi_i2s_tdm_conf.h"    // DSPIC33AK_TDM_SLOTS_PER_FS / _BLOCK_FRAMES
@@ -44,11 +44,11 @@
 //   200 MHz / (2*8*32*48000) - 1 = 7  -> BCLK 12.5 MHz, fs ~48.8 kHz (expected, not exact).
 #define TDM_SMOKE_TARGET_FS_HZ   (48000u)
 #define TDM_SMOKE_SPI_BRG \
-    ((uint32_t)((DSPIC33AK_CLOCK_SYS_HZ / (2u * (uint32_t)DSPIC33AK_TDM_SLOTS_PER_FS * 32u * TDM_SMOKE_TARGET_FS_HZ)) - 1u))
+    ((uint32_t)((STARTER_CLOCK_SYS_HZ / (2u * (uint32_t)DSPIC33AK_TDM_SLOTS_PER_FS * 32u * TDM_SMOKE_TARGET_FS_HZ)) - 1u))
 // Expected (design) BCLK and frame rate from the resolved BRG/geometry -- printed in the
 // status line so it stays correct across TDM8 (BRG=7, ~12.5 MHz) and TDM16 (BRG=3, ~25 MHz).
 #define TDM_SMOKE_EXP_BCLK_HZ \
-    (DSPIC33AK_CLOCK_SYS_HZ / (2u * (TDM_SMOKE_SPI_BRG + 1u)))
+    (STARTER_CLOCK_SYS_HZ / (2u * (TDM_SMOKE_SPI_BRG + 1u)))
 #define TDM_SMOKE_EXP_FS_HZ \
     (TDM_SMOKE_EXP_BCLK_HZ / ((uint32_t)DSPIC33AK_TDM_SLOTS_PER_FS * 32u))
 
