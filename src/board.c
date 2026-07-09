@@ -51,6 +51,19 @@ bool board_uart1_pins_init(void)
     return true;
 }
 
+bool board_uart2_pins_init(void)
+{
+    /* Phase 1: TX-only output mirror onto the PKOB4 "USB Serial Device".
+     * U2TX: idle-high output (UART idle line is high); GPIO before PPS.
+     * U2RX (RP59) is intentionally not routed yet -- added in Phase 2. */
+    if (!dspic33ak_gpio_rp_config_digital_output(BOARD_UART2_TX_RP, true))
+        return false;
+    if (!dspic33ak_pps_route_output(DSPIC33AK_PPS_OUTPUT_U2TX, BOARD_UART2_TX_RP))
+        return false;
+
+    return true;
+}
+
 bool board_can1_pins_init(void)
 {
     /* Enable the CAN1 module before HAL init. */

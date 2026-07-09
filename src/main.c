@@ -68,10 +68,33 @@ static void console_uart_init(void)
         .tx_irq_priority = 5u,
     };
 
+    /* UART2: PKOB4 "USB Serial Device" -- Phase 1 output mirror (TX only). The
+     * stdio write() retarget copies all console output here too (see
+     * uart_stdio.c). No RX until Phase 2, so no ring buffer / RX IRQ. */
+    const dspic33ak_uart_config_t cfg2 = {
+        .uart_clk_hz = STARTER_CLOCK_SYS_HZ,   /* CLKGEN8 <- PLL1, divide-by-1 */
+        .baudrate    = 230400u,
+        .timeout_ms  = 0u,
+        .get_ms      = NULL,
+        .data_bits   = 8u,
+        .stop_bits   = 1u,
+        .parity      = DSPIC33AK_UART_PARITY_NONE,
+        .enable_tx   = true,
+        .enable_rx   = false,
+        .rx_mode     = DSPIC33AK_UART_RX_MODE_POLLING,
+        .rx_ring_buffer = NULL,
+        .rx_ring_buffer_size = 0u,
+        .rx_irq_priority = 0u,
+        .tx_irq_priority = 5u,
+    };
+
     /* If pin init fails the UART is not yet up -- can't printf. Proceed anyway;
      * a wrong PPS config will be visible as garbled / no output. */
     (void)board_uart1_pins_init();
     (void)dspic33ak_uart_init(DSPIC33AK_UART_INST_1, &cfg);
+
+    (void)board_uart2_pins_init();
+    (void)dspic33ak_uart_init(DSPIC33AK_UART_INST_2, &cfg2);
 }
 
 static void term_init_safe(void)
