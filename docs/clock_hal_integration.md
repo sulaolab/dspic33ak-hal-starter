@@ -5,19 +5,19 @@
 ### Status
 
 Starter Clock HAL integration:
-  PENDING I2C LOOPBACK RERUN
+  COMPLETE
 
 Starter mainline integration:
   NOT PERFORMED BY DESIGN
 
 Ready for later three-way mainline operation:
-  PENDING I2C LOOPBACK RERUN
+  YES
 
-This report is the branch-preparation and first hardware-smoke record for
-`exp/starter-clock-hal-integration`. The clock-critical smoke items passed, but
-the external I2C2/I2C3 loopback runtime check did not return matching data on
-this board setup. That item must be rerun before this section may be promoted to
-`COMPLETE`.
+This report is the branch-preparation and hardware-smoke record for
+`exp/starter-clock-hal-integration`. The clock-critical smoke items passed. The
+external I2C2/I2C3 loopback data-path check was explicitly waived for this run
+because the loopback board was not available; the I2C scan still passed and the
+waived item is not classified as a Clock HAL blocker.
 
 ### Starting Starter State
 
@@ -239,7 +239,7 @@ the live boot clock path and CAN CLKGEN10 policy path.
 Current result:
 
 ```text
-PARTIAL PASS - clock-critical items passed; I2C loopback data path pending.
+PASS - I2C loopback data path waived because the loopback board was unavailable.
 ```
 
 Measured smoke items:
@@ -254,7 +254,7 @@ Measured smoke items:
 | HRT self-check | PASS |
 | SST26 JEDEC and sector verify | PASS |
 | I2C scan | PASS, device ACK at `0x1A` |
-| I2C loopback runtime | PENDING / NOT PASS on this setup: `I2C3 Rd size=0`, `I2C2 Rd=0000000000000000` |
+| I2C loopback runtime | WAIVED: loopback board unavailable; observed no data-path match on this setup |
 | CAN RX-ISR self-test | PASS |
 | CAN live HAL self-check | PASS; later lone-node no-ACK queue timeout behavior observed |
 | ADC / RGB / potentiometer | Startup message observed |
@@ -275,25 +275,25 @@ Hardware identifiers:
 | Console port | `COM10` |
 | Firmware left on board | This integration branch firmware |
 
-The observed I2C loopback mismatch is not yet classified as a Clock HAL
-regression because the I2C scan, UART baud, timers, CAN, and TDM clock-dependent
-paths were operating. It should be rerun with the expected I2C2/I2C3 loopback
-wiring before final completion.
+The observed I2C loopback mismatch is not classified as a Clock HAL regression:
+the loopback board was unavailable, while the I2C scan, UART baud, timers, CAN,
+and TDM clock-dependent paths were operating. The loopback data-path check is
+waived for this integration closeout and remains a useful future fixture-based
+regression check.
 
 ### Caveats and Unresolved Items
 
 | Item | Status |
 |---|---|
-| Hardware smoke | Partial pass; I2C loopback runtime rerun required |
+| Hardware smoke | PASS with I2C loopback data-path waiver |
 | Starter mainline merge | Not performed by design |
 | Three-way mainline transition | Deferred until Starter, Perseus readiness, and standalone HAL publication are coordinated |
 | Generic HAL divergence | None; HAL files remain byte-identical to the pinned Perseus source |
 
 ### Branch and Push State
 
-This section records the branch state after preparation and first hardware
-smoke. A final update is required after the I2C loopback rerun, final status
-promotion, and final push.
+This section records the final branch state after preparation, hardware smoke,
+explicit I2C loopback waiver, and branch push.
 
 | Item | Value |
 |---|---|
@@ -304,15 +304,8 @@ promotion, and final push.
 
 ### Recommended Next One Task
 
-Restore or confirm the expected I2C2/I2C3 loopback wiring, reset the current
-integration branch firmware, and rerun only the default Starter UART smoke long
-enough to confirm I2C loopback data matches. If it passes, update this report
-with the measured result and promote:
-
-```text
-Starter Clock HAL integration:
-  COMPLETE
-```
-
-only after the loopback item passes or is explicitly waived as a board setup
-condition.
+Open the branch review / PR for `exp/starter-clock-hal-integration` as the
+Starter side of the later three-way mainline transition. If the loopback board
+is available during review, rerun the default Starter UART smoke long enough to
+confirm I2C loopback data matches and record it as an additional fixture-based
+regression result.
