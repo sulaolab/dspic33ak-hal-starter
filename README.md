@@ -51,7 +51,16 @@ can remain reusable, but the starter board path shown here is the AK512 setup.
 
 ## What runs after programming?
 
-After programming the board, open a serial terminal at **230400 8N1**.
+After programming the board, open either (or both) of the two Windows serial
+ports at **230400 8N1**:
+
+* **"USB Serial Port"**   — UART1 / MCP2221A
+* **"USB Serial Device"** — UART2 / PKOB4
+
+Console output is mirrored to both ports. Printable ASCII and Enter received
+from either port are echoed and teed to both ports (CRLF is coalesced per input
+port; ESC, other control bytes, and non-ASCII are dropped). Type on one input
+port at a time.
 
 The firmware demonstrates:
 
@@ -68,11 +77,12 @@ The firmware demonstrates:
    Timer2 is also initialized as a free-running high-resolution counter and
    checked after the boot banner.
 
-3. **UART console and RX IRQ path**
-   `printf()` through UART1 at 230400 8N1. UART1 RX uses the ISR-ring
-   backend and echoes received bytes in the foreground loop. An opt-in boot
-   self-test validates async TX/RX, completion callbacks, counts, abort, and
-   recovery to normal echo mode.
+3. **Dual-port UART console and RX paths**
+   `printf()` output at 230400 8N1 is mirrored to both Windows ports. Input
+   from either port is teed to both (see above). The two ports use different RX
+   backends on purpose: **UART1 RX = ISR-ring**, **UART2 RX = polling**; both
+   feed the same foreground tee. An opt-in boot self-test validates UART1 async
+   TX/RX, completion callbacks, counts, abort, and recovery.
 
 4. **SPI flash access**
    Reads the SST26 JEDEC ID and verifies sector erase/write/read-back
@@ -172,7 +182,8 @@ through MPLAB X.
 1. Open `firmware.X` in MPLAB X (this regenerates the per-machine makefiles).
 2. Build (single configuration `dsPIC33AK512`, device dsPIC33AK512MPS512).
 3. Program to the board with the on-board PKOB4.
-4. Open a serial terminal on the board's USB-serial port at **230400 8N1**.
+4. Open a serial terminal on either Windows port ("USB Serial Port" / "USB
+   Serial Device") at **230400 8N1** — output is mirrored to both.
 
 Only `firmware.X/nbproject/{configurations,project}.xml` and the top-level
 `firmware.X/Makefile` are tracked; build output and the per-machine generated
