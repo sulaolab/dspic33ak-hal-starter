@@ -15,7 +15,7 @@
 #include <stdio.h>
 #include <stdint.h>
 
-#include "dspic33ak_clock.h"
+#include "starter_clock.h"
 #include "dspic33ak_tick_timer.h"
 #include "dspic33ak_high_res_timer.h"
 #include "dspic33ak_uart.h"
@@ -52,7 +52,7 @@ static uint8_t s_console_uart_rx_ring[256u];
 static void console_uart_init(void)
 {
     const dspic33ak_uart_config_t cfg = {
-        .uart_clk_hz = DSPIC33AK_CLOCK_SYS_HZ,   /* CLKGEN8 <- PLL1, divide-by-1 */
+        .uart_clk_hz = STARTER_CLOCK_SYS_HZ,   /* CLKGEN8 <- PLL1, divide-by-1 */
         .baudrate    = 230400u,
         .timeout_ms  = 0u,
         .get_ms      = NULL,
@@ -135,7 +135,7 @@ static void high_res_timer_boot_test(dspic33ak_high_res_timer_status_t init_stat
            (int)init_status,
            (int)dspic33ak_high_res_timer_is_present(),
            (int)dspic33ak_high_res_timer_is_initialized(),
-           (unsigned long)(DSPIC33AK_CLOCK_SYS_HZ / 2u));
+           (unsigned long)STARTER_CLOCK_FCY_HZ);
     printf(" HRT: count0=%lu count1=%lu count2=%lu d1=%lu d10=%lu\n",
            (unsigned long)count0,
            (unsigned long)count1,
@@ -171,17 +171,21 @@ static void console_uart_echo_poll(void)
 int main(void)
 {
     const dspic33ak_tick_timer_config_t tick_cfg = {
-        .timer_clk_hz = DSPIC33AK_CLOCK_SYS_HZ / 2u,
+        .timer_clk_hz = STARTER_CLOCK_FCY_HZ,
         .irq_priority = DSPIC33AK_TICK_TIMER_DEFAULT_IRQ_PRIORITY,
         .run_in_idle = false,
     };
     const dspic33ak_high_res_timer_config_t high_res_cfg = {
-        .timer_clk_hz = DSPIC33AK_CLOCK_SYS_HZ / 2u,
+        .timer_clk_hz = STARTER_CLOCK_FCY_HZ,
         .run_in_idle = false,
     };
     dspic33ak_high_res_timer_status_t high_res_status;
 
-    (void)dspic33ak_clock_init();      /* FRC -> PLL1 200 MHz; route CLKGEN1/5/6/8/9 */
+    if (!starter_clock_init()) {       /* FRC -> PLL1 200 MHz; route CLKGEN1/5/6/8/9 */
+        while (1) {
+            Nop();
+        }
+    }
     board_ports_digital_default();     /* all pins digital (needed for I2C SDA/SCL) */
     if (dspic33ak_tick_timer_init(&tick_cfg) != DSPIC33AK_TICK_TIMER_OK) {
         while (1) {
@@ -214,7 +218,7 @@ int main(void)
             printf(" udid   : read failed or invalid\n");
         }
     }
-    printf(" sysclk : %lu Hz (FRC -> PLL1)\n", (unsigned long)DSPIC33AK_CLOCK_SYS_HZ);
+    printf(" sysclk : %lu Hz (FRC -> PLL1)\n", (unsigned long)STARTER_CLOCK_SYS_HZ);
     printf(" uart   : UART1 @ 230400 8N1, RX ISR-ring echo active\n");
 #if HAL_STARTER_ENABLE_UART_ASYNC_SELFTEST
     printf(" uart async self-test: %s\n", uart_async_ok ? "PASS" : "FAIL");
@@ -254,7 +258,7 @@ int main(void)
      * Plug an I2C device into the MikroBUS A or B I2C header and it shows up. */
     {
         const dspic33ak_i2c_config_t i2c_cfg = {
-            .fcy_hz             = DSPIC33AK_CLOCK_SYS_HZ / 2u,   /* fcy = sysclk/2  */
+            .fcy_hz             = STARTER_CLOCK_FCY_HZ,           /* fcy = sysclk/2  */
             .bus_hz             = 400000u,                       /* 400 kHz         */
             .timeout_ms         = 5u,                            /* never hang      */
             .get_ms             = dspic33ak_tick_timer_get_ms,
@@ -286,27 +290,33 @@ int main(void)
      * connect a CAN node / analyzer (or a 2nd board in echo config) for ACKed
      * traffic. With CAN_BUS_TEST=1 the firmware instead enters the dedicated
      * two-board bus test and does not return. */
-    dspic33ak_clock_can_init();
-    if (!board_can1_pins_init()) {
-        printf(" WARNING: board_can1_pins_init failed\n");
-    }
+    bool can_runtime_ready = false;
+    if (!starter_clock_can_init()) {
+        printf(" ERROR: CAN clock init failed; CAN demos skipped.\n");
+    } else {
+        if (!board_can1_pins_init()) {
+            printf(" WARNING: board_can1_pins_init failed\n");
+        }
 #if !CAN_BUS_TEST
-    /* Single-board RX-interrupt self-test (INTERNAL loopback): proves the RX
-     * callback fires, a frame can be received, RX overflow is detected, and the
-     * TX interrupt line stays disabled - all without a bus or partner. Owns the
-     * CAN1 RX/general vectors for this build; leaves CAN1 quiesced afterwards. */
-    bool rx_isr_ok = can_rx_isr_selftest_run();
-    printf(" CAN1 RX-ISR self-check: %s.\n", rx_isr_ok ? "PASS" : "FAILED");
-    printf("==============================================\n");
+        /* Single-board RX-interrupt self-test (INTERNAL loopback): proves the RX
+         * callback fires, a frame can be received, RX overflow is detected, and the
+         * TX interrupt line stays disabled - all without a bus or partner. Owns the
+         * CAN1 RX/general vectors for this build; leaves CAN1 quiesced afterwards. */
+        bool rx_isr_ok = can_rx_isr_selftest_run();
+        printf(" CAN1 RX-ISR self-check: %s.\n", rx_isr_ok ? "PASS" : "FAILED");
+        printf("==============================================\n");
 #endif
-    bool can_ok = can_loopback_selftest();
-    printf(" CAN1 FD @500k/2M live on the bus (HAL self-check: %s).\n",
-           can_ok ? "PASS" : "FAILED");
-    printf("   No ACK partner -> error-passive + retransmit burst; add a CAN node\n");
-    printf("   (analyzer / 2nd board echo) to ACK it and see steady CAN H/L.\n");
-    printf("==============================================\n");
+        can_runtime_ready = can_loopback_selftest();
+        printf(" CAN1 FD @500k/2M live on the bus (HAL self-check: %s).\n",
+               can_runtime_ready ? "PASS" : "FAILED");
+        printf("   No ACK partner -> error-passive + retransmit burst; add a CAN node\n");
+        printf("   (analyzer / 2nd board echo) to ACK it and see steady CAN H/L.\n");
+        printf("==============================================\n");
+    }
 #if CAN_BUS_TEST
-    can_bus_test_run(CAN_BUS_TEST_ECHO);   /* never returns */
+    if (can_runtime_ready) {
+        can_bus_test_run(CAN_BUS_TEST_ECHO);   /* never returns */
+    }
 #endif
 
     /* ---- Potentiometer (ADC5) -> RGB LED (PWM1/2/3) ---- */
@@ -362,7 +372,9 @@ int main(void)
                     i2c_loopback_tick(DSPIC33AK_I2C_INST_2, beat);  /* even beat: I2C */
                 }
             } else {
-                can_loopback_tick(beat);                            /* odd beat: CAN */
+                if (can_runtime_ready) {
+                    can_loopback_tick(beat);                        /* odd beat: CAN */
+                }
             }
             beat++;
         }

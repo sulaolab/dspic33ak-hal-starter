@@ -26,7 +26,7 @@
 /*
  * Run the RX-ISR self-test. Prints its own result lines and returns true on a
  * full pass. The caller must have already routed the CAN clock and CAN1 pins
- * (dspic33ak_clock_can_init() + board_can1_pins_init()), exactly as for the
+ * (starter_clock_can_init() + board_can1_pins_init()), exactly as for the
  * can_loopback self-test.
  */
 bool can_rx_isr_selftest_run(void);

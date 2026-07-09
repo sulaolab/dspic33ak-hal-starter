@@ -56,7 +56,9 @@ After programming the board, open a serial terminal at **230400 8N1**.
 The firmware demonstrates:
 
 1. **Clock bring-up**
-   FRC -> PLL1, SYSCLK = 200 MHz
+   Generic Clock HAL mechanics plus Starter policy: FRC -> PLL1, SYSCLK =
+   200 MHz; CLKGEN1/5/6/8/9 divide-by-1; CLKGEN10 divide-by-10 for 20 MHz CAN
+   FD FCAN.
 
 2. **Timer HAL self-check**
    A Timer1-based 1 ms monotonic time base drives heartbeat timing and the
@@ -135,22 +137,23 @@ This pairs with the standalone HALs:
 - [dspic33ak-timer-hal](https://github.com/sulaolab/dspic33ak-timer-hal)
 - [dspic33ak-spi-i2s-tdm-hal](https://github.com/sulaolab/dspic33ak-spi-i2s-tdm-hal)
 
-This starter also currently vendors integration HAL folders such as `hal_dma`
-and the `hal_gpio_event` change-notification layer inside `hal_gpio`. The
-starter's active HAL surface therefore includes GPIO/PPS/CN events, UART, SPI,
-I2C, CAN FD, Timer, DMA, and SPI framed-mode I2S/TDM.
+This starter also currently vendors integration HAL folders such as `hal_clock`,
+`hal_dma`, and the `hal_gpio_event` change-notification layer inside
+`hal_gpio`. The starter's active HAL surface therefore includes Clock,
+GPIO/PPS/CN events, UART, SPI, I2C, CAN FD, Timer, DMA, and SPI framed-mode
+I2S/TDM.
 
-The reusable HAL implementations are maintained in the standalone repositories
-above. This starter vendors validated snapshots under matching `src/hal_xxx/`
-directories so the complete project builds without external source dependencies.
-Starter-only glue intentionally stays outside those HAL folders: board pin/PPS
-wiring lives in `src/board.*` and `src/board_pins.h`, board component helpers
-live in `src/board_components/`, and starter UART glue (`printf()` retargeting
-plus application-owned UART1 RX/TX interrupt-vector forwarding) lives in
+Reusable HAL implementations are vendored as validated snapshots under matching
+`src/hal_xxx/` directories so the complete project builds without external
+source dependencies. Starter-only glue intentionally stays outside those HAL
+folders: clock policy lives in `src/clock/`, board pin/PPS wiring lives in
+`src/board.*` and `src/board_pins.h`, board component helpers live in
+`src/board_components/`, and starter UART glue (`printf()` retargeting plus
+application-owned UART1 RX/TX interrupt-vector forwarding) lives in
 `src/console/`.
 
 This repository serves as the hardware integration and regression-validation
-project for the HAL set: clock, GPIO, UART, SPI, I2C, CAN FD, and Timer are
+project for the HAL set: Clock, GPIO, UART, SPI, I2C, CAN FD, and Timer are
 exercised together on the target board.
 
 ## Toolchain
@@ -291,12 +294,17 @@ src/
   board.c/.h            board bring-up: GPIO electrical config + PPS routing
   board_pins.h          board pin names (RP numbers for PPS pins; packed pin
                         for non-PPS GPIO-only pins)
-  clock/                dspic33ak_clock (PLL1 + CLKGEN routing)
+  clock/                Starter-specific clock policy:
+                        FRC -> PLL1 200 MHz, application CLKGENs,
+                        and CLKGEN10 /10 for CAN FD FCAN
   board_components/     board-specific component helpers built on HALs
                         or minimal device-level code
                         (LED/SW, RGB/POT, SST26 SPI-NOR)
   console/              starter UART glue: printf write() retarget plus
                         application-owned UART1 RX/TX interrupt-vector forwarding
+  hal_clock/            vendored generic dsPIC33AK Clock HAL:
+                        logical PLL / CLKGEN programming through core,
+                        device, and register-adaptation layers
   hal_gpio/             vendored GPIO+PPS HAL family:
                         dspic33ak_gpio.*    GPIO electrical attributes
                         dspic33ak_pps.*     peripheral signal routing (PPS)
@@ -330,12 +338,13 @@ docs/
   touch-addon.md        optional capacitive-touch add-on (QTM; not bundled)
 ```
 
-Design split: **GPIO / UART / SPI / I2C / CAN FD / Timer are the HALs**.
+Design split: **Clock / GPIO / UART / SPI / I2C / CAN FD / Timer are the HALs**.
 Validated snapshots are vendored into matching `src/hal_xxx/` folders for
-hardware integration and regression testing. Clock setup, board pin/PPS wiring,
-board-specific component helpers, console retargeting, and the bus validation demos
-remain starter-specific code, kept deliberately small and hand-written. See
-`docs/source_layout.md` for the ownership rules.
+hardware integration and regression testing. Generic clock mechanics live in
+`src/hal_clock/`; Starter clock policy lives in `src/clock/`. Board pin/PPS
+wiring, board-specific component helpers, console retargeting, and the bus
+validation demos remain starter-specific code, kept deliberately small and
+hand-written. See `docs/source_layout.md` for the ownership rules.
 
 The standalone Timer HAL is maintained at
 [dspic33ak-timer-hal](https://github.com/sulaolab/dspic33ak-timer-hal). The

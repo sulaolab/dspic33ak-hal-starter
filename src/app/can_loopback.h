@@ -19,7 +19,7 @@
  *    (state=error-passive, queue timeouts). For a clean two-board exchange use
  *    the separate bus test (CAN_BUS_TEST=1, originator/echo with distinct ids).
  *
- * Call after dspic33ak_clock_can_init() (20 MHz CAN clock) and
+ * Call after starter_clock_can_init() (20 MHz CAN clock) and
  * board_can1_pins_init() (PPS + module enable + transceiver out of standby).
  */
 
