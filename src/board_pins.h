@@ -33,14 +33,14 @@
 #define BOARD_UART1_TX_RP         (114u)   /* U1TX output  -> RP114 (RH1), idle high */
 #define BOARD_UART1_RX_RP         (50u)    /* U1RX input   <- RP50  (RD1) */
 
-/* ---- UART2 (PKOB4 "USB Serial Device" -- console output mirror) ----
+/* ---- UART2 (PKOB4 "USB Serial Device" -- console mirror + tee input) ----
  *   U2TX = RH0 (RP113)   U2RX = RD10 (RP59)
  * Same Curiosity motherboard + dsPIC33AK512 DIM as the perseus firmware; this is
- * the PKOB4 back-channel UART. Phase 1 uses TX only (mirror console output);
- * U2RX (RP59) is reserved for the Phase 2 echo/mirror input path.
+ * the PKOB4 back-channel UART. TX mirrors console output; RX (Phase 2) feeds the
+ * input tee so keystrokes on this port are echoed/mirrored like UART1.
  */
 #define BOARD_UART2_TX_RP         (113u)   /* U2TX output  -> RP113 (RH0), idle high */
-#define BOARD_UART2_RX_RP         (59u)    /* U2RX input   <- RP59  (RD10), Phase 2 */
+#define BOARD_UART2_RX_RP         (59u)    /* U2RX input   <- RP59  (RD10) */
 
 /* ---- SPI4 -> SST26 external SPI NOR flash (on the Curiosity motherboard) ----
  *   SDO4 = RA12 (RP13)   SDI4 = RA13 (RP14)   SCK4 = RE1 (RP66)
