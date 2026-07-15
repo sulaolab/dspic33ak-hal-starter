@@ -43,6 +43,10 @@
 //   BRG = SYS / (2 * slots * 32 * fs) - 1.
 //   200 MHz / (2*8*32*48000) - 1 = 7  -> BCLK 12.5 MHz, fs ~48.8 kHz (expected, not exact).
 #define TDM_SMOKE_TARGET_FS_HZ   (48000u)
+// NOTE: valid only while the target BCLK (slots*32*fs) <= SYS/2, i.e. the divisor >= 1. For the
+// shipping demo geometries this holds (TDM8/48k -> BRG 7, TDM16 -> 3). A much larger slots*fs
+// would drive the divisor below 1 and the "- 1u" would underflow to a huge BRG -- keep the demo
+// within the safe range (the HAL is rate-agnostic; this macro is the starter's own convenience).
 #define TDM_SMOKE_SPI_BRG \
     ((uint32_t)((STARTER_CLOCK_SYS_HZ / (2u * (uint32_t)DSPIC33AK_TDM_SLOTS_PER_FS * 32u * TDM_SMOKE_TARGET_FS_HZ)) - 1u))
 // Expected (design) BCLK and frame rate from the resolved BRG/geometry -- printed in the
@@ -245,13 +249,18 @@ bool tdm_smoke_init(void)
     // FS_50PCT the pin reads CLC10OUT (78); inst_stop() releases CLC10 and MUST restore the
     // pin to SS1 (27); the next start re-engages (78 again). Proves the release-restore path
     // that makes a runtime FS_50PCT -> stop -> FS_PULSE -> start switch correct.
+    // Exercise the restart through the SYSTEM domain lifecycle (stop_all -> start_all_domains),
+    // the same path the normal start uses, rather than the per-leg inst_stop/inst_start.
     printf(" [FS-SW] RP70R after FS_50PCT start = %u (expect 78=CLC10OUT)\n", (unsigned)RPOR17bits.RP70R);
-    dspic33ak_spi_i2s_tdm_inst_stop(inst);
+    dspic33ak_spi_i2s_tdm_stop_all_domains();
     printf(" [FS-SW] RP70R after stop(release)  = %u (expect 27=SS1 restored)\n", (unsigned)RPOR17bits.RP70R);
-    if (!dspic33ak_spi_i2s_tdm_inst_start(inst))
+    if (!dspic33ak_spi_i2s_tdm_start_all_domains())
     {
+        // Fail closed: a failed restart is NOT a successful init (do not leave s_started true).
         s_init_error = dspic33ak_spi_i2s_tdm_get_last_error();
+        s_started    = false;
         printf(" [FS-SW] re-start FAILED: %s\n", tdm_smoke_last_error_str());
+        return false;
     }
     printf(" [FS-SW] RP70R after re-start       = %u (expect 78=CLC10OUT)\n", (unsigned)RPOR17bits.RP70R);
 #endif
@@ -332,6 +341,7 @@ const char *tdm_smoke_last_error_str(void)
         case DSPIC33AK_SPI_I2S_TDM_ERR_PIN_CONFIG:         return "pin-config";
         case DSPIC33AK_SPI_I2S_TDM_ERR_CLC:                return "clc";
         case DSPIC33AK_SPI_I2S_TDM_ERR_DMA_CONFIG:         return "dma-config";
+        case DSPIC33AK_SPI_I2S_TDM_ERR_NOT_OPEN:           return "not-open";
         default:                                           return "unknown";
     }
 }
