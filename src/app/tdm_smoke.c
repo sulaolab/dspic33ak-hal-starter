@@ -80,7 +80,9 @@ static float    s_tx_ref_meansq;            // mean-square of (lut>>16), the 0 d
 static bool     s_started;
 static dspic33ak_spi_i2s_tdm_error_t s_init_error = DSPIC33AK_SPI_I2S_TDM_ERR_NONE;
 
-// Published by the block callback (debug aid; non-atomic read in the main loop is fine).
+// Published by the block callback (debug aid). Read non-atomically from the main loop: on this
+// 16-bit core a 64-bit read may TEAR against the ISR's update, so a single status line's dB can
+// be momentarily inaccurate. This is display only -- transport control does not depend on it.
 static volatile uint32_t s_phase;           // frame phase into the sine LUT
 static volatile uint64_t s_rx_sumsq;        // last block: sum of (rx>>16)^2
 static volatile uint32_t s_rx_count;        // last block: sample count
@@ -169,7 +171,13 @@ bool tdm_smoke_init(void)
     tdm_smoke_build_sine();
 
     // Board/clock port (pin routing reached via the hook -- the HAL core stays board-free).
-    dspic33ak_spi_i2s_tdm_set_port(&s_tdm_smoke_port);
+    // set_port() is a fail-closed bool API (rejects while opened/running); honour it rather than
+    // continuing with an unbound port.
+    if (!dspic33ak_spi_i2s_tdm_set_port(&s_tdm_smoke_port))
+    {
+        s_init_error = dspic33ak_spi_i2s_tdm_get_last_error();
+        return false;
+    }
 
     inst = dspic33ak_spi_i2s_tdm_spi1();
     if (inst == NULL)
@@ -240,7 +248,14 @@ bool tdm_smoke_init(void)
     // (For FS_50PCT the HAL engages CLC10 internally just before the module turns on.)
     if (!dspic33ak_spi_i2s_tdm_start_all_domains())
     {
-        s_init_error = dspic33ak_spi_i2s_tdm_get_last_error();
+        // Fail closed: the HAL rolls back the domains it started, but open() left the shared port
+        // opened. Since close() now preserves the config mode and rejects while running (neither
+        // applies here -- nothing is running), close() to release the open state; otherwise the
+        // next tdm_smoke_init() would get ERR_ALREADY_OPEN from set_port()/configure_system().
+        // Save the real error first (close() overwrites last-error on success).
+        const dspic33ak_spi_i2s_tdm_error_t err = dspic33ak_spi_i2s_tdm_get_last_error();
+        (void)dspic33ak_spi_i2s_tdm_close();
+        s_init_error = err;
         return false;
     }
 
@@ -261,12 +276,26 @@ bool tdm_smoke_init(void)
     // Exercise the restart through the SYSTEM domain lifecycle (stop_all -> start_all_domains),
     // the same path the normal start uses, rather than the per-leg inst_stop/inst_start.
     printf(" [FS-SW] RP70R after FS_50PCT start = %u (expect 78=CLC10OUT)\n", (unsigned)RPOR17bits.RP70R);
-    dspic33ak_spi_i2s_tdm_stop_all_domains();
+    // stop_all_domains() is now a bool SYSTEM-mode API; this smoke is SYSTEM (configure_system),
+    // so it returns true. Honour it: a failed stop is a failed self-test (fail closed).
+    if (!dspic33ak_spi_i2s_tdm_stop_all_domains())
+    {
+        const dspic33ak_spi_i2s_tdm_error_t err = dspic33ak_spi_i2s_tdm_get_last_error();
+        (void)dspic33ak_spi_i2s_tdm_close();
+        s_init_error = err;
+        s_started    = false;
+        printf(" [FS-SW] stop FAILED: %s\n", tdm_smoke_last_error_str());
+        return false;
+    }
     printf(" [FS-SW] RP70R after stop(release)  = %u (expect 27=SS1 restored)\n", (unsigned)RPOR17bits.RP70R);
     if (!dspic33ak_spi_i2s_tdm_start_all_domains())
     {
-        // Fail closed: a failed restart is NOT a successful init (do not leave s_started true).
-        s_init_error = dspic33ak_spi_i2s_tdm_get_last_error();
+        // Fail closed: a failed restart is NOT a successful init. Release the still-open port
+        // (close() preserves config mode; nothing is running after a failed start) so a re-init
+        // is not blocked by ERR_ALREADY_OPEN. Preserve the real error across close().
+        const dspic33ak_spi_i2s_tdm_error_t err = dspic33ak_spi_i2s_tdm_get_last_error();
+        (void)dspic33ak_spi_i2s_tdm_close();
+        s_init_error = err;
         s_started    = false;
         printf(" [FS-SW] re-start FAILED: %s\n", tdm_smoke_last_error_str());
         return false;
@@ -302,7 +331,8 @@ void tdm_smoke_status_print(void)
         return;
     }
 
-    // Snapshot the callback's last-block accumulator (non-atomic read is acceptable here).
+    // Snapshot the callback's last-block accumulator. Non-atomic 64-bit read may tear on this
+    // 16-bit core (display only; see the s_rx_sumsq declaration note) -- acceptable here.
     sumsq = s_rx_sumsq;
     cnt   = s_rx_count;
     if ((cnt > 0u) && (s_tx_ref_meansq > 0.0f))
