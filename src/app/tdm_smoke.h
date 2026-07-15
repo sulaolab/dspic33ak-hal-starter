@@ -4,7 +4,7 @@
 /*
  * tdm_smoke.h
  * -----------
- * Codec-less SPI1 framed-mode (TDM8) smoke demo for the dspic33ak-hal-starter.
+ * Codec-less SPI1 framed-mode (TDM8) smoke demo for the AK256MPS306 HAL starter.
  *
  * Brings up SPI1 as a self-clocked TDM8 master on MikroBUS-A and drives all 8 slots with
  * the same ~800 Hz-class sine, so a scope on DataOut shows a TDM8 frame. If DataOut is

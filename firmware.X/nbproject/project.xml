@@ -3,7 +3,7 @@
     <type>com.microchip.mplab.nbide.embedded.makeproject</type>
     <configuration>
         <data xmlns="http://www.netbeans.org/ns/make-project/1">
-            <name>dspic33ak_hal_starter</name>
+            <name>dspic33ak256mps306_hal_starter</name>
             <creation-uuid>a1b2c3d4-0001-4abc-9def-0123456789ab</creation-uuid>
             <make-project-type>0</make-project-type>
             <sourceEncoding>ISO-8859-1</sourceEncoding>
@@ -13,7 +13,7 @@
             </sourceRootList>
             <confList>
                 <confElem>
-                    <name>dsPIC33AK512</name>
+                    <name>dsPIC33AK256MPS306</name>
                     <type>2</type>
                 </confElem>
             </confList>

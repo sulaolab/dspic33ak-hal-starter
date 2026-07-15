@@ -1,14 +1,14 @@
 /*
- * dspic33ak-hal-starter  -  main.c
+ * dspic33ak256mps306-hal-starter  -  main.c
  * --------------------------------
  * Minimal bring-up starter for the Microchip Curiosity Platform Development
- * Board with a dsPIC33AK512MPS512 DIM, demonstrating the dspic33ak-*-hal family.
+ * Board with a dsPIC33AK256MPS306 DIM, demonstrating the dspic33ak-*-hal family.
  *
  * Boot sequence (built up across phases):
  *   Phase 0: clock -> UART -> printf banner            <-- this file, now
- *   Phase 1: + SPI external-flash self-test
- *   Phase 2: + I2C bus scan
- *   Phase 3: + potentiometer ADC -> RGB LED, heartbeat
+ *   Phase 1: + board LEDs / switches
+ *   Phase 2: + SPI1 framed-mode TDM smoke demo on MikroBUS-A
+ *   Later:  + AK256-specific I3C/I2C-compatible work
  */
 
 #include <xc.h>
@@ -44,8 +44,7 @@
 
 /* ---- Device configuration words ----
  * Most config bits use device defaults (the device boots on the FRC, which we
- * then feed into PLL1). Alternate-I2C2 pin mapping is selected for this board. */
-#pragma config FDEVOPT_ALTI2C2 = ON   /* I2C2 on its alternate (board) pins */
+ * then feed into PLL1). */
 
 static uint8_t s_console_uart_rx_ring[256u];
 
@@ -281,9 +280,9 @@ int main(void)
 
     printf("\n\n");
     printf("==============================================\n");
-    printf(" dspic33ak-hal-starter\n");
+    printf(" dspic33ak256mps306-hal-starter\n");
     printf(" build  : " __DATE__ " " __TIME__ "\n");
-    printf(" device : dsPIC33AK512MPS512\n");
+    printf(" device : dsPIC33AK256MPS306\n");
     /* Per-die Unique Device ID (board-individual identity). UDID128 is the four
      * read-only words concatenated UDID4..UDID1 (high word first). */
     {
@@ -316,7 +315,8 @@ int main(void)
     printf(" LEDs: SW1/SW2 poll LED7/LED6; SW3 CN event drives LED5.\n");
     printf("==============================================\n");
 
-    /* ---- SPI external flash (SST26 on SPI4) ---- */
+#if HAL_STARTER_ENABLE_SST26_DEMO
+    /* ---- SPI external flash (SST26 on SPI4; disabled by default on AK256) ---- */
     if (sst26_min_init()) {
         uint8_t mfr = 0, typ = 0, dev = 0;
         bool id_ok = sst26_min_read_jedec(&mfr, &typ, &dev);
@@ -331,7 +331,12 @@ int main(void)
         printf(" SST26: SPI init failed\n");
     }
     printf("==============================================\n");
+#else
+    printf(" SST26: skipped on AK256MPS306 starter (SPI4/DIM path not available).\n");
+    printf("==============================================\n");
+#endif
 
+#if HAL_STARTER_ENABLE_I2C_SCAN_DEMO
     /* ---- I2C bus scan ----
      * We drive I2C2 (MikroBUS A, alternate pins). On this board MikroBUS A and
      * B share one I2C bus through a shorting resistor, so a scan finds devices
@@ -352,15 +357,26 @@ int main(void)
         }
     }
     printf("==============================================\n");
+#else
+    printf(" I2C scan: skipped on AK256MPS306 starter; I3C/I2C-compat path is next phase.\n");
+    printf("==============================================\n");
+#endif
 
-    /* ---- I2C master<->slave loopback (I2C2 master <-> I2C3 slave @0x55) ----
+#if HAL_STARTER_ENABLE_I2C_LOOPBACK_DEMO
+    /* ---- I2C master<->slave loopback (legacy AK512 demo path) ----
      * Bring up the I2C3 slave once; the main loop then runs one Write+Read
      * round trip per heartbeat over the shared MikroBUS A/B bus. */
     bool loopback_ok = i2c_loopback_init();
     printf(" I2C loopback: I2C2 master <-> I2C3 slave @0x55 (%s); per beat below.\n",
            loopback_ok ? "ready" : "slave init FAILED");
     printf("==============================================\n");
+#else
+    bool loopback_ok = false;
+    printf(" I2C loopback: skipped on AK256MPS306 starter.\n");
+    printf("==============================================\n");
+#endif
 
+#if HAL_STARTER_ENABLE_CAN_DEMO
     /* ---- CAN FD (CAN1) ----
      * Route the 20 MHz CAN clock (CLKGEN10) and configure the CAN1 pins (PPS +
      * module enable + transceiver out of standby). can_loopback_selftest() runs a
@@ -399,16 +415,26 @@ int main(void)
         can_bus_test_run(CAN_BUS_TEST_ECHO);   /* never returns */
     }
 #endif
+#else
+    bool can_runtime_ready = false;
+    printf(" CAN1 demo: skipped on AK256MPS306 starter pending board-pin validation.\n");
+    printf("==============================================\n");
+#endif
 
-    /* ---- Potentiometer (ADC5) -> RGB LED (PWM1/2/3) ---- */
+#if HAL_STARTER_ENABLE_RGB_POT_DEMO
+    /* ---- Potentiometer/RGB LED demo (disabled pending AK256 AD1AN2 path) ---- */
     rgb_pot_init();
     printf(" RGB LED follows the potentiometer; LED0 blinks with the heartbeat.\n");
     printf("==============================================\n");
+#else
+    printf(" RGB/POT demo: skipped on AK256MPS306 starter pending AD1AN2/RGB validation.\n");
+    printf("==============================================\n");
+#endif
 
 #if HAL_STARTER_ENABLE_TDM_SMOKE_DEMO
     /* ---- SPI1 framed-mode TDM8 smoke demo (codec-less self-clocked master, MikroBUS-A) ----
      * Drives all 8 TDM slots with a ~800 Hz-class sine so a scope on DataOut shows a TDM8
-     * frame. Jumper DataOut(RP101)->DataIn(RP106) to see the RX level near 0 dB rel. The
+     * frame. Jumper DataOut(RP12)->DataIn(RP39) to see the RX level near 0 dB rel. The
      * stream runs on DMA/ISR; the main loop only prints a status line every 5 s. A start
      * failure is reported but does NOT stop the rest of the starter. Disable in
      * app_config.h (HAL_STARTER_ENABLE_TDM_SMOKE_DEMO 0) to free the MikroBUS-A SPI pins. */
@@ -435,7 +461,9 @@ int main(void)
 #endif
     while (1)
     {
+#if HAL_STARTER_ENABLE_RGB_POT_DEMO
         rgb_pot_update();
+#endif
         led_sw_update();      /* SW1/2 polled; SW3 event state mirrored on LED5 */
         console_input_tee_poll();
 

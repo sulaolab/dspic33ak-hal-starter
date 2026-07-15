@@ -1,7 +1,7 @@
 /*
  * board.c
  * -------
- * Board pin wiring for the Curiosity + dsPIC33AK512MPS512 DIM starter.
+ * Board pin wiring for the Curiosity + dsPIC33AK256MPS306 DIM starter.
  * PPS-capable pins are configured via the RP-first GPIO API and the PPS HAL,
  * using the RP number as the single identifier for both GPIO attributes and
  * signal routing. Non-PPS pins (CS, WP, RST, STBY) use the packed-pin API.
@@ -101,6 +101,7 @@ bool board_can1_pins_init(void)
 
 bool board_spi4_sst26_pins_init(void)
 {
+#if defined(SPI4CON1) && defined(_RPOUT_SDO4) && defined(_RPOUT_SCK4) && defined(_SDI4R)
     /* Non-PPS control pins: CS/WP (active-low, idle high) and RST (asserted low
      * here; the SST26 driver releases it after the reset-pulse delay). */
     static const dspic33ak_gpio_config_t out_high = {
@@ -126,6 +127,9 @@ bool board_spi4_sst26_pins_init(void)
     if (!dspic33ak_pps_route_input(DSPIC33AK_PPS_INPUT_SDI4, BOARD_SST26_SDI4_RP)) return false;
 
     return true;
+#else
+    return false;
+#endif
 }
 
 bool board_rgb_pins_init(void)

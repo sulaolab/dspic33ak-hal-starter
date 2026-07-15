@@ -26,7 +26,7 @@ extern "C" {
 #define SST26_JEDEC_DEV   (0x12u)
 
 /* Bring up the SST26: board pins + reset pulse, then init the SPI HAL on SPI4.
- * Returns false if the SPI HAL failed to initialize. */
+ * Returns false if SPI4 is unavailable on the target or the SPI HAL failed to initialize. */
 bool sst26_min_init(void);
 
 /* Read the JEDEC ID (0x9F). Stores the three ID bytes (any pointer may be NULL)

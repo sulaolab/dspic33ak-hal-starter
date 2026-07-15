@@ -2,7 +2,7 @@
 #define DSPIC33AK_SPI_I2S_TDM_CONF_H
 
 //===========================================================
-// dspic33ak_spi_i2s_tdm_conf.h  --  dspic33ak-hal-starter PROJECT config (compiled)
+// dspic33ak_spi_i2s_tdm_conf.h  --  AK256MPS306 HAL starter project config (compiled)
 //
 // The starter's project-supplied SPI/I2S/TDM HAL config, copied from the HAL's
 // dspic33ak_spi_i2s_tdm_conf.h_example template and kept here in src/ on the include path

@@ -7,15 +7,16 @@
  * Tiny board component helper for the Curiosity motherboard's 8 user LEDs and
  * 3 user switches, built on dspic33ak_gpio (the GPIO HAL). This is not a HAL.
  *
- * Board wiring (EV74H48A + EV80L65A, dsPIC33AK512MPS512 DIM):
- *   LED0..LED7  = RC8..RC15  (active-high: drive high to light)
- *   SW1 = RF3, SW2 = RF0, SW3 = RB2  (active-low: reads 0 while pressed)
+ * Board wiring (dsPIC33AK256MPS306 DIM):
+ *   LED0..LED7 = RP50..RP57 / RD1..RD8  (active-high: drive high to light)
+ *   SW1 = RP41/RC8, SW2 = RP30/RB13, SW3 = RP29/RB12
+ *   (active-low: reads 0 while pressed)
  *
  * Note the indexing trap: LEDs are 0-based (LED0..LED7, matching the board
  * silkscreen) while switches are 1-based (SW1..SW3).
  *
- * Note RF0 is also an analog input (AD3AN4), so this sample clears ANSEL on
- * every switch RP it owns; it does not rely on board_ports_digital_default().
+ * This sample clears ANSEL on every switch RP it owns; it does not rely on
+ * board_ports_digital_default().
  */
 
 #include <stdint.h>

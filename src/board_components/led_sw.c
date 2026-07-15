@@ -4,9 +4,9 @@
  * Board component helper for the 8 user LEDs + 3 user switches, built on the
  * GPIO HAL. See led_sw.h.
  *
- * Board wiring (dsPIC33AK512MPS512 DIM on the Curiosity motherboard):
- *   LED0..LED7 = RC8..RC15  (active-high)
- *   SW1 = RF3, SW2 = RF0, SW3 = RB2  (active-low, pulled up)
+ * Board wiring (dsPIC33AK256MPS306 DIM on the Curiosity motherboard):
+ *   LED0..LED7 = RP50..RP57 / RD1..RD8  (active-high)
+ *   SW1 = RP41/RC8, SW2 = RP30/RB13, SW3 = RP29/RB12  (active-low, pulled up)
  */
 
 #include <xc.h>
@@ -18,8 +18,8 @@
 #include "dspic33ak_gpio_event.h"
 #include "dspic33ak_tick_timer.h"
 
-/* LED0..LED7 -> RC8..RC15, lit when driven high. LEDs are 0-indexed to match
- * the board silkscreen (LED0..LED7); the switches below are 1-indexed (SW1..3). */
+/* LED0..LED7 are lit when driven high. LEDs are 0-indexed to match the board
+ * silkscreen (LED0..LED7); the switches below are 1-indexed (SW1..3). */
 static const dspic33ak_gpio_pin_t LED_PINS[LED_SW_LED_COUNT] = {
     BOARD_LED0_PIN,
     BOARD_LED1_PIN,

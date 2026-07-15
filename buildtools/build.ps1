@@ -10,7 +10,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 if ([string]::IsNullOrWhiteSpace($Configuration)) {
-    $Configuration = 'dsPIC33AK512'
+    $Configuration = 'dsPIC33AK256MPS306'
 }
 
 function Invoke-CheckedCommand {

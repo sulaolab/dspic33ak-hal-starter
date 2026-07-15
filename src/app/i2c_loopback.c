@@ -17,6 +17,8 @@
 #include "dspic33ak_i2c_slave.h"
 #include "dspic33ak_tick_timer.h"
 
+#if defined(I2C3CON1)
+
 #define LB_SLAVE_INST   DSPIC33AK_I2C_INST_3   /* MikroBUS B */
 #define LB_SLAVE_ADDR   0x55u
 #define LB_LEN          8u                     /* payload length per transfer */
@@ -153,3 +155,18 @@ void i2c_loopback_tick(dspic33ak_i2c_instance_t master_inst, uint32_t beat)
 
     printf("\n");   /* blank line between per-beat round trips */
 }
+
+#else
+
+bool i2c_loopback_init(void)
+{
+    return false;
+}
+
+void i2c_loopback_tick(dspic33ak_i2c_instance_t master_inst, uint32_t beat)
+{
+    (void)master_inst;
+    (void)beat;
+}
+
+#endif

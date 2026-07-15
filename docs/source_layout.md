@@ -16,6 +16,7 @@ Reusable HAL snapshots live in module-specific `src/hal_xxx/` folders:
 | `src/hal_uart/` | UART HAL core, device table, and optional RX ISR ring backend. |
 | `src/hal_spi/` | SPI HAL core. |
 | `src/hal_i2c/` | I2C HAL common, master, slave, and device abstraction. |
+| `src/hal_i3c/` | I3C HAL foundation: common types, I3C-as-I2C-compatible controller API shape, and device/register adaptation layer. |
 | `src/hal_can/` | CAN FD HAL node/device/common code and optional ISR layer. |
 | `src/hal_timer/` | Timer1 tick and Timer2 high-resolution timer HAL. |
 | `src/hal_dma/` | DMA HAL for low-level channel setup and small IRQ helpers used by higher-level drivers. |
@@ -52,6 +53,10 @@ wiring.
 
 The `board_components` directory name is intentional: these files are
 board-specific component helpers, not reusable HAL implementations.
+
+The `hal_i3c` folder is currently a development scaffold.  It is listed in the
+project so the API and device/register mapping stay build-visible while the
+command queue and timing implementation are filled in.
 
 ## MPLAB X project updates
 

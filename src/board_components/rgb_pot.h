@@ -4,13 +4,13 @@
 /*
  * rgb_pot.h
  * ---------
- * Board component helper (NOT a HAL): read the on-board potentiometer with ADC5
- * and drive the RGB LED color with PWM1/2/3. Minimal, hand-written register
- * setup, just enough to be a lively demo. A real project would wrap ADC/PWM in
- * proper drivers.
+ * Board component helper (NOT a HAL): original AK512 RGB/POT demo.
  *
- * Pin routing (PPS + LED GPIO) is owned by board_rgb_pins_init(); the pot analog
- * pin (RA7 / AD5AN0) ANSEL is set here.
+ * On AK256MPS306 this translation unit currently builds as a no-op stub because
+ * the pot moved to AD1AN2 / RA3 and needs a fresh board path.
+ *
+ * Pin routing (PPS + LED GPIO) is owned by board_rgb_pins_init() when the demo
+ * is enabled on a supported board.
  */
 
 #include <stdint.h>
@@ -19,8 +19,8 @@
 extern "C" {
 #endif
 
-/* Set up the pot ADC (ADC5 ch0) and the RGB PWM (PG1/2/3). Calls
- * board_rgb_pins_init() for the LED pins/PPS. Call once after the clock is up. */
+/* Set up the pot ADC and RGB PWM on supported boards. No-op on AK256MPS306
+ * until the AD1AN2 path is implemented. */
 void rgb_pot_init(void);
 
 /* Read the pot (0..4095) and update the RGB LED color from it. */

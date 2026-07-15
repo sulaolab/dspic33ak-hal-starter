@@ -14,6 +14,7 @@
  */
 
 #include "can_rx_isr_selftest.h"
+#include "app_config.h"
 #include "can_bus_test.h"   /* CAN_BUS_TEST: decides who owns the CAN1 vectors */
 
 #include <xc.h>
@@ -71,7 +72,7 @@ static void rxisr_callback(dspic33ak_canfd_instance_t inst, uint32_t events, voi
  * is intentionally NOT defined: dspic33ak_canfd_isr_enable() never enables the
  * _C1TXIE line, so it cannot fire. (When CAN_BUS_TEST=1 the two-board test owns
  * the CAN1 vectors instead, so guard these out to avoid duplicate symbols.) */
-#if !CAN_BUS_TEST
+#if HAL_STARTER_ENABLE_CAN_DEMO && !CAN_BUS_TEST
 void __attribute__((interrupt, no_auto_psv)) _C1RXInterrupt(void)
 {
     dspic33ak_canfd_irq_handler(DSPIC33AK_CANFD_INST_1);

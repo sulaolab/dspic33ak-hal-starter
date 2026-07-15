@@ -7,7 +7,7 @@ param(
     [Alias('clean-java')]
     [switch]$CleanJava,
     [string]$Serial = $env:PKOB4_SERIAL,
-    [string]$Device = 'dsPIC33AK512MPS512',
+    [string]$Device = 'dsPIC33AK256MPS306',
     [string]$ResetDevice,
     [string]$Hex,
     [string]$Configuration = $env:MPLABX_CONF,
@@ -20,7 +20,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 if ([string]::IsNullOrWhiteSpace($Configuration)) {
-    $Configuration = 'dsPIC33AK512'
+    $Configuration = 'dsPIC33AK256MPS306'
 }
 if ($Verbose -and $Quiet) {
     throw "Use either -Verbose or -Quiet, not both."

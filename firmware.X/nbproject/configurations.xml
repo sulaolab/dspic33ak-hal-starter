@@ -67,6 +67,11 @@
         <itemPath>../src/hal_i2c/dspic33ak_i2c_slave.c</itemPath>
         <itemPath>../src/hal_i2c/dspic33ak_i2c_device.c</itemPath>
       </logicalFolder>
+      <logicalFolder name="f23" displayName="hal_i3c" projectFiles="true">
+        <itemPath>../src/hal_i3c/dspic33ak_i3c_common.c</itemPath>
+        <itemPath>../src/hal_i3c/dspic33ak_i3c_master.c</itemPath>
+        <itemPath>../src/hal_i3c/dspic33ak_i3c_device.c</itemPath>
+      </logicalFolder>
       <logicalFolder name="f9" displayName="hal_spi" projectFiles="true">
         <itemPath>../src/hal_spi/dspic33ak_spi.c</itemPath>
       </logicalFolder>
@@ -98,10 +103,10 @@
   </sourceRootList>
   <projectmakefile>Makefile</projectmakefile>
   <confs>
-    <conf name="dsPIC33AK512" type="2">
+    <conf name="dsPIC33AK256MPS306" type="2">
       <toolsSet>
         <developmentServer>localhost</developmentServer>
-        <targetDevice>dsPIC33AK512MPS512</targetDevice>
+        <targetDevice>dsPIC33AK256MPS306</targetDevice>
         <targetHeader></targetHeader>
         <targetPluginBoard></targetPluginBoard>
         <platformTool>pkob4hybrid</platformTool>
@@ -157,7 +162,7 @@
         <property key="enable-unroll-loops" value="false"/>
         <property key="expand-pragma-config" value="false"/>
         <property key="extra-include-directories"
-                  value="..\src;..\src\clock;..\src\board_components;..\src\console;..\src\hal_clock;..\src\hal_gpio;..\src\hal_uart;..\src\hal_spi;..\src\hal_i2c;..\src\hal_can;..\src\hal_timer;..\src\hal_udid;..\src\app;..\src\hal_dma;..\src\hal_spi_i2s_tdm"/>
+                  value="..\src;..\src\clock;..\src\board_components;..\src\console;..\src\hal_clock;..\src\hal_gpio;..\src\hal_uart;..\src\hal_spi;..\src\hal_i2c;..\src\hal_i3c;..\src\hal_can;..\src\hal_timer;..\src\hal_udid;..\src\app;..\src\hal_dma;..\src\hal_spi_i2s_tdm"/>
         <property key="isolate-each-function" value="false"/>
         <property key="keep-inline" value="false"/>
         <property key="oXC16gcc-cnsts-mauxflash" value="false"/>

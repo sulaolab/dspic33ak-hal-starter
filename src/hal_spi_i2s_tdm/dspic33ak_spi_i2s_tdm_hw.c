@@ -123,6 +123,27 @@ static const tdm_spi_dev_t s_spi_dev[] =
         { &IEC2, _IEC2_SPI3RXIE_MASK, &IFS2, _IFS2_SPI3RXIF_MASK },
         { &IEC2, _IEC2_SPI3TXIE_MASK, &IFS2, _IFS2_SPI3TXIF_MASK },
     },
+#elif DSPIC33AK_SPI_I2S_TDM_DEVICE == DSPIC33AK_SPI_I2S_TDM_DEV_AK256MPS306
+    // dsPIC33AK256MPS306: SPI1-3, no SPI4. DMA trigger and IRQ locations match
+    // the AK512 SPI1-3 table in the current dsPIC33AK-MP DFP/family data.
+    [TDM_SPI1] =
+    {
+        (volatile void *)&SPI1BUF, &SPI1CON1, &SPI1BRG, &SPI1IMSK, 0x6u, 0x7u,
+        { &IEC2, _IEC2_SPI1RXIE_MASK, &IFS2, _IFS2_SPI1RXIF_MASK },
+        { &IEC2, _IEC2_SPI1TXIE_MASK, &IFS2, _IFS2_SPI1TXIF_MASK },
+    },
+    [TDM_SPI2] =
+    {
+        (volatile void *)&SPI2BUF, &SPI2CON1, &SPI2BRG, &SPI2IMSK, 0x8u, 0x9u,
+        { &IEC2, _IEC2_SPI2RXIE_MASK, &IFS2, _IFS2_SPI2RXIF_MASK },
+        { &IEC2, _IEC2_SPI2TXIE_MASK, &IFS2, _IFS2_SPI2TXIF_MASK },
+    },
+    [TDM_SPI3] =
+    {
+        (volatile void *)&SPI3BUF, &SPI3CON1, &SPI3BRG, &SPI3IMSK, 0xAu, 0xBu,
+        { &IEC2, _IEC2_SPI3RXIE_MASK, &IFS2, _IFS2_SPI3RXIF_MASK },
+        { &IEC2, _IEC2_SPI3TXIE_MASK, &IFS2, _IFS2_SPI3TXIF_MASK },
+    },
 #endif
 };
 

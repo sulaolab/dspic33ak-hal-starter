@@ -11,13 +11,16 @@
 //===========================================================
 #define DSPIC33AK_SPI_I2S_TDM_DEV_AK512   (1)
 #define DSPIC33AK_SPI_I2S_TDM_DEV_AK128   (2)
+#define DSPIC33AK_SPI_I2S_TDM_DEV_AK256MPS306 (3)
 
 #if   defined(__dsPIC33AK512MPS512__)
   #define DSPIC33AK_SPI_I2S_TDM_DEVICE    DSPIC33AK_SPI_I2S_TDM_DEV_AK512
 #elif defined(__dsPIC33AK128MC106__)
   #define DSPIC33AK_SPI_I2S_TDM_DEVICE    DSPIC33AK_SPI_I2S_TDM_DEV_AK128
+#elif defined(__dsPIC33AK256MPS306__)
+  #define DSPIC33AK_SPI_I2S_TDM_DEVICE    DSPIC33AK_SPI_I2S_TDM_DEV_AK256MPS306
 #else
-  #error "Unsupported device -- the SPI/I2S/TDM HAL expects __dsPIC33AK512MPS512__ or __dsPIC33AK128MC106__."
+  #error "Unsupported device -- add this part's SPI/I2S/TDM silicon facts in dspic33ak_spi_i2s_tdm_hw.{c,h}."
 #endif
 
 //===========================================================
@@ -38,8 +41,9 @@
 // vectors are generated from it).
 //
 // Supported-device limitation: the silicon-facts paths currently cover
-// __dsPIC33AK512MPS512__ and __dsPIC33AK128MC106__ only; other parts need their
-// facts added in dspic33ak_spi_i2s_tdm_hw.{c,h}. Sibling dependencies are
+// __dsPIC33AK512MPS512__, __dsPIC33AK128MC106__, and
+// __dsPIC33AK256MPS306__; other parts need their facts added in
+// dspic33ak_spi_i2s_tdm_hw.{c,h}. Sibling dependencies are
 // dspic33ak_dma (required) and dspic33ak_high_res_timer (compile/link dependency
 // for the load monitor, runtime-gated via is_initialized()).
 //===========================================================

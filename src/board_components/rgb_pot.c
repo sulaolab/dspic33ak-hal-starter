@@ -18,6 +18,8 @@
 #include "dspic33ak_gpio.h"
 #include "rgb_pot.h"
 
+#if defined(AD5CON) && defined(PG1CON) && defined(PG2CON) && defined(PG3CON)
+
 /* PWM generator period (Q4 format, as the PG period register expects). Off the
  * 200 MHz CLKGEN5 this is ~13 kHz - well above flicker, fine for an LED. */
 #define RGB_PWM_PER        (15360u << 4)   /* = 245760 */
@@ -149,3 +151,22 @@ void rgb_pot_update(void)
     pwm_rgb_set(2, green);
     pwm_rgb_set(3, red);
 }
+
+#else
+
+/*
+ * AK256MPS306 migration note:
+ * The original starter demo used ADC5 channel 0 on the AK512 DIM.  The
+ * AK256MPS306 DIM exposes the pot at AD1AN2 / RA3, and the RGB/POT demo is
+ * intentionally disabled until that path is implemented.  Keep this translation
+ * unit buildable so the project layout remains stable across devices.
+ */
+void rgb_pot_init(void)
+{
+}
+
+void rgb_pot_update(void)
+{
+}
+
+#endif

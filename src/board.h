@@ -32,10 +32,8 @@ bool board_uart1_pins_init(void);
  * U2RX digital input, plus PPS routing. Returns false if any step failed. */
 bool board_uart2_pins_init(void);
 
-/* Configure the SST26 SPI4 pins: SDO/SCK digital outputs (idle low), SDI digital
- * input, CS/WP idle high (deasserted), RST asserted low; plus PPS routing.
- * RST is left asserted; the SST26 driver completes the reset pulse.
- * Returns false if any step failed. */
+/* Configure the legacy SST26 SPI4 pins. Returns false on AK256MPS306 because
+ * this DIM path is not available there. */
 bool board_spi4_sst26_pins_init(void);
 
 /* Configure the RGB LED pins (digital outputs) and route the PWM generator
