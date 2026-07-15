@@ -32,6 +32,7 @@
 #include "board.h"
 #include "app_config.h"
 #include "tdm_smoke.h"
+#include "tdm_neg_test.h"
 #if HAL_STARTER_ENABLE_UART_ASYNC_SELFTEST
 #include "uart_async_selftest.h"
 #endif
@@ -404,6 +405,19 @@ int main(void)
     rgb_pot_init();
     printf(" RGB LED follows the potentiometer; LED0 blinks with the heartbeat.\n");
     printf("==============================================\n");
+
+#if HAL_STARTER_ENABLE_TDM_NEG_TEST
+    /* ---- OPT-IN SPI/I2S/TDM HAL negative-validation self-test (contract regression) ----
+     * Runs BEFORE the smoke demo and leaves the HAL stopped + closed so the smoke starts
+     * normally. Prints "[NEG] pass=N fail=M"; a failure is reported but does NOT stop the
+     * starter. Default OFF (app_config.h). */
+    if (tdm_neg_test_run()) {
+        printf(" [NEG] all negative-validation cases PASSED.\n");
+    } else {
+        printf(" [NEG] one or more cases FAILED (see [NEG] lines above).\n");
+    }
+    printf("==============================================\n");
+#endif
 
 #if HAL_STARTER_ENABLE_TDM_SMOKE_DEMO
     /* ---- SPI1 framed-mode TDM8 smoke demo (codec-less self-clocked master, MikroBUS-A) ----

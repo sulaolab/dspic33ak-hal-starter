@@ -68,4 +68,20 @@
 #define HAL_STARTER_ENABLE_UART_ASYNC_SELFTEST 0
 #endif
 
+/*
+ * OPT-IN SPI/I2S/TDM HAL negative-validation self-test -- default OFF.
+ *
+ * When 1: at boot, BEFORE the TDM smoke demo, drive the SPI/I2S/TDM HAL through its misuse
+ * paths and assert each returns the documented bool + dspic33ak_spi_i2s_tdm_error_t
+ * (wrong-config-mode, not-open, bad-instance, already-open, already-running, topology,
+ * clock-not-ready, invalid-domain), plus the non-destructive double-start on a 2-leg build.
+ * Prints one line per case and a "[NEG] pass=N fail=M" summary, then leaves the HAL stopped +
+ * closed so the smoke demo starts normally. Pure API-contract test -- needs no external signals.
+ * The 2-leg cases are exercised only in a DSPIC33AK_TDM_USE_SPI2=1 build (logged skipped otherwise).
+ * For contract-regression verification only; keep 0 for the shipped starter.
+ */
+#ifndef HAL_STARTER_ENABLE_TDM_NEG_TEST
+#define HAL_STARTER_ENABLE_TDM_NEG_TEST 0
+#endif
+
 #endif /* APP_CONFIG_H */
