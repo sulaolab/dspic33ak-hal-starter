@@ -45,10 +45,19 @@
 #define TDM_SMOKE_TARGET_FS_HZ   (48000u)
 // NOTE: valid only while the target BCLK (slots*32*fs) <= SYS/2, i.e. the divisor >= 1. For the
 // shipping demo geometries this holds (TDM8/48k -> BRG 7, TDM16 -> 3). A much larger slots*fs
-// would drive the divisor below 1 and the "- 1u" would underflow to a huge BRG -- keep the demo
-// within the safe range (the HAL is rate-agnostic; this macro is the starter's own convenience).
+// would drive the divisor below 1 and the "- 1" would underflow to a huge BRG -- the
+// _Static_assert below turns that misconfiguration into a build failure instead of a runtime
+// surprise. The arithmetic is done in uint64_t so the intermediate slots*32*fs cannot overflow.
 #define TDM_SMOKE_SPI_BRG \
-    ((uint32_t)((STARTER_CLOCK_SYS_HZ / (2u * (uint32_t)DSPIC33AK_TDM_SLOTS_PER_FS * 32u * TDM_SMOKE_TARGET_FS_HZ)) - 1u))
+    ((uint32_t)(((uint64_t)STARTER_CLOCK_SYS_HZ / \
+                 (2ull * (uint64_t)DSPIC33AK_TDM_SLOTS_PER_FS * 32ull * (uint64_t)TDM_SMOKE_TARGET_FS_HZ)) - 1ull))
+// Build-fail (not just comment) if the requested BCLK exceeds the available SPI clock: the divisor
+// would be < 1 and the "- 1" underflow to a huge BRG. All operands are compile-time constants.
+_Static_assert(
+    (uint64_t)STARTER_CLOCK_SYS_HZ >=
+        (2ull * (uint64_t)DSPIC33AK_TDM_SLOTS_PER_FS * 32ull * (uint64_t)TDM_SMOKE_TARGET_FS_HZ),
+    "TDM_SMOKE: requested BCLK (slots*32*fs) exceeds the SPI clock; SPI_BRG would underflow -- "
+    "lower TDM_SMOKE_TARGET_FS_HZ or the slot count." );
 // Expected (design) BCLK and frame rate from the resolved BRG/geometry -- printed in the
 // status line so it stays correct across TDM8 (BRG=7, ~12.5 MHz) and TDM16 (BRG=3, ~25 MHz).
 #define TDM_SMOKE_EXP_BCLK_HZ \
@@ -342,6 +351,8 @@ const char *tdm_smoke_last_error_str(void)
         case DSPIC33AK_SPI_I2S_TDM_ERR_CLC:                return "clc";
         case DSPIC33AK_SPI_I2S_TDM_ERR_DMA_CONFIG:         return "dma-config";
         case DSPIC33AK_SPI_I2S_TDM_ERR_NOT_OPEN:           return "not-open";
+        case DSPIC33AK_SPI_I2S_TDM_ERR_ALREADY_OPEN:       return "already-open";
+        case DSPIC33AK_SPI_I2S_TDM_ERR_CONFIG_MODE:        return "config-mode";
         default:                                           return "unknown";
     }
 }

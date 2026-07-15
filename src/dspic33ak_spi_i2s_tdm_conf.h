@@ -125,11 +125,12 @@
 #define DSPIC33AK_TDM_SPI2_SYNC_DOMAIN   (0)
 #endif
 
-// sync_domain must be 0..31 (start_all_domains()'s dedup/rollback mask range).
-#if (DSPIC33AK_TDM_SPI1_SYNC_DOMAIN >= 32)
+// sync_domain must be 0..31 (start_all_domains()'s dedup/rollback mask range). Reject negatives
+// too: a negative literal would cast to a large uint8_t at runtime.
+#if ((DSPIC33AK_TDM_SPI1_SYNC_DOMAIN) < 0) || ((DSPIC33AK_TDM_SPI1_SYNC_DOMAIN) >= 32)
 #error "DSPIC33AK_TDM_SPI1_SYNC_DOMAIN must be in 0..31."
 #endif
-#if DSPIC33AK_TDM_USE_SPI2 && (DSPIC33AK_TDM_SPI2_SYNC_DOMAIN >= 32)
+#if DSPIC33AK_TDM_USE_SPI2 && (((DSPIC33AK_TDM_SPI2_SYNC_DOMAIN) < 0) || ((DSPIC33AK_TDM_SPI2_SYNC_DOMAIN) >= 32))
 #error "DSPIC33AK_TDM_SPI2_SYNC_DOMAIN must be in 0..31."
 #endif
 
