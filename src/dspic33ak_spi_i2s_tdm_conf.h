@@ -69,11 +69,11 @@
 // DMA channel allocation (single source of truth for the SPI<->DMA binding)
 //
 // Each SPI Audio instance owns one RX + one TX DMA channel. These numbers are read by
-// the HAL core both for its s_spi_legs[] table AND for its generated _DMAnInterrupt
-// vectors (the core builds the vector names from them by token-paste), so changing an
-// assignment here moves the whole chain -- leg table and vector -- together. Each is
-// -D overridable. Maintain a chip-wide map by hand: the HAL cannot see other
-// subsystems' DMA usage. Duplicate channels fail the build (redefined vector).
+// the HAL core for its s_spi_legs[] table and to bind its explicit _DMA<rx>Interrupt
+// vectors (a compile-time assert ties each vector to its RX-DMA channel; change a channel
+// and the build fails until the vector + assert match). Each is -D overridable. Maintain a
+// chip-wide map by hand: the HAL cannot see other subsystems' DMA usage. Duplicate channels
+// fail the build (redefined vector).
 //===========================================================
 #ifndef DSPIC33AK_TDM_SPI1_RX_DMA
 #define DSPIC33AK_TDM_SPI1_RX_DMA   0
@@ -102,27 +102,28 @@
 
 
 //===========================================================
-// Instance descriptor list -- SINGLE SOURCE for instance count + assignment.
+// Instance count + physical assignment.
 //
-//   X( leg-name, phys-SPI, RX-DMA, TX-DMA, role, slots, blk )
-// The FIRST row is the block-timing REFERENCE (BLOCK_REF -- its RX-block ISR defines the
-// block boundary and is what is_running()/the singleton get_status() report); the rest
-// are FOLLOWERs. BLOCK_REF is NOT a clock master; the clock role (master/slave) is
-// separate and per-instance (config_t.role).
-// slots/blk are PER INSTANCE (each leg's Rx_<name>/Tx_<name> is sized 2*slots*blk), so
-// different legs may run different framing/block sizes. The core generates the leg enum,
-// per-instance buffers, the s_spi_legs[] table, and the per-instance _DMAnInterrupt
-// vectors from this list -- adding an instance = add a row (a free SPI + two free DMA
-// channels).
+// The transport core defines its leg enum, per-instance ping-pong buffers, the
+// s_spi_legs[] table, and the explicit _DMA<rx>Interrupt vectors directly in C, keyed off
+// the per-instance channel #defines above (DSPIC33AK_TDM_SPIn_RX/TX_DMA) and the geometry
+// macros (DSPIC33AK_TDM_SLOTS_PER_FS / _BLOCK_FRAMES). The number of legs is chosen by
+// DSPIC33AK_TDM_USE_SPI2 (1 or 2 SPI audio transports) -- there is no macro row list.
+// The per-leg clock role and (rate-agnostic) stream shape are set at runtime by the
+// integrator's config (dspic33ak_spi_i2s_tdm_configure_system() / _inst_configure()),
+// not here.
 //===========================================================
-#if DSPIC33AK_TDM_USE_SPI2
-#define DSPIC33AK_TDM_INSTANCE_LIST(X)                                                                                              \
-    X( SPI1, TDM_SPI1, DSPIC33AK_TDM_SPI1_RX_DMA, DSPIC33AK_TDM_SPI1_TX_DMA, BLOCK_REF, DSPIC33AK_TDM_SLOTS_PER_FS, DSPIC33AK_TDM_BLOCK_FRAMES ) \
-    X( SPI2, TDM_SPI2, DSPIC33AK_TDM_SPI2_RX_DMA, DSPIC33AK_TDM_SPI2_TX_DMA, FOLLOWER, DSPIC33AK_TDM_SLOTS_PER_FS, DSPIC33AK_TDM_BLOCK_FRAMES )
-#else
-#define DSPIC33AK_TDM_INSTANCE_LIST(X)                                                                                              \
-    X( SPI1, TDM_SPI1, DSPIC33AK_TDM_SPI1_RX_DMA, DSPIC33AK_TDM_SPI1_TX_DMA, BLOCK_REF, DSPIC33AK_TDM_SLOTS_PER_FS, DSPIC33AK_TDM_BLOCK_FRAMES )
-#endif // DSPIC33AK_TDM_USE_SPI2
+
+// Per-leg SYNC DOMAIN id: the s_spi_legs[] default (a caller using configure_system() may
+// override it per leg at runtime). Legs sharing a domain are co-clocked and started
+// phase-locked as a group; different domains are independent/async. NOT the clock role.
+// Starter smoke is SPI1-only, so SPI2's value is used only when DSPIC33AK_TDM_USE_SPI2=1.
+#ifndef DSPIC33AK_TDM_SPI1_SYNC_DOMAIN
+#define DSPIC33AK_TDM_SPI1_SYNC_DOMAIN   (0)
+#endif
+#ifndef DSPIC33AK_TDM_SPI2_SYNC_DOMAIN
+#define DSPIC33AK_TDM_SPI2_SYNC_DOMAIN   (0)
+#endif
 
 
 #if (DSPIC33AK_TDM_SLOTS_PER_FS <= 0)

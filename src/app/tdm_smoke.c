@@ -106,10 +106,11 @@ static void tdm_smoke_block_cb(const int32_t *src, int32_t *dst, void *user)
 //===========================================================
 // Board/clock port: pins only (master-only demo). No external clock / CLC.
 //===========================================================
-static bool tdm_smoke_configure_pins(dspic33ak_spi_i2s_tdm_role_t role)
+static bool tdm_smoke_configure_pins(dspic33ak_spi_i2s_tdm_clock_role_t role)
 {
     // This demo is master-only; reject any other role rather than silently mis-routing.
-    if (role != DSPIC33AK_SPI_I2S_TDM_ROLE_MASTER)
+    // open() passes the committed primary leg's role here (MASTER for this smoke).
+    if (role != DSPIC33AK_SPI_I2S_TDM_CLOCK_MASTER)
     {
         return false;
     }
@@ -171,52 +172,60 @@ bool tdm_smoke_init(void)
         return false;
     }
 
-    // TDM self-clocked master config (TDM8 by default). Geometry comes from the same conf.h constants that
-    // sized the HAL's static DMA buffers; BRG sets the master BCLK from the system clock.
-    const dspic33ak_spi_i2s_tdm_config_t cfg =
+    // TDM self-clocked master config (TDM8 by default), expressed as a one-leg SYSTEM table
+    // and applied via the public transactional path configure_system() -> open() ->
+    // start_all_domains(). Geometry comes from the same conf.h constants that sized the HAL's
+    // static DMA buffers; BRG sets the master BCLK from the system clock. Every stream field
+    // is stated explicitly (no default builder + override).
+    static const dspic33ak_spi_i2s_tdm_leg_setup_t s_tdm_system[] =
     {
-        .format                       = DSPIC33AK_SPI_I2S_TDM_FORMAT_TDM,
-        .role                         = DSPIC33AK_SPI_I2S_TDM_ROLE_MASTER,
-        .slots_per_fs                 = (uint8_t)DSPIC33AK_TDM_SLOTS_PER_FS,
-        .word_bits                    = 32u,
-        .block_frames                 = (uint16_t)DSPIC33AK_TDM_BLOCK_FRAMES,
-        .brg                          = TDM_SMOKE_SPI_BRG,
-        .mclk_enable                  = true,    // MCLKEN=1 (CLKGEN9 reference)
+        {
+            .stream =
+            {
+                .format                        = DSPIC33AK_SPI_I2S_TDM_FORMAT_TDM,
+                .clock_role                    = DSPIC33AK_SPI_I2S_TDM_CLOCK_MASTER,
+                .slots_per_fs                  = (uint8_t)DSPIC33AK_TDM_SLOTS_PER_FS,
+                .word_bits                     = 32u,
 #if APP_TDM_MASTER_FS50_BY_CLC10
-        // 50%-duty FS: for this TDM8 master the HAL emits a half-frame marker and engages
-        // CLC10 to toggle it into a ~50%-duty FS on the FS pin (all hidden in the HAL).
-        .fs_shape                     = DSPIC33AK_SPI_I2S_TDM_FS_50PCT,
+                // 50%-duty FS: for this TDM8 master the HAL emits a half-frame marker and
+                // engages CLC10 to toggle it into a ~50%-duty FS on the FS pin (HAL-internal).
+                .fs_shape                      = DSPIC33AK_SPI_I2S_TDM_FS_50PCT,
 #else
-        .fs_shape                     = DSPIC33AK_SPI_I2S_TDM_FS_PULSE,  // short 1-BCLK frame sync
+                .fs_shape                      = DSPIC33AK_SPI_I2S_TDM_FS_PULSE,  // short 1-BCLK frame sync
 #endif
-        .fs_coincides_first_bclk      = true,    // SPIFE=1 : no 1-bit delay (TDM8)
-        .bclk_idle_high               = true,    // CKP=1
-        .bclk_change_on_active_to_idle = false,  // CKE=0
-        .ignore_overflow              = true,    // IGNROV=1
-        .ignore_underrun              = true,    // IGNTUR=1
+                .block_frames                  = (uint16_t)DSPIC33AK_TDM_BLOCK_FRAMES,
+                .brg                           = TDM_SMOKE_SPI_BRG,
+                .mclk_enable                   = true,    // MCLKEN=1 (CLKGEN9 reference)
+                .fs_coincides_first_bclk       = true,    // SPIFE=1 : no 1-bit delay (TDM8)
+                .bclk_idle_high                = true,    // CKP=1
+                .bclk_change_on_active_to_idle = false,   // CKE=0
+                .ignore_overflow               = true,    // IGNROV=1
+                .ignore_underrun               = true,    // IGNTUR=1
+            },
+            .sync_domain = 0u,
+        },
     };
-    if (!dspic33ak_spi_i2s_tdm_inst_configure(inst, &cfg))
-    {
-        s_init_error = dspic33ak_spi_i2s_tdm_get_last_error();
-        return false;
-    }
 
-    // The DMA HAL must be globally initialized before any channel config (inst_start()
-    // arms the SPI1 RX/TX DMA). Only the TDM demo uses DMA on this board, so bring it up
-    // here, before start.
+    // The DMA HAL must be globally initialized before any channel config / start (start
+    // arms the SPI1 RX/TX DMA). Only the TDM demo uses DMA on this board.
     dspic33ak_dma_global_init();
 
-    // Open the shared port (routes MikroBUS-A SPI1 pins via the hook) for the master role.
-    if (!dspic33ak_spi_i2s_tdm_open(DSPIC33AK_SPI_I2S_TDM_ROLE_MASTER))
+    // Transactional whole-system configure (one leg here). open() takes NO role -- it derives
+    // the master role from this committed primary leg and passes it to the pin hook.
+    if (!dspic33ak_spi_i2s_tdm_configure_system(
+            s_tdm_system, (uint8_t)(sizeof(s_tdm_system) / sizeof(s_tdm_system[0]))))
     {
         s_init_error = dspic33ak_spi_i2s_tdm_get_last_error();
         return false;
     }
-
-    // Arm DMA + enable SPI1: the stream now runs autonomously on DMA/ISR.
-    // (For the FS_50PCT config the HAL's inst_start() engages CLC10 internally just before
-    // the module turns on -- no app/CLC code here.)
-    if (!dspic33ak_spi_i2s_tdm_inst_start(inst))
+    if (!dspic33ak_spi_i2s_tdm_open())
+    {
+        s_init_error = dspic33ak_spi_i2s_tdm_get_last_error();
+        return false;
+    }
+    // Start the sync domain: arms DMA + enables SPI1; the stream runs autonomously on DMA/ISR.
+    // (For FS_50PCT the HAL engages CLC10 internally just before the module turns on.)
+    if (!dspic33ak_spi_i2s_tdm_start_all_domains())
     {
         s_init_error = dspic33ak_spi_i2s_tdm_get_last_error();
         return false;
