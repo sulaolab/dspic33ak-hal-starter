@@ -159,10 +159,13 @@ static void neg_single_mode( dspic33ak_spi_i2s_tdm_inst_t *spi1 )
                 dspic33ak_spi_i2s_tdm_inst_configure( spi1, &master ),
                 false, DSPIC33AK_SPI_I2S_TDM_ERR_ALREADY_OPEN );
     {
-        dspic33ak_spi_i2s_tdm_leg_setup_t s0;
-        s0.stream = master; s0.sync_domain = 0u;
+        // Pass a correctly-sized array (count == built leg count) even though this call is rejected
+        // early (ALREADY_OPEN) -- don't lean on the HAL's internal validation order in a 2-leg build.
+        dspic33ak_spi_i2s_tdm_leg_setup_t setups[2];
+        setups[0].stream = master;                                          setups[0].sync_domain = 0u;
+        setups[1].stream = neg_cfg( DSPIC33AK_SPI_I2S_TDM_CLOCK_SLAVE, true ); setups[1].sync_domain = 0u;
         neg_expect( "configure_system while open -> ALREADY_OPEN",
-                    dspic33ak_spi_i2s_tdm_configure_system( &s0, dspic33ak_spi_i2s_tdm_instance_count() ),
+                    dspic33ak_spi_i2s_tdm_configure_system( setups, dspic33ak_spi_i2s_tdm_instance_count() ),
                     false, DSPIC33AK_SPI_I2S_TDM_ERR_ALREADY_OPEN );
     }
 
@@ -218,8 +221,12 @@ static void neg_readiness( dspic33ak_spi_i2s_tdm_inst_t *spi1 )
                 dspic33ak_spi_i2s_tdm_inst_start( spi1 ),
                 true, DSPIC33AK_SPI_I2S_TDM_ERR_NONE );
 
-    (void)dspic33ak_spi_i2s_tdm_inst_stop( spi1 );
-    (void)dspic33ak_spi_i2s_tdm_close();
+    neg_expect( "readiness cleanup inst_stop -> ok",
+                dspic33ak_spi_i2s_tdm_inst_stop( spi1 ),
+                true, DSPIC33AK_SPI_I2S_TDM_ERR_NONE );
+    neg_expect( "readiness cleanup close -> ok",
+                dspic33ak_spi_i2s_tdm_close(),
+                true, DSPIC33AK_SPI_I2S_TDM_ERR_NONE );
     neg_expect( "set_port(NULL) -> ok",
                 dspic33ak_spi_i2s_tdm_set_port( NULL ),
                 true, DSPIC33AK_SPI_I2S_TDM_ERR_NONE );
@@ -273,7 +280,9 @@ static void neg_system_mode( dspic33ak_spi_i2s_tdm_inst_t *spi1 )
     neg_expect( "inst_start in SYSTEM -> CONFIG_MODE",
                 dspic33ak_spi_i2s_tdm_inst_start( spi1 ),
                 false, DSPIC33AK_SPI_I2S_TDM_ERR_CONFIG_MODE );
-    (void)dspic33ak_spi_i2s_tdm_close();
+    neg_expect( "system_mode cleanup close -> ok",
+                dspic33ak_spi_i2s_tdm_close(),
+                true, DSPIC33AK_SPI_I2S_TDM_ERR_NONE );
 }
 
 // 2-leg-only: two-masters-per-domain / same-domain framing mismatch / non-destructive double-start.
@@ -289,13 +298,71 @@ static void neg_two_leg( dspic33ak_spi_i2s_tdm_inst_t *spi1, dspic33ak_spi_i2s_t
                 dspic33ak_spi_i2s_tdm_configure_system( s, 2u ),
                 false, DSPIC33AK_SPI_I2S_TDM_ERR_TOPOLOGY );
 
-    // (h) same-domain framing mismatch (CKP differs) -> TOPOLOGY (preflight). One master, so it
-    // fails the framing check, not the >1-master check.
-    s[0].stream = neg_cfg( DSPIC33AK_SPI_I2S_TDM_CLOCK_MASTER, true  ); s[0].sync_domain = 0u;
-    s[1].stream = neg_cfg( DSPIC33AK_SPI_I2S_TDM_CLOCK_SLAVE,  false ); s[1].sync_domain = 0u;
-    neg_expect( "configure_system(framing mismatch) -> TOPOLOGY",
-                dspic33ak_spi_i2s_tdm_configure_system( s, 2u ),
-                false, DSPIC33AK_SPI_I2S_TDM_ERR_TOPOLOGY );
+    // (h) same-domain framing mismatch -> TOPOLOGY (preflight). One master (so it fails the framing
+    // check, not the >1-master check); flip ONE framing field at a time on the slave leg. Each of
+    // SPIFE / CKP / CKE / fs_shape is compared by tdm_domain_framing_matches. (format/slots/word_bits
+    // are rejected earlier by the per-leg envelope check, so they can't isolate the framing path.)
+    {
+        // SPIFE (fs_coincides_first_bclk)
+        s[0].stream = neg_cfg( DSPIC33AK_SPI_I2S_TDM_CLOCK_MASTER, true ); s[0].sync_domain = 0u;
+        s[1].stream = neg_cfg( DSPIC33AK_SPI_I2S_TDM_CLOCK_SLAVE,  true ); s[1].sync_domain = 0u;
+        s[1].stream.fs_coincides_first_bclk = !s[0].stream.fs_coincides_first_bclk;
+        neg_expect( "framing mismatch SPIFE -> TOPOLOGY",
+                    dspic33ak_spi_i2s_tdm_configure_system( s, 2u ),
+                    false, DSPIC33AK_SPI_I2S_TDM_ERR_TOPOLOGY );
+
+        // CKP (bclk_idle_high)
+        s[1].stream = neg_cfg( DSPIC33AK_SPI_I2S_TDM_CLOCK_SLAVE, false ); s[1].sync_domain = 0u;  // s[0] CKP=true
+        neg_expect( "framing mismatch CKP -> TOPOLOGY",
+                    dspic33ak_spi_i2s_tdm_configure_system( s, 2u ),
+                    false, DSPIC33AK_SPI_I2S_TDM_ERR_TOPOLOGY );
+
+        // CKE (bclk_change_on_active_to_idle)
+        s[1].stream = neg_cfg( DSPIC33AK_SPI_I2S_TDM_CLOCK_SLAVE, true ); s[1].sync_domain = 0u;
+        s[1].stream.bclk_change_on_active_to_idle = !s[0].stream.bclk_change_on_active_to_idle;
+        neg_expect( "framing mismatch CKE -> TOPOLOGY",
+                    dspic33ak_spi_i2s_tdm_configure_system( s, 2u ),
+                    false, DSPIC33AK_SPI_I2S_TDM_ERR_TOPOLOGY );
+
+        // fs_shape (FS_PULSE vs FS_50PCT) -- compared regardless of role (I2S FRMSYPW / TDM marker).
+        s[1].stream = neg_cfg( DSPIC33AK_SPI_I2S_TDM_CLOCK_SLAVE, true ); s[1].sync_domain = 0u;
+        s[1].stream.fs_shape = DSPIC33AK_SPI_I2S_TDM_FS_50PCT;   // s[0] is FS_PULSE
+        neg_expect( "framing mismatch fs_shape -> TOPOLOGY",
+                    dspic33ak_spi_i2s_tdm_configure_system( s, 2u ),
+                    false, DSPIC33AK_SPI_I2S_TDM_ERR_TOPOLOGY );
+    }
+
+    // Transactional all-or-nothing: a valid system A stays committed after a rejected system B.
+    {
+        dspic33ak_spi_i2s_tdm_leg_setup_t a1, a2, c1, c2;
+        // Commit valid system A (co-clocked dom0: leg0 master, leg1 slave, matching framing).
+        s[0].stream = neg_cfg( DSPIC33AK_SPI_I2S_TDM_CLOCK_MASTER, true ); s[0].sync_domain = 0u;
+        s[1].stream = neg_cfg( DSPIC33AK_SPI_I2S_TDM_CLOCK_SLAVE,  true ); s[1].sync_domain = 0u;
+        neg_expect( "configure_system A (valid) -> ok",
+                    dspic33ak_spi_i2s_tdm_configure_system( s, 2u ),
+                    true, DSPIC33AK_SPI_I2S_TDM_ERR_NONE );
+        bool ga1 = dspic33ak_spi_i2s_tdm_inst_get_setup( spi1, &a1 );
+        bool ga2 = dspic33ak_spi_i2s_tdm_inst_get_setup( spi2, &a2 );
+
+        // Attempt invalid system B (two masters/domain) -> rejected, no side effects.
+        s[0].stream = neg_cfg( DSPIC33AK_SPI_I2S_TDM_CLOCK_MASTER, true ); s[0].sync_domain = 0u;
+        s[1].stream = neg_cfg( DSPIC33AK_SPI_I2S_TDM_CLOCK_MASTER, true ); s[1].sync_domain = 0u;
+        neg_expect( "configure_system B (invalid) -> TOPOLOGY",
+                    dspic33ak_spi_i2s_tdm_configure_system( s, 2u ),
+                    false, DSPIC33AK_SPI_I2S_TDM_ERR_TOPOLOGY );
+
+        // A must be preserved unchanged (all-or-nothing).
+        bool gc1 = dspic33ak_spi_i2s_tdm_inst_get_setup( spi1, &c1 );
+        bool gc2 = dspic33ak_spi_i2s_tdm_inst_get_setup( spi2, &c2 );
+        neg_expect_cond( "system A preserved after rejected B",
+                         ga1 && ga2 && gc1 && gc2 &&
+                         ( c1.stream.clock_role   == a1.stream.clock_role ) &&
+                         ( c1.stream.slots_per_fs == a1.stream.slots_per_fs ) &&
+                         ( c1.sync_domain         == a1.sync_domain ) &&
+                         ( c1.stream.bclk_idle_high == a1.stream.bclk_idle_high ) &&
+                         ( c2.stream.clock_role   == a2.stream.clock_role ) &&
+                         ( c2.sync_domain         == a2.sync_domain ) );
+    }
 
     // R2-1 non-destructiveness (realizable form): two independent domains, each a master. A second
     // start_all_domains() and a repeat start_domain() are idempotent and DO NOT tear a running
@@ -334,8 +401,15 @@ static void neg_two_leg( dspic33ak_spi_i2s_tdm_inst_t *spi1, dspic33ak_spi_i2s_t
                          st1.running && st2.running );
     }
 
-    (void)dspic33ak_spi_i2s_tdm_stop_all_domains();
-    (void)dspic33ak_spi_i2s_tdm_close();
+    // Checked cleanup: the harness must leave the HAL stopped + closed (verified, not assumed).
+    neg_expect( "2-leg cleanup stop_all_domains -> ok",
+                dspic33ak_spi_i2s_tdm_stop_all_domains(),
+                true, DSPIC33AK_SPI_I2S_TDM_ERR_NONE );
+    neg_expect( "2-leg cleanup close -> ok",
+                dspic33ak_spi_i2s_tdm_close(),
+                true, DSPIC33AK_SPI_I2S_TDM_ERR_NONE );
+    neg_expect_cond( "all legs stopped after 2-leg cleanup",
+                     !dspic33ak_spi_i2s_tdm_is_running() );
 }
 
 //===========================================================
@@ -368,6 +442,7 @@ bool tdm_neg_test_run( void )
     neg_sync_domain_range();
     neg_single_mode( spi1 );
     neg_readiness( spi1 );
+    neg_system_mode( spi1 );
 
     if( ( n >= 2u ) && ( spi2 != NULL ) )
     {
@@ -375,7 +450,7 @@ bool tdm_neg_test_run( void )
     }
     else
     {
-        printf(" [NEG] skip 2-leg cases (g/h/non-destructive double-start): needs DSPIC33AK_TDM_USE_SPI2=1\n" );
+        printf(" [NEG] skip 2-leg cases (g/h/framing/transactional/non-destructive): needs DSPIC33AK_TDM_USE_SPI2=1\n" );
     }
 
     // The literal (a)/(b) "running-domain preserved when another domain's start fails" is covered by
@@ -383,9 +458,12 @@ bool tdm_neg_test_run( void )
     // constructible through the public API (see tdm_neg_test.h / plan).
     printf(" [NEG] note a/b: start_all rollback non-destructiveness is review-covered (see plan)\n" );
 
-    // Leave the HAL clean for the subsequent smoke demo: stopped, closed, no test port.
-    // (mode may be SYSTEM here; the smoke's configure_system() re-commits from any stopped+closed mode.)
-    (void)dspic33ak_spi_i2s_tdm_set_port( NULL );
+    // Leave the HAL clean for the subsequent smoke demo: stopped, closed, no test port. Verify the
+    // clear succeeds (mode may be SYSTEM here; the smoke's configure_system() re-commits from any
+    // stopped+closed mode). A failed clear must fail the run so the smoke does not start dirty.
+    neg_expect( "final set_port(NULL) -> ok",
+                dspic33ak_spi_i2s_tdm_set_port( NULL ),
+                true, DSPIC33AK_SPI_I2S_TDM_ERR_NONE );
 
     printf(" [NEG] pass=%lu fail=%lu\n", (unsigned long)s_pass, (unsigned long)s_fail );
     return ( s_fail == 0u );
