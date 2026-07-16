@@ -43,8 +43,21 @@
 //   BRG = SYS / (2 * slots * 32 * fs) - 1.
 //   200 MHz / (2*8*32*48000) - 1 = 7  -> BCLK 12.5 MHz, fs ~48.8 kHz (expected, not exact).
 #define TDM_SMOKE_TARGET_FS_HZ   (48000u)
+// NOTE: valid only while the target BCLK (slots*32*fs) <= SYS/2, i.e. the divisor >= 1. For the
+// shipping demo geometries this holds (TDM8/48k -> BRG 7, TDM16 -> 3). A much larger slots*fs
+// would drive the divisor below 1 and the "- 1" would underflow to a huge BRG -- the
+// _Static_assert below turns that misconfiguration into a build failure instead of a runtime
+// surprise. The arithmetic is done in uint64_t so the intermediate slots*32*fs cannot overflow.
 #define TDM_SMOKE_SPI_BRG \
-    ((uint32_t)((STARTER_CLOCK_SYS_HZ / (2u * (uint32_t)DSPIC33AK_TDM_SLOTS_PER_FS * 32u * TDM_SMOKE_TARGET_FS_HZ)) - 1u))
+    ((uint32_t)(((uint64_t)STARTER_CLOCK_SYS_HZ / \
+                 (2ull * (uint64_t)DSPIC33AK_TDM_SLOTS_PER_FS * 32ull * (uint64_t)TDM_SMOKE_TARGET_FS_HZ)) - 1ull))
+// Build-fail (not just comment) if the requested BCLK exceeds the available SPI clock: the divisor
+// would be < 1 and the "- 1" underflow to a huge BRG. All operands are compile-time constants.
+_Static_assert(
+    (uint64_t)STARTER_CLOCK_SYS_HZ >=
+        (2ull * (uint64_t)DSPIC33AK_TDM_SLOTS_PER_FS * 32ull * (uint64_t)TDM_SMOKE_TARGET_FS_HZ),
+    "TDM_SMOKE: requested BCLK (slots*32*fs) exceeds the SPI clock; SPI_BRG would underflow -- "
+    "lower TDM_SMOKE_TARGET_FS_HZ or the slot count." );
 // Expected (design) BCLK and frame rate from the resolved BRG/geometry -- printed in the
 // status line so it stays correct across TDM8 (BRG=7, ~12.5 MHz) and TDM16 (BRG=3, ~25 MHz).
 #define TDM_SMOKE_EXP_BCLK_HZ \
@@ -67,7 +80,9 @@ static float    s_tx_ref_meansq;            // mean-square of (lut>>16), the 0 d
 static bool     s_started;
 static dspic33ak_spi_i2s_tdm_error_t s_init_error = DSPIC33AK_SPI_I2S_TDM_ERR_NONE;
 
-// Published by the block callback (debug aid; non-atomic read in the main loop is fine).
+// Published by the block callback (debug aid). Read non-atomically from the main loop: on this
+// 16-bit core a 64-bit read may TEAR against the ISR's update, so a single status line's dB can
+// be momentarily inaccurate. This is display only -- transport control does not depend on it.
 static volatile uint32_t s_phase;           // frame phase into the sine LUT
 static volatile uint64_t s_rx_sumsq;        // last block: sum of (rx>>16)^2
 static volatile uint32_t s_rx_count;        // last block: sample count
@@ -106,10 +121,11 @@ static void tdm_smoke_block_cb(const int32_t *src, int32_t *dst, void *user)
 //===========================================================
 // Board/clock port: pins only (master-only demo). No external clock / CLC.
 //===========================================================
-static bool tdm_smoke_configure_pins(dspic33ak_spi_i2s_tdm_role_t role)
+static bool tdm_smoke_configure_pins(dspic33ak_spi_i2s_tdm_clock_role_t role)
 {
     // This demo is master-only; reject any other role rather than silently mis-routing.
-    if (role != DSPIC33AK_SPI_I2S_TDM_ROLE_MASTER)
+    // open() passes the committed primary leg's role here (MASTER for this smoke).
+    if (role != DSPIC33AK_SPI_I2S_TDM_CLOCK_MASTER)
     {
         return false;
     }
@@ -155,7 +171,13 @@ bool tdm_smoke_init(void)
     tdm_smoke_build_sine();
 
     // Board/clock port (pin routing reached via the hook -- the HAL core stays board-free).
-    dspic33ak_spi_i2s_tdm_set_port(&s_tdm_smoke_port);
+    // set_port() is a fail-closed bool API (rejects while opened/running); honour it rather than
+    // continuing with an unbound port.
+    if (!dspic33ak_spi_i2s_tdm_set_port(&s_tdm_smoke_port))
+    {
+        s_init_error = dspic33ak_spi_i2s_tdm_get_last_error();
+        return false;
+    }
 
     inst = dspic33ak_spi_i2s_tdm_spi1();
     if (inst == NULL)
@@ -171,54 +193,69 @@ bool tdm_smoke_init(void)
         return false;
     }
 
-    // TDM self-clocked master config (TDM8 by default). Geometry comes from the same conf.h constants that
-    // sized the HAL's static DMA buffers; BRG sets the master BCLK from the system clock.
-    const dspic33ak_spi_i2s_tdm_config_t cfg =
+    // TDM self-clocked master config (TDM8 by default), expressed as a one-leg SYSTEM table
+    // and applied via the public transactional path configure_system() -> open() ->
+    // start_all_domains(). Geometry comes from the same conf.h constants that sized the HAL's
+    // static DMA buffers; BRG sets the master BCLK from the system clock. Every stream field
+    // is stated explicitly (no default builder + override).
+    static const dspic33ak_spi_i2s_tdm_leg_setup_t s_tdm_system[] =
     {
-        .format                       = DSPIC33AK_SPI_I2S_TDM_FORMAT_TDM,
-        .role                         = DSPIC33AK_SPI_I2S_TDM_ROLE_MASTER,
-        .slots_per_fs                 = (uint8_t)DSPIC33AK_TDM_SLOTS_PER_FS,
-        .word_bits                    = 32u,
-        .block_frames                 = (uint16_t)DSPIC33AK_TDM_BLOCK_FRAMES,
-        .brg                          = TDM_SMOKE_SPI_BRG,
-        .mclk_enable                  = true,    // MCLKEN=1 (CLKGEN9 reference)
+        {
+            .stream =
+            {
+                .format                        = DSPIC33AK_SPI_I2S_TDM_FORMAT_TDM,
+                .clock_role                    = DSPIC33AK_SPI_I2S_TDM_CLOCK_MASTER,
+                .slots_per_fs                  = (uint8_t)DSPIC33AK_TDM_SLOTS_PER_FS,
+                .word_bits                     = 32u,
 #if APP_TDM_MASTER_FS50_BY_CLC10
-        // 50%-duty FS: for this TDM8 master the HAL emits a half-frame marker and engages
-        // CLC10 to toggle it into a ~50%-duty FS on the FS pin (all hidden in the HAL).
-        .fs_shape                     = DSPIC33AK_SPI_I2S_TDM_FS_50PCT,
+                // 50%-duty FS: for this TDM8 master the HAL emits a half-frame marker and
+                // engages CLC10 to toggle it into a ~50%-duty FS on the FS pin (HAL-internal).
+                .fs_shape                      = DSPIC33AK_SPI_I2S_TDM_FS_50PCT,
 #else
-        .fs_shape                     = DSPIC33AK_SPI_I2S_TDM_FS_PULSE,  // short 1-BCLK frame sync
+                .fs_shape                      = DSPIC33AK_SPI_I2S_TDM_FS_PULSE,  // short 1-BCLK frame sync
 #endif
-        .fs_coincides_first_bclk      = true,    // SPIFE=1 : no 1-bit delay (TDM8)
-        .bclk_idle_high               = true,    // CKP=1
-        .bclk_change_on_active_to_idle = false,  // CKE=0
-        .ignore_overflow              = true,    // IGNROV=1
-        .ignore_underrun              = true,    // IGNTUR=1
+                .block_frames                  = (uint16_t)DSPIC33AK_TDM_BLOCK_FRAMES,
+                .brg                           = TDM_SMOKE_SPI_BRG,
+                .mclk_enable                   = true,    // MCLKEN=1 (CLKGEN9 reference)
+                .fs_coincides_first_bclk       = true,    // SPIFE=1 : no 1-bit delay (TDM8)
+                .bclk_idle_high                = true,    // CKP=1
+                .bclk_change_on_active_to_idle = false,   // CKE=0
+                .ignore_overflow               = true,    // IGNROV=1
+                .ignore_underrun               = true,    // IGNTUR=1
+            },
+            .sync_domain = 0u,
+        },
     };
-    if (!dspic33ak_spi_i2s_tdm_inst_configure(inst, &cfg))
-    {
-        s_init_error = dspic33ak_spi_i2s_tdm_get_last_error();
-        return false;
-    }
 
-    // The DMA HAL must be globally initialized before any channel config (inst_start()
-    // arms the SPI1 RX/TX DMA). Only the TDM demo uses DMA on this board, so bring it up
-    // here, before start.
+    // The DMA HAL must be globally initialized before any channel config / start (start
+    // arms the SPI1 RX/TX DMA). Only the TDM demo uses DMA on this board.
     dspic33ak_dma_global_init();
 
-    // Open the shared port (routes MikroBUS-A SPI1 pins via the hook) for the master role.
-    if (!dspic33ak_spi_i2s_tdm_open(DSPIC33AK_SPI_I2S_TDM_ROLE_MASTER))
+    // Transactional whole-system configure (one leg here). open() takes NO role -- it derives
+    // the master role from this committed primary leg and passes it to the pin hook.
+    if (!dspic33ak_spi_i2s_tdm_configure_system(
+            s_tdm_system, (uint8_t)(sizeof(s_tdm_system) / sizeof(s_tdm_system[0]))))
     {
         s_init_error = dspic33ak_spi_i2s_tdm_get_last_error();
         return false;
     }
-
-    // Arm DMA + enable SPI1: the stream now runs autonomously on DMA/ISR.
-    // (For the FS_50PCT config the HAL's inst_start() engages CLC10 internally just before
-    // the module turns on -- no app/CLC code here.)
-    if (!dspic33ak_spi_i2s_tdm_inst_start(inst))
+    if (!dspic33ak_spi_i2s_tdm_open())
     {
         s_init_error = dspic33ak_spi_i2s_tdm_get_last_error();
+        return false;
+    }
+    // Start the sync domain: arms DMA + enables SPI1; the stream runs autonomously on DMA/ISR.
+    // (For FS_50PCT the HAL engages CLC10 internally just before the module turns on.)
+    if (!dspic33ak_spi_i2s_tdm_start_all_domains())
+    {
+        // Fail closed: the HAL rolls back the domains it started, but open() left the shared port
+        // opened. Since close() now preserves the config mode and rejects while running (neither
+        // applies here -- nothing is running), close() to release the open state; otherwise the
+        // next tdm_smoke_init() would get ERR_ALREADY_OPEN from set_port()/configure_system().
+        // Save the real error first (close() overwrites last-error on success).
+        const dspic33ak_spi_i2s_tdm_error_t err = dspic33ak_spi_i2s_tdm_get_last_error();
+        (void)dspic33ak_spi_i2s_tdm_close();
+        s_init_error = err;
         return false;
     }
 
@@ -236,13 +273,32 @@ bool tdm_smoke_init(void)
     // FS_50PCT the pin reads CLC10OUT (78); inst_stop() releases CLC10 and MUST restore the
     // pin to SS1 (27); the next start re-engages (78 again). Proves the release-restore path
     // that makes a runtime FS_50PCT -> stop -> FS_PULSE -> start switch correct.
+    // Exercise the restart through the SYSTEM domain lifecycle (stop_all -> start_all_domains),
+    // the same path the normal start uses, rather than the per-leg inst_stop/inst_start.
     printf(" [FS-SW] RP70R after FS_50PCT start = %u (expect 78=CLC10OUT)\n", (unsigned)RPOR17bits.RP70R);
-    dspic33ak_spi_i2s_tdm_inst_stop(inst);
-    printf(" [FS-SW] RP70R after stop(release)  = %u (expect 27=SS1 restored)\n", (unsigned)RPOR17bits.RP70R);
-    if (!dspic33ak_spi_i2s_tdm_inst_start(inst))
+    // stop_all_domains() is now a bool SYSTEM-mode API; this smoke is SYSTEM (configure_system),
+    // so it returns true. Honour it: a failed stop is a failed self-test (fail closed).
+    if (!dspic33ak_spi_i2s_tdm_stop_all_domains())
     {
-        s_init_error = dspic33ak_spi_i2s_tdm_get_last_error();
+        const dspic33ak_spi_i2s_tdm_error_t err = dspic33ak_spi_i2s_tdm_get_last_error();
+        (void)dspic33ak_spi_i2s_tdm_close();
+        s_init_error = err;
+        s_started    = false;
+        printf(" [FS-SW] stop FAILED: %s\n", tdm_smoke_last_error_str());
+        return false;
+    }
+    printf(" [FS-SW] RP70R after stop(release)  = %u (expect 27=SS1 restored)\n", (unsigned)RPOR17bits.RP70R);
+    if (!dspic33ak_spi_i2s_tdm_start_all_domains())
+    {
+        // Fail closed: a failed restart is NOT a successful init. Release the still-open port
+        // (close() preserves config mode; nothing is running after a failed start) so a re-init
+        // is not blocked by ERR_ALREADY_OPEN. Preserve the real error across close().
+        const dspic33ak_spi_i2s_tdm_error_t err = dspic33ak_spi_i2s_tdm_get_last_error();
+        (void)dspic33ak_spi_i2s_tdm_close();
+        s_init_error = err;
+        s_started    = false;
         printf(" [FS-SW] re-start FAILED: %s\n", tdm_smoke_last_error_str());
+        return false;
     }
     printf(" [FS-SW] RP70R after re-start       = %u (expect 78=CLC10OUT)\n", (unsigned)RPOR17bits.RP70R);
 #endif
@@ -275,7 +331,8 @@ void tdm_smoke_status_print(void)
         return;
     }
 
-    // Snapshot the callback's last-block accumulator (non-atomic read is acceptable here).
+    // Snapshot the callback's last-block accumulator. Non-atomic 64-bit read may tear on this
+    // 16-bit core (display only; see the s_rx_sumsq declaration note) -- acceptable here.
     sumsq = s_rx_sumsq;
     cnt   = s_rx_count;
     if ((cnt > 0u) && (s_tx_ref_meansq > 0.0f))
@@ -323,6 +380,9 @@ const char *tdm_smoke_last_error_str(void)
         case DSPIC33AK_SPI_I2S_TDM_ERR_PIN_CONFIG:         return "pin-config";
         case DSPIC33AK_SPI_I2S_TDM_ERR_CLC:                return "clc";
         case DSPIC33AK_SPI_I2S_TDM_ERR_DMA_CONFIG:         return "dma-config";
+        case DSPIC33AK_SPI_I2S_TDM_ERR_NOT_OPEN:           return "not-open";
+        case DSPIC33AK_SPI_I2S_TDM_ERR_ALREADY_OPEN:       return "already-open";
+        case DSPIC33AK_SPI_I2S_TDM_ERR_CONFIG_MODE:        return "config-mode";
         default:                                           return "unknown";
     }
 }

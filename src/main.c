@@ -32,6 +32,7 @@
 #include "board.h"
 #include "app_config.h"
 #include "tdm_smoke.h"
+#include "tdm_neg_test.h"
 #if HAL_STARTER_ENABLE_UART_ASYNC_SELFTEST
 #include "uart_async_selftest.h"
 #endif
@@ -405,6 +406,24 @@ int main(void)
     printf(" RGB LED follows the potentiometer; LED0 blinks with the heartbeat.\n");
     printf("==============================================\n");
 
+    /* NEG self-test result gates the smoke demo (fail-closed). When the NEG toggle is off this is
+     * true, so the smoke runs normally in the shipped build. */
+#if HAL_STARTER_ENABLE_TDM_NEG_TEST
+    /* ---- OPT-IN SPI/I2S/TDM HAL negative-validation self-test (contract regression) ----
+     * Runs BEFORE the smoke demo and leaves the HAL stopped + closed. Prints "[NEG] pass=N fail=M".
+     * On failure the HAL may be in an unexpected state, so the TDM smoke is SKIPPED (fail-closed) --
+     * the rest of the starter continues. Default OFF (app_config.h). */
+    const bool tdm_neg_ok = tdm_neg_test_run();
+    if (tdm_neg_ok) {
+        printf(" [NEG] all negative-validation cases PASSED.\n");
+    } else {
+        printf(" [NEG] one or more cases FAILED (see [NEG] lines above); TDM smoke will be skipped.\n");
+    }
+    printf("==============================================\n");
+#else
+    const bool tdm_neg_ok = true;
+#endif
+
 #if HAL_STARTER_ENABLE_TDM_SMOKE_DEMO
     /* ---- SPI1 framed-mode TDM8 smoke demo (codec-less self-clocked master, MikroBUS-A) ----
      * Drives all 8 TDM slots with a ~800 Hz-class sine so a scope on DataOut shows a TDM8
@@ -412,7 +431,9 @@ int main(void)
      * stream runs on DMA/ISR; the main loop only prints a status line every 5 s. A start
      * failure is reported but does NOT stop the rest of the starter. Disable in
      * app_config.h (HAL_STARTER_ENABLE_TDM_SMOKE_DEMO 0) to free the MikroBUS-A SPI pins. */
-    if (tdm_smoke_init()) {
+    if (!tdm_neg_ok) {
+        printf(" [TDM1] smoke SKIPPED: negative self-test failed (HAL state not trusted).\n");
+    } else if (tdm_smoke_init()) {
         printf(" [TDM1] SPI1 TDM8 master smoke demo started (MikroBUS-A;"
                " jumper DataOut->DataIn for loopback).\n");
     } else {
@@ -420,6 +441,8 @@ int main(void)
                tdm_smoke_last_error_str());
     }
     printf("==============================================\n");
+#else
+    (void)tdm_neg_ok;   /* consumed only by the smoke gate; avoid unused-variable when smoke is off */
 #endif
 
     /* Main loop: update the LED color from the pot continuously, toggle LED0 once

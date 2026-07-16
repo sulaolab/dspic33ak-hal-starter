@@ -68,4 +68,28 @@
 #define HAL_STARTER_ENABLE_UART_ASYNC_SELFTEST 0
 #endif
 
+/*
+ * OPT-IN SPI/I2S/TDM HAL negative-validation self-test -- default OFF.
+ *
+ * When 1: at boot, BEFORE the TDM smoke demo, drive the SPI/I2S/TDM HAL through its misuse
+ * paths and assert each returns the documented bool + dspic33ak_spi_i2s_tdm_error_t
+ * (wrong-config-mode, not-open, bad-instance, already-open, already-running, topology,
+ * clock-not-ready, invalid-domain), plus the non-destructive double-start on a 2-leg build.
+ * Prints one line per case and a "[NEG] pass=N fail=M" summary, then leaves the HAL stopped +
+ * closed so the smoke demo starts normally. Pure API-contract test -- needs no external signals.
+ * The 2-leg cases (two-masters/domain, framing mismatch, transactional preservation, non-destructive
+ * double-start) are exercised only in a DSPIC33AK_TDM_USE_SPI2=1 build (logged skipped otherwise).
+ * For contract-regression verification only; keep 0 for the shipped starter.
+ *
+ * Two on-board runs cover the matrix:
+ *   Run A (single-leg): NEG=1, DSPIC33AK_TDM_USE_SPI2=0, SMOKE=1 -> single-leg matrix, then the
+ *          smoke resumes (proves the harness left the HAL clean).
+ *   Run B (2-leg):      NEG=1, DSPIC33AK_TDM_USE_SPI2=1, SMOKE=0 -> 2-leg matrix only. SMOKE must be
+ *          0 here: the smoke's fixed 1-leg system table would fail configure_system()'s count check
+ *          against a 2-leg build (TDM_SPI_LEG_COUNT==2).
+ */
+#ifndef HAL_STARTER_ENABLE_TDM_NEG_TEST
+#define HAL_STARTER_ENABLE_TDM_NEG_TEST 0
+#endif
+
 #endif /* APP_CONFIG_H */
