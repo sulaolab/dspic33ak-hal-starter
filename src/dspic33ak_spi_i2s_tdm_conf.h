@@ -34,7 +34,7 @@
 // (Sample rate is NOT a setting here -- the transport is rate-agnostic; the product's
 // supported-rate policy lives in the app layer, not the HAL.)
 // The core's static DMA ping-pong buffers are sized 2 * SLOTS_PER_FS *
-// BLOCK_FRAMES, and configure() rejects a config_t whose slots_per_fs /
+// BLOCK_FRAMES, and inst_configure() / configure_system() reject a config_t whose slots_per_fs /
 // block_frames do not match these compile-time values.
 //===========================================================
 
@@ -115,8 +115,10 @@
 //===========================================================
 
 // Per-leg SYNC DOMAIN id: the s_spi_legs[] default (a caller using configure_system() may
-// override it per leg at runtime). Legs sharing a domain are co-clocked and started
-// phase-locked as a group; different domains are independent/async. NOT the clock role.
+// override it per leg at runtime). Legs sharing a domain are co-clocked and started phase-locked
+// as a group; legs in different domains are started/rolled-back separately and need not share
+// BCLK/FS -- but this is NOT full independence (source-readiness is engine-wide/primary-gated;
+// CLC10 + the clock port are shared). NOT the clock role.
 // Starter smoke is SPI1-only, so SPI2's value is used only when DSPIC33AK_TDM_USE_SPI2=1.
 #ifndef DSPIC33AK_TDM_SPI1_SYNC_DOMAIN
 #define DSPIC33AK_TDM_SPI1_SYNC_DOMAIN   (0)
