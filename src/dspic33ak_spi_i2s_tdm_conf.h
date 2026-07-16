@@ -72,8 +72,10 @@
 // the HAL core for its s_spi_legs[] table and to bind its explicit _DMA<rx>Interrupt
 // vectors (a compile-time assert ties each vector to its RX-DMA channel; change a channel
 // and the build fails until the vector + assert match). Each is -D overridable. Maintain a
-// chip-wide map by hand: the HAL cannot see other subsystems' DMA usage. Duplicate channels
-// fail the build (redefined vector).
+// chip-wide map by hand: the HAL cannot see other subsystems' DMA usage. Assignment errors are
+// caught in two places: an RX-DMA channel that no longer matches its explicit vector fails the
+// build on the _Static_assert; a duplicate channel (RX==TX on a leg, or shared across legs) is
+// rejected at runtime by the topology validation (ERR_TOPOLOGY) before open()/start().
 //===========================================================
 #ifndef DSPIC33AK_TDM_SPI1_RX_DMA
 #define DSPIC33AK_TDM_SPI1_RX_DMA   0
