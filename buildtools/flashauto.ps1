@@ -1,3 +1,11 @@
+# flashauto.ps1 - build-adjacent flash (+reset) helper, board selected by PKOB4 serial.
+#
+# Output: by default the flash/reset tools now print the compact [flash]/[reset]
+# progress log with a 5s heartbeat (proof-of-life during long waits) and pass the
+# MPLAB X report block through. Pass -Verbose to instead stream the raw mdb /
+# IPECMDBoost output (the previous behaviour), or -Quiet to suppress this wrapper's
+# own status lines. See resetauto.ps1 for a reset-only shortcut.
+
 param(
     [switch]$Reset,
     [switch]$List,
@@ -261,7 +269,7 @@ Write-Status "Serial: $serialNumber"
 
 if ($Reset) {
     $resetArgs = @('--serial', $serialNumber, '--device', $resetDeviceToken, '--timeout', $ResetTimeoutSec)
-    if (-not $Quiet) { $resetArgs += '--verbose' }
+    if ($Verbose) { $resetArgs += '--verbose' }
     if ($DryRun) { $resetArgs += '--dry-run' }
     Write-Status "Reset device token: $resetDeviceToken"
     Write-Status "Reset timeout: ${ResetTimeoutSec}s"
@@ -284,13 +292,13 @@ $flashArgs = @(
     '--device', $Device,
     '--hex', $hexPath
 )
-if (-not $Quiet) { $flashArgs += '--verbose' }
+if ($Verbose) { $flashArgs += '--verbose' }
 if ($DryRun) { $flashArgs += '--dry-run' }
 
 Invoke-CheckedExe -Exe $flashTool -Arguments $flashArgs
 
 $resetArgs = @('--serial', $serialNumber, '--device', $resetDeviceToken, '--timeout', $ResetTimeoutSec)
-if (-not $Quiet) { $resetArgs += '--verbose' }
+if ($Verbose) { $resetArgs += '--verbose' }
 if ($DryRun) { $resetArgs += '--dry-run' }
 
 Write-Status "Running reset after successful flash..."
