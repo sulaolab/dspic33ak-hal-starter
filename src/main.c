@@ -51,11 +51,19 @@
 static uint8_t s_console_uart_rx_ring[256u];
 
 /*
- * UART init status, captured so a failed bring-up is observable from the
- * debugger. Deliberately NOT reported via printf(): stdio retargets to UART1,
- * so if UART1 init failed there is no console to print to (the AK128 IFS2/IFS3
- * "no output" root cause). Inspect these instead of trusting the port.
+ * UART bring-up status, captured so a failure is observable from the debugger.
+ * Deliberately NOT reported via printf(): stdio retargets to UART1, so if UART1
+ * init failed there is no console to print to (the AK128 IFS2/IFS3 "no output"
+ * root cause). Inspect these instead of trusting the port.
+ *
+ * Two stages are recorded separately so the observation covers the whole path:
+ *   - g_uart{1,2}_pins_init_ok : PPS/pin routing (board_uartN_pins_init()).
+ *   - g_uart{1,2}_init_status  : HAL peripheral init (dspic33ak_uart_init()).
+ * A wrong PPS config leaves pins_init_ok == false even when init_status == OK
+ * (the peripheral comes up but its output is misrouted), so both must be read.
  */
+volatile bool g_uart1_pins_init_ok = false;
+volatile bool g_uart2_pins_init_ok = false;
 volatile dspic33ak_uart_status_t g_uart1_init_status = DSPIC33AK_UART_OK;
 volatile dspic33ak_uart_status_t g_uart2_init_status = DSPIC33AK_UART_OK;
 
@@ -99,13 +107,14 @@ static void console_uart_init(void)
         .tx_irq_priority = 5u,
     };
 
-    /* If pin init fails the UART is not yet up -- can't printf. Proceed anyway;
-     * a wrong PPS config will be visible as garbled / no output. */
-    (void)board_uart1_pins_init();
-    g_uart1_init_status = dspic33ak_uart_init(DSPIC33AK_UART_INST_1, &cfg);
+    /* If pin init fails the UART is not yet up -- can't printf. Proceed anyway
+     * (a wrong PPS config shows as garbled / no output, a useful debug signal),
+     * but record the pin result so the failure is visible in the debugger. */
+    g_uart1_pins_init_ok = board_uart1_pins_init();
+    g_uart1_init_status  = dspic33ak_uart_init(DSPIC33AK_UART_INST_1, &cfg);
 
-    (void)board_uart2_pins_init();
-    g_uart2_init_status = dspic33ak_uart_init(DSPIC33AK_UART_INST_2, &cfg2);
+    g_uart2_pins_init_ok = board_uart2_pins_init();
+    g_uart2_init_status  = dspic33ak_uart_init(DSPIC33AK_UART_INST_2, &cfg2);
 }
 
 static void term_init_safe(void)
