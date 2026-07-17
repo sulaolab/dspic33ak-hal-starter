@@ -50,6 +50,15 @@
 
 static uint8_t s_console_uart_rx_ring[256u];
 
+/*
+ * UART init status, captured so a failed bring-up is observable from the
+ * debugger. Deliberately NOT reported via printf(): stdio retargets to UART1,
+ * so if UART1 init failed there is no console to print to (the AK128 IFS2/IFS3
+ * "no output" root cause). Inspect these instead of trusting the port.
+ */
+volatile dspic33ak_uart_status_t g_uart1_init_status = DSPIC33AK_UART_OK;
+volatile dspic33ak_uart_status_t g_uart2_init_status = DSPIC33AK_UART_OK;
+
 static void console_uart_init(void)
 {
     const dspic33ak_uart_config_t cfg = {
@@ -93,10 +102,10 @@ static void console_uart_init(void)
     /* If pin init fails the UART is not yet up -- can't printf. Proceed anyway;
      * a wrong PPS config will be visible as garbled / no output. */
     (void)board_uart1_pins_init();
-    (void)dspic33ak_uart_init(DSPIC33AK_UART_INST_1, &cfg);
+    g_uart1_init_status = dspic33ak_uart_init(DSPIC33AK_UART_INST_1, &cfg);
 
     (void)board_uart2_pins_init();
-    (void)dspic33ak_uart_init(DSPIC33AK_UART_INST_2, &cfg2);
+    g_uart2_init_status = dspic33ak_uart_init(DSPIC33AK_UART_INST_2, &cfg2);
 }
 
 static void term_init_safe(void)
