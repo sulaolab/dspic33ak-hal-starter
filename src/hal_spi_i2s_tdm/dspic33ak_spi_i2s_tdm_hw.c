@@ -372,28 +372,35 @@ void dspic33ak_spi_i2s_tdm_hw_soft_stop( tdm_spi_inst_t inst )
 
 
 /*
- * EXPERIMENT: read + clear this instance's SPIxSTAT sticky error flags (bit-slip detection).
+ * Sample this instance's SPI framed-transport health flags (SPIxSTAT) once per completed RX
+ * block, and ack the ones that are software-clearable. The HAL owns these sticky bits once this
+ * is called: other code reading raw SPIxSTAT afterward will see them already acked.
  *
- * Returns the observed SPIROV/SPITUR/FRMERR mask and clears exactly those bits (read-modify-write;
- * read-only STAT bits are untouched). One SFR read + one masked write -- safe to call from the
- * RX-block ISR each block. See dspic33ak_spi_i2s_tdm_hw.h for why the driver normally ignores these.
+ * SPIROV and FRMERR are R/C/HS (software-clearable) -- acked here. SPITUR is R/HSC (hardware
+ * self-clearing on SPIEN=0, NOT software-clearable) and reflects a live/dynamic underrun
+ * condition, so it is only OBSERVED, never written. Returns the full observed mask (all three
+ * bits as read, before any clear) -- callers get SPITUR's live state either way.
  */
-uint32_t dspic33ak_spi_i2s_tdm_hw_read_clear_errflags( tdm_spi_inst_t inst )
+uint32_t dspic33ak_spi_i2s_tdm_hw_sample_ack_errflags( tdm_spi_inst_t inst )
 {
     if( !hw_inst_valid( inst ) )
     {
         return 0u;
     }
     volatile uint32_t *stat = s_spi_dev[inst].stat;
-    const uint32_t mask = DSPIC33AK_SPI_I2S_TDM_STAT_SPIROV
-                        | DSPIC33AK_SPI_I2S_TDM_STAT_SPITUR
-                        | DSPIC33AK_SPI_I2S_TDM_STAT_FRMERR;
-    const uint32_t flags = *stat & mask;
-    if( flags != 0u )
+    const uint32_t status = *stat;
+    const uint32_t observed = status
+                        & ( DSPIC33AK_SPI_I2S_TDM_STAT_SPIROV
+                          | DSPIC33AK_SPI_I2S_TDM_STAT_SPITUR
+                          | DSPIC33AK_SPI_I2S_TDM_STAT_FRMERR );
+    const uint32_t clearable = observed
+                        & ( DSPIC33AK_SPI_I2S_TDM_STAT_SPIROV
+                          | DSPIC33AK_SPI_I2S_TDM_STAT_FRMERR );
+    if( clearable != 0u )
     {
-        *stat &= ~flags;   // clear only the sticky error bits we observed
+        *stat = status & ~clearable;   // ack only the software-clearable bits we observed
     }
-    return flags;
+    return observed;
 }
 
 

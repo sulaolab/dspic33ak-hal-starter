@@ -53,10 +53,10 @@ void dspic33ak_spi_i2s_tdm_diag_reset( dspic33ak_spi_i2s_tdm_diag_t* d )
 
     d->block_count               = 0u;
     d->block_deadline_miss_count = 0u;
-    d->err_rov_count             = 0u;
-    d->err_tur_count             = 0u;
-    d->err_frm_count             = 0u;
-    d->frm_consec                = 0u;
+    d->err_rov_block_count        = 0u;
+    d->err_tur_block_count        = 0u;
+    d->err_frm_block_count        = 0u;
+    d->frmerr_consecutive_blocks  = 0u;
     d->isr_start_count           = 0u;
     d->isr_last_count            = 0u;
     d->isr_min_count             = 0xFFFFFFFFUL;
@@ -161,10 +161,12 @@ void dspic33ak_spi_i2s_tdm_diag_note_block( dspic33ak_spi_i2s_tdm_diag_t* d )
 
 
 /*
- * Bit-slip detection: fold one RX-block's SPIxSTAT error observation into this instance's counters.
- * MUST be called once per completed block (even when flags==0) so frm_consec resets on a clean block.
- * `flags` is the read_clear_errflags() mask. SPIROV/SPITUR are simple occurrence counters; FRMERR
- * additionally drives frm_consec (consecutive-FRMERR block run), which the auto-recovery watches.
+ * Sample framed-transport health: fold one RX-block's SPIxSTAT flag observation into this
+ * instance's diagnostics. MUST be called once per completed block (even when flags==0) so
+ * frmerr_consecutive_blocks resets on a clean block. `flags` is the
+ * dspic33ak_spi_i2s_tdm_hw_sample_ack_errflags() mask. Each counter counts RX BLOCKS in which its
+ * bit was observed, not raw event occurrences. When FRMERR is absent, frmerr_consecutive_blocks
+ * is reset to zero; the other counters are unchanged when flags == 0.
  */
 void dspic33ak_spi_i2s_tdm_diag_note_errflags( dspic33ak_spi_i2s_tdm_diag_t* d, uint32_t flags )
 {
@@ -172,10 +174,17 @@ void dspic33ak_spi_i2s_tdm_diag_note_errflags( dspic33ak_spi_i2s_tdm_diag_t* d, 
     {
         return;
     }
-    if( flags & DSPIC33AK_SPI_I2S_TDM_STAT_SPIROV ) { d->err_rov_count++; }
-    if( flags & DSPIC33AK_SPI_I2S_TDM_STAT_SPITUR ) { d->err_tur_count++; }
-    if( flags & DSPIC33AK_SPI_I2S_TDM_STAT_FRMERR ) { d->err_frm_count++; d->frm_consec++; }
-    else                                            { d->frm_consec = 0u; }
+    if( flags & DSPIC33AK_SPI_I2S_TDM_STAT_SPIROV ) { d->err_rov_block_count++; }
+    if( flags & DSPIC33AK_SPI_I2S_TDM_STAT_SPITUR ) { d->err_tur_block_count++; }
+    if( flags & DSPIC33AK_SPI_I2S_TDM_STAT_FRMERR )
+    {
+        d->err_frm_block_count++;
+        d->frmerr_consecutive_blocks++;
+    }
+    else
+    {
+        d->frmerr_consecutive_blocks = 0u;   // FRMERR absent this block -> break the run
+    }
 }
 
 

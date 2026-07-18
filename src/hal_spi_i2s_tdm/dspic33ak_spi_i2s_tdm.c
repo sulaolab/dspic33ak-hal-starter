@@ -1780,10 +1780,10 @@ bool dspic33ak_spi_i2s_tdm_inst_get_status( dspic33ak_spi_i2s_tdm_inst_t* inst,
     dspic33ak_spi_i2s_tdm_diag_read_counts( &inst->diag,
                                             &status->block_count,
                                             &status->block_deadline_miss_count );
-    status->err_rov_count = inst->diag.err_rov_count;   // bit-slip watch (masked read)
-    status->err_tur_count = inst->diag.err_tur_count;
-    status->err_frm_count = inst->diag.err_frm_count;
-    status->frm_consec    = inst->diag.frm_consec;      // consecutive-FRMERR run (auto-recovery trigger)
+    status->err_rov_block_count       = inst->diag.err_rov_block_count;   // masked read
+    status->err_tur_block_count       = inst->diag.err_tur_block_count;
+    status->err_frm_block_count       = inst->diag.err_frm_block_count;
+    status->frmerr_consecutive_blocks = inst->diag.frmerr_consecutive_blocks;
     tdm_rx_ie_restore( inst->rx_dma_ch, rxie_bak );
 
     // load monitor (does its own RX-IE guard; honours clear_peak)
@@ -2333,11 +2333,11 @@ static inline void tdm_rx_block( tdm_spi_leg_t* inst, uint8_t rx_ch, uint8_t tx_
 
     dspic33ak_spi_i2s_tdm_diag_isr_begin( &inst->diag );
 
-    // Bit-slip / HW-error watch: fold this instance's SPIxSTAT sticky error flags
-    // (SPIROV/SPITUR/FRMERR) into its diag. Cheap (1 SFR read + masked clear); normally zero.
-    // Detects connector-glitch frame slips (visible via get_status err_*_count / telemetry).
+    // Sample + fold this instance's SPIxSTAT framed-transport health flags (SPIROV/SPITUR/
+    // FRMERR) into its diag. Cheap (1 SFR read + masked ack); normally zero. The HAL only
+    // records these counters -- recovery policy, if any, belongs to the application.
     dspic33ak_spi_i2s_tdm_diag_note_errflags( &inst->diag,
-        dspic33ak_spi_i2s_tdm_hw_read_clear_errflags( inst->spi_inst ) );
+        dspic33ak_spi_i2s_tdm_hw_sample_ack_errflags( inst->spi_inst ) );
 
     dma_stat = dspic33ak_dma_isr_snapshot( rx_ch );
 
