@@ -49,6 +49,15 @@
 #define DSPIC33AK_SPI_I2S_TDM_IMSK_SPIRBFEN (1UL << 0)    /* SPIxIMSKbits.SPIRBFEN */
 #define DSPIC33AK_SPI_I2S_TDM_IMSK_SPITBEN  (1UL << 3)    /* SPIxIMSKbits.SPITBEN  */
 
+/* ---- SPIxSTAT status bits (sticky error flags; software-clear by writing the bit to 0) ----
+ * Bit positions from p33AK512MPS512.h / p33AK128MC106.h tagSPI1STATBITS (SPIxSTAT is a 32-bit SFR):
+ *   SPIRBF=0 SPITBF=1 SPITBE=3 SPIRBE=5 SPIROV=6 SRMT=7 SPITUR=8 SPIBUSY=11 FRMERR=12.
+ * These are HARDWARE health flags NOT normally monitored by the driver; used by the
+ * connector-glitch bit-slip detection experiment (read+count+clear in the RX-block ISR). */
+#define DSPIC33AK_SPI_I2S_TDM_STAT_SPIROV   (1UL << 6)    /* receive overflow  */
+#define DSPIC33AK_SPI_I2S_TDM_STAT_SPITUR   (1UL << 8)    /* transmit underrun */
+#define DSPIC33AK_SPI_I2S_TDM_STAT_FRMERR   (1UL << 12)   /* frame-sync error  */
+
 /* ---- Minimal generic 32-bit SFR access helpers ---- */
 /*
  * Set one or more bits in a 32-bit SFR.

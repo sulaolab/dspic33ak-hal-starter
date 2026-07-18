@@ -9,6 +9,7 @@
 #include <stddef.h>                   // NULL
 #include "dspic33ak_high_res_timer.h" // dspic33ak_high_res_timer_* (ISR load/time monitor; runtime-gated via is_initialized())
 #include "dspic33ak_dma.h"            // dspic33ak_dma_status_has_half_done_conflict()
+#include "dspic33ak_spi_i2s_tdm_reg.h" // DSPIC33AK_SPI_I2S_TDM_STAT_* masks (note_errflags)
 
 
 //===========================================================
@@ -52,6 +53,10 @@ void dspic33ak_spi_i2s_tdm_diag_reset( dspic33ak_spi_i2s_tdm_diag_t* d )
 
     d->block_count               = 0u;
     d->block_deadline_miss_count = 0u;
+    d->err_rov_count             = 0u;
+    d->err_tur_count             = 0u;
+    d->err_frm_count             = 0u;
+    d->frm_consec                = 0u;
     d->isr_start_count           = 0u;
     d->isr_last_count            = 0u;
     d->isr_min_count             = 0xFFFFFFFFUL;
@@ -152,6 +157,25 @@ void dspic33ak_spi_i2s_tdm_diag_note_block( dspic33ak_spi_i2s_tdm_diag_t* d )
         return;
     }
     d->block_count++;
+}
+
+
+/*
+ * Bit-slip detection: fold one RX-block's SPIxSTAT error observation into this instance's counters.
+ * MUST be called once per completed block (even when flags==0) so frm_consec resets on a clean block.
+ * `flags` is the read_clear_errflags() mask. SPIROV/SPITUR are simple occurrence counters; FRMERR
+ * additionally drives frm_consec (consecutive-FRMERR block run), which the auto-recovery watches.
+ */
+void dspic33ak_spi_i2s_tdm_diag_note_errflags( dspic33ak_spi_i2s_tdm_diag_t* d, uint32_t flags )
+{
+    if( d == NULL )
+    {
+        return;
+    }
+    if( flags & DSPIC33AK_SPI_I2S_TDM_STAT_SPIROV ) { d->err_rov_count++; }
+    if( flags & DSPIC33AK_SPI_I2S_TDM_STAT_SPITUR ) { d->err_tur_count++; }
+    if( flags & DSPIC33AK_SPI_I2S_TDM_STAT_FRMERR ) { d->err_frm_count++; d->frm_consec++; }
+    else                                            { d->frm_consec = 0u; }
 }
 
 

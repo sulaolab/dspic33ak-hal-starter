@@ -44,6 +44,7 @@ typedef struct {
 typedef struct {
     volatile void     *spi_buf;     // &SPIxBUF
     volatile uint32_t *con1;        // &SPIxCON1
+    volatile uint32_t *stat;        // &SPIxSTAT (sticky error/health flags: SPIROV/SPITUR/FRMERR)
     volatile uint32_t *brg;         // &SPIxBRG
     volatile uint32_t *imsk;        // &SPIxIMSK
     uint8_t            rx_trigger;  // DMAxSELbits.CHSEL for SPIxRX (data sheet Table 13-2)
@@ -77,25 +78,25 @@ static const tdm_spi_dev_t s_spi_dev[] =
     // Family Data Sheet (DS70005591A) -> SPInRx / SPInTx rows.
     [TDM_SPI1] =
     {
-        (volatile void *)&SPI1BUF, &SPI1CON1, &SPI1BRG, &SPI1IMSK, 0x6u, 0x7u,
+        (volatile void *)&SPI1BUF, &SPI1CON1, &SPI1STAT, &SPI1BRG, &SPI1IMSK, 0x6u, 0x7u,
         { &IEC2, _IEC2_SPI1RXIE_MASK, &IFS2, _IFS2_SPI1RXIF_MASK },
         { &IEC2, _IEC2_SPI1TXIE_MASK, &IFS2, _IFS2_SPI1TXIF_MASK },
     },
     [TDM_SPI2] =
     {
-        (volatile void *)&SPI2BUF, &SPI2CON1, &SPI2BRG, &SPI2IMSK, 0x8u, 0x9u,
+        (volatile void *)&SPI2BUF, &SPI2CON1, &SPI2STAT, &SPI2BRG, &SPI2IMSK, 0x8u, 0x9u,
         { &IEC2, _IEC2_SPI2RXIE_MASK, &IFS2, _IFS2_SPI2RXIF_MASK },
         { &IEC2, _IEC2_SPI2TXIE_MASK, &IFS2, _IFS2_SPI2TXIF_MASK },
     },
     [TDM_SPI3] =
     {
-        (volatile void *)&SPI3BUF, &SPI3CON1, &SPI3BRG, &SPI3IMSK, 0xAu, 0xBu,
+        (volatile void *)&SPI3BUF, &SPI3CON1, &SPI3STAT, &SPI3BRG, &SPI3IMSK, 0xAu, 0xBu,
         { &IEC2, _IEC2_SPI3RXIE_MASK, &IFS2, _IFS2_SPI3RXIF_MASK },
         { &IEC2, _IEC2_SPI3TXIE_MASK, &IFS2, _IFS2_SPI3TXIF_MASK },
     },
     [TDM_SPI4] =
     {
-        (volatile void *)&SPI4BUF, &SPI4CON1, &SPI4BRG, &SPI4IMSK, 0xCu, 0xDu,
+        (volatile void *)&SPI4BUF, &SPI4CON1, &SPI4STAT, &SPI4BRG, &SPI4IMSK, 0xCu, 0xDu,
         { &IEC2, _IEC2_SPI4RXIE_MASK, &IFS2, _IFS2_SPI4RXIF_MASK },
         { &IEC2, _IEC2_SPI4TXIE_MASK, &IFS2, _IFS2_SPI4TXIF_MASK },
     },
@@ -107,19 +108,19 @@ static const tdm_spi_dev_t s_spi_dev[] =
     // SPI1 RX/TX CPU IRQ bits straddle IEC1/IEC2 and IFS1/IFS2 on AK128.
     [TDM_SPI1] =
     {
-        (volatile void *)&SPI1BUF, &SPI1CON1, &SPI1BRG, &SPI1IMSK, 0x6u, 0x7u,
+        (volatile void *)&SPI1BUF, &SPI1CON1, &SPI1STAT, &SPI1BRG, &SPI1IMSK, 0x6u, 0x7u,
         { &IEC1, _IEC1_SPI1RXIE_MASK, &IFS1, _IFS1_SPI1RXIF_MASK },
         { &IEC2, _IEC2_SPI1TXIE_MASK, &IFS2, _IFS2_SPI1TXIF_MASK },
     },
     [TDM_SPI2] =
     {
-        (volatile void *)&SPI2BUF, &SPI2CON1, &SPI2BRG, &SPI2IMSK, 0x8u, 0x9u,
+        (volatile void *)&SPI2BUF, &SPI2CON1, &SPI2STAT, &SPI2BRG, &SPI2IMSK, 0x8u, 0x9u,
         { &IEC2, _IEC2_SPI2RXIE_MASK, &IFS2, _IFS2_SPI2RXIF_MASK },
         { &IEC2, _IEC2_SPI2TXIE_MASK, &IFS2, _IFS2_SPI2TXIF_MASK },
     },
     [TDM_SPI3] =
     {
-        (volatile void *)&SPI3BUF, &SPI3CON1, &SPI3BRG, &SPI3IMSK, 0xAu, 0xBu,
+        (volatile void *)&SPI3BUF, &SPI3CON1, &SPI3STAT, &SPI3BRG, &SPI3IMSK, 0xAu, 0xBu,
         { &IEC2, _IEC2_SPI3RXIE_MASK, &IFS2, _IFS2_SPI3RXIF_MASK },
         { &IEC2, _IEC2_SPI3TXIE_MASK, &IFS2, _IFS2_SPI3TXIF_MASK },
     },
@@ -367,6 +368,32 @@ void dspic33ak_spi_i2s_tdm_hw_soft_stop( tdm_spi_inst_t inst )
     hw_spi_irq_enable( inst, false );
 
     dspic33ak_spi_i2s_tdm_hw_module_enable( inst, false );
+}
+
+
+/*
+ * EXPERIMENT: read + clear this instance's SPIxSTAT sticky error flags (bit-slip detection).
+ *
+ * Returns the observed SPIROV/SPITUR/FRMERR mask and clears exactly those bits (read-modify-write;
+ * read-only STAT bits are untouched). One SFR read + one masked write -- safe to call from the
+ * RX-block ISR each block. See dspic33ak_spi_i2s_tdm_hw.h for why the driver normally ignores these.
+ */
+uint32_t dspic33ak_spi_i2s_tdm_hw_read_clear_errflags( tdm_spi_inst_t inst )
+{
+    if( !hw_inst_valid( inst ) )
+    {
+        return 0u;
+    }
+    volatile uint32_t *stat = s_spi_dev[inst].stat;
+    const uint32_t mask = DSPIC33AK_SPI_I2S_TDM_STAT_SPIROV
+                        | DSPIC33AK_SPI_I2S_TDM_STAT_SPITUR
+                        | DSPIC33AK_SPI_I2S_TDM_STAT_FRMERR;
+    const uint32_t flags = *stat & mask;
+    if( flags != 0u )
+    {
+        *stat &= ~flags;   // clear only the sticky error bits we observed
+    }
+    return flags;
 }
 
 

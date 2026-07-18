@@ -36,6 +36,10 @@
 typedef struct {
     volatile uint32_t block_count;               // completed blocks since reset()
     volatile uint32_t block_deadline_miss_count; // HALF+DONE conflicts on this instance since reset()
+    volatile uint32_t err_rov_count;             // SPIROV (RX overflow) occurrences since reset() [bit-slip experiment]
+    volatile uint32_t err_tur_count;             // SPITUR (TX underrun) occurrences since reset()
+    volatile uint32_t err_frm_count;             // FRMERR (frame-sync error) occurrences since reset()
+    volatile uint32_t frm_consec;                // consecutive blocks with FRMERR set (0 on a clean block) [auto-recovery]
     volatile uint32_t isr_start_count;           // timer count at the current ISR entry
     volatile uint32_t isr_last_count;            // ticks of the last completed ISR
     volatile uint32_t isr_min_count;             // min ticks since the last clear_peak
@@ -57,6 +61,12 @@ void dspic33ak_spi_i2s_tdm_diag_isr_end( dspic33ak_spi_i2s_tdm_diag_t* d );
 // Count one completed block for THIS instance's RX-block ISR (read via
 // *_read_counts() / get_status()). Each instance keeps its own block_count.
 void dspic33ak_spi_i2s_tdm_diag_note_block( dspic33ak_spi_i2s_tdm_diag_t* d );
+
+// EXPERIMENT (bit-slip detection): fold one RX-block ISR's SPIxSTAT error-flag observation into
+// this instance's counters. `flags` is the mask from dspic33ak_spi_i2s_tdm_hw_read_clear_errflags()
+// (DSPIC33AK_SPI_I2S_TDM_STAT_SPIROV/SPITUR/FRMERR); each set bit bumps its own counter. No-op when
+// flags==0. Read back via get_status (err_rov/tur/frm_count) under the ISR mask.
+void dspic33ak_spi_i2s_tdm_diag_note_errflags( dspic33ak_spi_i2s_tdm_diag_t* d, uint32_t flags );
 
 // Update deadline diagnostics from THIS instance's DMA status snapshot. A HALF+DONE
 // conflict means this instance's RX-block ISR fell a full block behind, so it counts

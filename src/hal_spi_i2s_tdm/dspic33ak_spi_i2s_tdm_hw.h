@@ -57,6 +57,13 @@ void dspic33ak_spi_i2s_tdm_hw_module_enable( tdm_spi_inst_t inst, bool enable );
 void dspic33ak_spi_i2s_tdm_hw_irq_clear_flags( tdm_spi_inst_t inst );
 void dspic33ak_spi_i2s_tdm_hw_soft_stop( tdm_spi_inst_t inst );
 
+// EXPERIMENT (connector-glitch bit-slip detection): read this instance's SPIxSTAT sticky error
+// flags (SPIROV/SPITUR/FRMERR), clear the ones observed, and return the flag mask
+// (DSPIC33AK_SPI_I2S_TDM_STAT_* bits); 0 if none set or inst out of range. Cheap (one SFR read +
+// masked write-back), meant to be called once per RX-block ISR to catch a frame slip when it
+// happens (the driver otherwise runs with IGNROV/IGNTUR set and never inspects these HW flags).
+uint32_t dspic33ak_spi_i2s_tdm_hw_read_clear_errflags( tdm_spi_inst_t inst );
+
 // Return the PPS output-function code (_RPOUT_SSx) for one SPI instance's frame-sync
 // (SSx = FRMSYNC output in framed master mode). Used by the CLC10 50%-FS module to find,
 // by reverse PPS lookup, which physical pin the board routed this instance's FS to.
