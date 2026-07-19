@@ -145,6 +145,7 @@ This pairs with the standalone HALs:
 - [dspic33ak-i2c-hal](https://github.com/sulaolab/dspic33ak-i2c-hal)
 - [dspic33ak-can-hal](https://github.com/sulaolab/dspic33ak-can-hal)
 - [dspic33ak-timer-hal](https://github.com/sulaolab/dspic33ak-timer-hal)
+- [dspic33ak-dma-hal](https://github.com/sulaolab/dspic33ak-dma-hal)
 - [dspic33ak-spi-i2s-tdm-hal](https://github.com/sulaolab/dspic33ak-spi-i2s-tdm-hal)
 
 This starter also currently vendors integration HAL folders such as `hal_clock`,

@@ -5,6 +5,6 @@ This directory vendors the dsPIC33AK SPI/I2S/TDM HAL from:
 - Repository: https://github.com/sulaolab/dspic33ak-spi-i2s-tdm-hal
 - Branch: main
 - Source directory: src/
-- Upstream commit: c111d3b82a1499c05c680ad4f2a236c5ab5ed63b
+- Upstream commit: cd2385fb621376605f4338fa3fc31e4f1366ce01
 
 Apply reusable transport changes upstream first, then refresh this validated starter snapshot.

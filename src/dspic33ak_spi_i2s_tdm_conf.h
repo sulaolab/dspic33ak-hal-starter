@@ -30,7 +30,9 @@
 // Compile-time integration settings:
 //   DSPIC33AK_TDM_SLOTS_PER_FS   slots per frame-sync: TDM8 = 8, I2S = 2.
 //   DSPIC33AK_TDM_BLOCK_FRAMES   frames per ping/pong half (DMA block size).
-//   DSPIC33AK_TDM_USE_SPI2      1 = SPI2 Audio transport is part of this build.
+//   DSPIC33AK_TDM_USE_SPI2      1 = second logical transport row is built.
+//   DSPIC33AK_TDM_USE_SPI3/4    1 = additional physical SPI3/SPI4 rows are built.
+//   DSPIC33AK_TDM_BASE_ON_SPI34 1 = remap logical rows 0/1 from SPI1/2 to SPI3/4.
 // (Sample rate is NOT a setting here -- the transport is rate-agnostic; the product's
 // supported-rate policy lives in the app layer, not the HAL.)
 // The core's static DMA ping-pong buffers are sized 2 * SLOTS_PER_FS *
@@ -65,13 +67,13 @@
 #define DSPIC33AK_TDM_USE_SPI2        0     // single SPI Audio transport by default
 #endif
 #ifndef DSPIC33AK_TDM_USE_SPI3
-#define DSPIC33AK_TDM_USE_SPI3        0
+#define DSPIC33AK_TDM_USE_SPI3        0     // no additional SPI3 row by default
 #endif
 #ifndef DSPIC33AK_TDM_USE_SPI4
-#define DSPIC33AK_TDM_USE_SPI4        0
+#define DSPIC33AK_TDM_USE_SPI4        0     // no additional SPI4 row by default
 #endif
 #ifndef DSPIC33AK_TDM_BASE_ON_SPI34
-#define DSPIC33AK_TDM_BASE_ON_SPI34   0     // set with USE_SPI2=1 for the explicit SPI3/4 bank
+#define DSPIC33AK_TDM_BASE_ON_SPI34   0     // default logical bank is physical SPI1/SPI2
 #endif
 
 //===========================================================
@@ -130,8 +132,9 @@
 // The transport core defines its leg enum, per-instance ping-pong buffers, the
 // s_spi_legs[] table, and the explicit _DMA<rx>Interrupt vectors directly in C, keyed off
 // the per-instance channel #defines above (DSPIC33AK_TDM_SPIn_RX/TX_DMA) and the geometry
-// macros (DSPIC33AK_TDM_SLOTS_PER_FS / _BLOCK_FRAMES). The number of legs is chosen by
-// DSPIC33AK_TDM_USE_SPI2 (1 or 2 SPI audio transports) -- there is no macro row list.
+// macros (DSPIC33AK_TDM_SLOTS_PER_FS / _BLOCK_FRAMES). By default, logical rows 0/1 map
+// to physical SPI1/SPI2. DSPIC33AK_TDM_BASE_ON_SPI34 explicitly remaps those same two rows
+// to SPI3/SPI4; DSPIC33AK_TDM_USE_SPI3/4 instead add physical SPI3/SPI4 rows after SPI1/SPI2.
 // The per-leg clock role and (rate-agnostic) stream shape are set at runtime by the
 // integrator's config (dspic33ak_spi_i2s_tdm_configure_system() / _inst_configure()),
 // not here.
@@ -142,7 +145,7 @@
 // as a group; legs in different domains are started/rolled-back separately and need not share
 // BCLK/FS -- but this is NOT full independence (source-readiness is engine-wide/primary-gated;
 // CLC10 + the clock port are shared). NOT the clock role.
-// Starter smoke is SPI1-only, so SPI2's value is used only when DSPIC33AK_TDM_USE_SPI2=1.
+// Starter smoke is SPI1-only by default; additional values are used only when those rows are built.
 #ifndef DSPIC33AK_TDM_SPI1_SYNC_DOMAIN
 #define DSPIC33AK_TDM_SPI1_SYNC_DOMAIN   (0)
 #endif
