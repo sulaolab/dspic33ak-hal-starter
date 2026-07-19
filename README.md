@@ -155,7 +155,8 @@ I2S/TDM.
 
 Reusable HAL implementations are vendored as validated snapshots under matching
 `src/hal_xxx/` directories so the complete project builds without external
-source dependencies. Starter-only glue intentionally stays outside those HAL
+source dependencies. Where present, `src/hal_xxx/UPSTREAM.md` records the exact
+standalone revision used by the snapshot. Starter-only glue intentionally stays outside those HAL
 folders: clock policy lives in `src/clock/`, board pin/PPS wiring lives in
 `src/board.*` and `src/board_pins.h`, board component helpers live in
 `src/board_components/`, and starter UART glue (`printf()` retargeting plus

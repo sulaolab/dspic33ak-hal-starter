@@ -64,6 +64,15 @@
 #ifndef DSPIC33AK_TDM_USE_SPI2
 #define DSPIC33AK_TDM_USE_SPI2        0     // single SPI Audio transport by default
 #endif
+#ifndef DSPIC33AK_TDM_USE_SPI3
+#define DSPIC33AK_TDM_USE_SPI3        0
+#endif
+#ifndef DSPIC33AK_TDM_USE_SPI4
+#define DSPIC33AK_TDM_USE_SPI4        0
+#endif
+#ifndef DSPIC33AK_TDM_BASE_ON_SPI34
+#define DSPIC33AK_TDM_BASE_ON_SPI34   0     // set with USE_SPI2=1 for the explicit SPI3/4 bank
+#endif
 
 //===========================================================
 // DMA channel allocation (single source of truth for the SPI<->DMA binding)
@@ -88,6 +97,18 @@
 #endif
 #ifndef DSPIC33AK_TDM_SPI2_TX_DMA
 #define DSPIC33AK_TDM_SPI2_TX_DMA   3
+#endif
+#ifndef DSPIC33AK_TDM_SPI3_RX_DMA
+#define DSPIC33AK_TDM_SPI3_RX_DMA   4
+#endif
+#ifndef DSPIC33AK_TDM_SPI3_TX_DMA
+#define DSPIC33AK_TDM_SPI3_TX_DMA   5
+#endif
+#ifndef DSPIC33AK_TDM_SPI4_RX_DMA
+#define DSPIC33AK_TDM_SPI4_RX_DMA   6
+#endif
+#ifndef DSPIC33AK_TDM_SPI4_TX_DMA
+#define DSPIC33AK_TDM_SPI4_TX_DMA   7
 #endif
 
 
@@ -128,6 +149,12 @@
 #ifndef DSPIC33AK_TDM_SPI2_SYNC_DOMAIN
 #define DSPIC33AK_TDM_SPI2_SYNC_DOMAIN   (0)
 #endif
+#ifndef DSPIC33AK_TDM_SPI3_SYNC_DOMAIN
+#define DSPIC33AK_TDM_SPI3_SYNC_DOMAIN   (2)
+#endif
+#ifndef DSPIC33AK_TDM_SPI4_SYNC_DOMAIN
+#define DSPIC33AK_TDM_SPI4_SYNC_DOMAIN   (3)
+#endif
 
 // sync_domain must be 0..31 (start_all_domains()'s dedup/rollback mask range). Reject negatives
 // too: a negative literal would cast to a large uint8_t at runtime.
@@ -136,6 +163,12 @@
 #endif
 #if DSPIC33AK_TDM_USE_SPI2 && (((DSPIC33AK_TDM_SPI2_SYNC_DOMAIN) < 0) || ((DSPIC33AK_TDM_SPI2_SYNC_DOMAIN) >= 32))
 #error "DSPIC33AK_TDM_SPI2_SYNC_DOMAIN must be in 0..31."
+#endif
+#if DSPIC33AK_TDM_USE_SPI3 && (((DSPIC33AK_TDM_SPI3_SYNC_DOMAIN) < 0) || ((DSPIC33AK_TDM_SPI3_SYNC_DOMAIN) >= 32))
+#error "DSPIC33AK_TDM_SPI3_SYNC_DOMAIN must be in 0..31."
+#endif
+#if DSPIC33AK_TDM_USE_SPI4 && (((DSPIC33AK_TDM_SPI4_SYNC_DOMAIN) < 0) || ((DSPIC33AK_TDM_SPI4_SYNC_DOMAIN) >= 32))
+#error "DSPIC33AK_TDM_SPI4_SYNC_DOMAIN must be in 0..31."
 #endif
 
 
@@ -157,6 +190,27 @@
 
 #if ((DSPIC33AK_TDM_USE_SPI2 != 0) && (DSPIC33AK_TDM_USE_SPI2 != 1))
 #error "DSPIC33AK_TDM_USE_SPI2 must be 0 or 1."
+#endif
+#if ((DSPIC33AK_TDM_USE_SPI3 != 0) && (DSPIC33AK_TDM_USE_SPI3 != 1))
+#error "DSPIC33AK_TDM_USE_SPI3 must be 0 or 1."
+#endif
+#if ((DSPIC33AK_TDM_USE_SPI4 != 0) && (DSPIC33AK_TDM_USE_SPI4 != 1))
+#error "DSPIC33AK_TDM_USE_SPI4 must be 0 or 1."
+#endif
+#if ((DSPIC33AK_TDM_BASE_ON_SPI34 != 0) && (DSPIC33AK_TDM_BASE_ON_SPI34 != 1))
+#error "DSPIC33AK_TDM_BASE_ON_SPI34 must be 0 or 1."
+#endif
+#if (DSPIC33AK_TDM_USE_SPI3 != DSPIC33AK_TDM_USE_SPI4)
+#error "The SPI3/SPI4 expansion requires SPI3 and SPI4 together."
+#endif
+#if DSPIC33AK_TDM_BASE_ON_SPI34 && !DSPIC33AK_TDM_USE_SPI2
+#error "The SPI34 test bank requires two logical rows (DSPIC33AK_TDM_USE_SPI2=1)."
+#endif
+#if DSPIC33AK_TDM_BASE_ON_SPI34 && (DSPIC33AK_TDM_USE_SPI3 || DSPIC33AK_TDM_USE_SPI4)
+#error "SPI34 test-bank mode and simultaneous four-leg mode are mutually exclusive."
+#endif
+#if DSPIC33AK_TDM_USE_SPI3 && !DSPIC33AK_TDM_USE_SPI2
+#error "SPI3/SPI4 expansion currently requires the existing SPI1/SPI2 pair."
 #endif
 
 #if (DSPIC33AK_TDM_SLOTS_PER_FS > (2147483647 / (2 * DSPIC33AK_TDM_BLOCK_FRAMES)))

@@ -220,8 +220,6 @@ bool tdm_smoke_init(void)
                 .fs_coincides_first_bclk       = true,    // SPIFE=1 : no 1-bit delay (TDM8)
                 .bclk_idle_high                = true,    // CKP=1
                 .bclk_change_on_active_to_idle = false,   // CKE=0
-                .ignore_overflow               = true,    // IGNROV=1
-                .ignore_underrun               = true,    // IGNTUR=1
             },
             .sync_domain = 0u,
         },
