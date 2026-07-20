@@ -23,14 +23,17 @@
 // the APP side (compare your APP_* against the DSPIC33AK_TDM_* here and #error on a
 // mismatch). The HAL does not police the app, and vice versa.
 //
-// Each setting is -D-overridable (#ifndef-guarded). This template defaults to the
-// SAFEST generic config: a single SPI1 TDM8 stream, no second codec. Override with -D
-// or by editing below for I2S (2 slots), a different block size, a second SPI, etc.
+// Each setting is -D-overridable (#ifndef-guarded). This project config defaults to a
+// single SPI1 TDM8 stream with no additional transport legs. Override with -D or edit
+// below for I2S (2 slots), a different block size, or additional transport legs.
 //
 // Compile-time integration settings:
 //   DSPIC33AK_TDM_SLOTS_PER_FS   slots per frame-sync: TDM8 = 8, I2S = 2.
 //   DSPIC33AK_TDM_BLOCK_FRAMES   frames per ping/pong half (DMA block size).
-//   DSPIC33AK_TDM_USE_SPI2      1 = SPI2 Audio transport is part of this build.
+//   DSPIC33AK_TDM_USE_SPI2      1 = second logical transport row is built.
+//   DSPIC33AK_TDM_USE_SPI3/4    1 = additional physical SPI3/SPI4 rows are built (AK512 only).
+//   DSPIC33AK_TDM_BASE_ON_SPI34 1 = remap logical rows 0/1 from SPI1/2 to SPI3/4 (AK512 only).
+// AK128 has no SPI4 or DMA6/7, so paired SPI3/4 and four-leg modes are unavailable.
 // (Sample rate is NOT a setting here -- the transport is rate-agnostic; the product's
 // supported-rate policy lives in the app layer, not the HAL.)
 // The core's static DMA ping-pong buffers are sized 2 * SLOTS_PER_FS *
@@ -64,6 +67,15 @@
 #ifndef DSPIC33AK_TDM_USE_SPI2
 #define DSPIC33AK_TDM_USE_SPI2        0     // single SPI Audio transport by default
 #endif
+#ifndef DSPIC33AK_TDM_USE_SPI3
+#define DSPIC33AK_TDM_USE_SPI3        0     // no additional SPI3 row by default
+#endif
+#ifndef DSPIC33AK_TDM_USE_SPI4
+#define DSPIC33AK_TDM_USE_SPI4        0     // no additional SPI4 row by default
+#endif
+#ifndef DSPIC33AK_TDM_BASE_ON_SPI34
+#define DSPIC33AK_TDM_BASE_ON_SPI34   0     // default logical bank is physical SPI1/SPI2
+#endif
 
 //===========================================================
 // DMA channel allocation (single source of truth for the SPI<->DMA binding)
@@ -89,6 +101,18 @@
 #ifndef DSPIC33AK_TDM_SPI2_TX_DMA
 #define DSPIC33AK_TDM_SPI2_TX_DMA   3
 #endif
+#ifndef DSPIC33AK_TDM_SPI3_RX_DMA
+#define DSPIC33AK_TDM_SPI3_RX_DMA   4
+#endif
+#ifndef DSPIC33AK_TDM_SPI3_TX_DMA
+#define DSPIC33AK_TDM_SPI3_TX_DMA   5
+#endif
+#ifndef DSPIC33AK_TDM_SPI4_RX_DMA
+#define DSPIC33AK_TDM_SPI4_RX_DMA   6
+#endif
+#ifndef DSPIC33AK_TDM_SPI4_TX_DMA
+#define DSPIC33AK_TDM_SPI4_TX_DMA   7
+#endif
 
 
 //===========================================================
@@ -109,8 +133,9 @@
 // The transport core defines its leg enum, per-instance ping-pong buffers, the
 // s_spi_legs[] table, and the explicit _DMA<rx>Interrupt vectors directly in C, keyed off
 // the per-instance channel #defines above (DSPIC33AK_TDM_SPIn_RX/TX_DMA) and the geometry
-// macros (DSPIC33AK_TDM_SLOTS_PER_FS / _BLOCK_FRAMES). The number of legs is chosen by
-// DSPIC33AK_TDM_USE_SPI2 (1 or 2 SPI audio transports) -- there is no macro row list.
+// macros (DSPIC33AK_TDM_SLOTS_PER_FS / _BLOCK_FRAMES). By default, logical rows 0/1 map
+// to physical SPI1/SPI2. DSPIC33AK_TDM_BASE_ON_SPI34 explicitly remaps those same two rows
+// to SPI3/SPI4; DSPIC33AK_TDM_USE_SPI3/4 instead add physical SPI3/SPI4 rows after SPI1/SPI2.
 // The per-leg clock role and (rate-agnostic) stream shape are set at runtime by the
 // integrator's config (dspic33ak_spi_i2s_tdm_configure_system() / _inst_configure()),
 // not here.
@@ -121,12 +146,18 @@
 // as a group; legs in different domains are started/rolled-back separately and need not share
 // BCLK/FS -- but this is NOT full independence (source-readiness is engine-wide/primary-gated;
 // CLC10 + the clock port are shared). NOT the clock role.
-// Starter smoke is SPI1-only, so SPI2's value is used only when DSPIC33AK_TDM_USE_SPI2=1.
+// Starter smoke is SPI1-only by default; additional values are used only when those rows are built.
 #ifndef DSPIC33AK_TDM_SPI1_SYNC_DOMAIN
 #define DSPIC33AK_TDM_SPI1_SYNC_DOMAIN   (0)
 #endif
 #ifndef DSPIC33AK_TDM_SPI2_SYNC_DOMAIN
 #define DSPIC33AK_TDM_SPI2_SYNC_DOMAIN   (0)
+#endif
+#ifndef DSPIC33AK_TDM_SPI3_SYNC_DOMAIN
+#define DSPIC33AK_TDM_SPI3_SYNC_DOMAIN   (2)
+#endif
+#ifndef DSPIC33AK_TDM_SPI4_SYNC_DOMAIN
+#define DSPIC33AK_TDM_SPI4_SYNC_DOMAIN   (3)
 #endif
 
 // sync_domain must be 0..31 (start_all_domains()'s dedup/rollback mask range). Reject negatives
@@ -136,6 +167,12 @@
 #endif
 #if DSPIC33AK_TDM_USE_SPI2 && (((DSPIC33AK_TDM_SPI2_SYNC_DOMAIN) < 0) || ((DSPIC33AK_TDM_SPI2_SYNC_DOMAIN) >= 32))
 #error "DSPIC33AK_TDM_SPI2_SYNC_DOMAIN must be in 0..31."
+#endif
+#if DSPIC33AK_TDM_USE_SPI3 && (((DSPIC33AK_TDM_SPI3_SYNC_DOMAIN) < 0) || ((DSPIC33AK_TDM_SPI3_SYNC_DOMAIN) >= 32))
+#error "DSPIC33AK_TDM_SPI3_SYNC_DOMAIN must be in 0..31."
+#endif
+#if DSPIC33AK_TDM_USE_SPI4 && (((DSPIC33AK_TDM_SPI4_SYNC_DOMAIN) < 0) || ((DSPIC33AK_TDM_SPI4_SYNC_DOMAIN) >= 32))
+#error "DSPIC33AK_TDM_SPI4_SYNC_DOMAIN must be in 0..31."
 #endif
 
 
@@ -157,6 +194,27 @@
 
 #if ((DSPIC33AK_TDM_USE_SPI2 != 0) && (DSPIC33AK_TDM_USE_SPI2 != 1))
 #error "DSPIC33AK_TDM_USE_SPI2 must be 0 or 1."
+#endif
+#if ((DSPIC33AK_TDM_USE_SPI3 != 0) && (DSPIC33AK_TDM_USE_SPI3 != 1))
+#error "DSPIC33AK_TDM_USE_SPI3 must be 0 or 1."
+#endif
+#if ((DSPIC33AK_TDM_USE_SPI4 != 0) && (DSPIC33AK_TDM_USE_SPI4 != 1))
+#error "DSPIC33AK_TDM_USE_SPI4 must be 0 or 1."
+#endif
+#if ((DSPIC33AK_TDM_BASE_ON_SPI34 != 0) && (DSPIC33AK_TDM_BASE_ON_SPI34 != 1))
+#error "DSPIC33AK_TDM_BASE_ON_SPI34 must be 0 or 1."
+#endif
+#if (DSPIC33AK_TDM_USE_SPI3 != DSPIC33AK_TDM_USE_SPI4)
+#error "The SPI3/SPI4 expansion requires SPI3 and SPI4 together."
+#endif
+#if DSPIC33AK_TDM_BASE_ON_SPI34 && !DSPIC33AK_TDM_USE_SPI2
+#error "The SPI34 test bank requires two logical rows (DSPIC33AK_TDM_USE_SPI2=1)."
+#endif
+#if DSPIC33AK_TDM_BASE_ON_SPI34 && (DSPIC33AK_TDM_USE_SPI3 || DSPIC33AK_TDM_USE_SPI4)
+#error "SPI34 test-bank mode and simultaneous four-leg mode are mutually exclusive."
+#endif
+#if DSPIC33AK_TDM_USE_SPI3 && !DSPIC33AK_TDM_USE_SPI2
+#error "SPI3/SPI4 expansion currently requires the existing SPI1/SPI2 pair."
 #endif
 
 #if (DSPIC33AK_TDM_SLOTS_PER_FS > (2147483647 / (2 * DSPIC33AK_TDM_BLOCK_FRAMES)))

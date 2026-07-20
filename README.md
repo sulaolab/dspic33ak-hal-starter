@@ -145,6 +145,7 @@ This pairs with the standalone HALs:
 - [dspic33ak-i2c-hal](https://github.com/sulaolab/dspic33ak-i2c-hal)
 - [dspic33ak-can-hal](https://github.com/sulaolab/dspic33ak-can-hal)
 - [dspic33ak-timer-hal](https://github.com/sulaolab/dspic33ak-timer-hal)
+- [dspic33ak-dma-hal](https://github.com/sulaolab/dspic33ak-dma-hal)
 - [dspic33ak-spi-i2s-tdm-hal](https://github.com/sulaolab/dspic33ak-spi-i2s-tdm-hal)
 
 This starter also currently vendors integration HAL folders such as `hal_clock`,
@@ -155,7 +156,8 @@ I2S/TDM.
 
 Reusable HAL implementations are vendored as validated snapshots under matching
 `src/hal_xxx/` directories so the complete project builds without external
-source dependencies. Starter-only glue intentionally stays outside those HAL
+source dependencies. Where present, `src/hal_xxx/UPSTREAM.md` records the exact
+standalone revision used by the snapshot. Starter-only glue intentionally stays outside those HAL
 folders: clock policy lives in `src/clock/`, board pin/PPS wiring lives in
 `src/board.*` and `src/board_pins.h`, board component helpers live in
 `src/board_components/`, and starter UART glue (`printf()` retargeting plus

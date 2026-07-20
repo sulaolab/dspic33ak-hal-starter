@@ -92,8 +92,6 @@ static dspic33ak_spi_i2s_tdm_config_t neg_cfg( dspic33ak_spi_i2s_tdm_clock_role_
     c.fs_coincides_first_bclk       = true;
     c.bclk_idle_high                = ckp;
     c.bclk_change_on_active_to_idle = false;
-    c.ignore_overflow               = true;
-    c.ignore_underrun               = true;
     return c;
 }
 
