@@ -2,7 +2,7 @@
 
 This directory vendors the dsPIC33AK DMA HAL from:
 
-- Repository: https://github.com/sulaolab/dspic33ak-dma-hal
+- Repository: https://github.com/sulaolab/dspic33ak-hal-dma
 - Branch: main
 - Source directory: src/
 - Upstream commit: 30e9bf943af51853fda90293b6fb9adeefb26290

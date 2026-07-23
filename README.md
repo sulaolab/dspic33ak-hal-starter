@@ -139,14 +139,14 @@ together.
 
 This pairs with the standalone HALs:
 
-- [dspic33ak-gpio-hal](https://github.com/sulaolab/dspic33ak-gpio-hal)
-- [dspic33ak-uart-hal](https://github.com/sulaolab/dspic33ak-uart-hal)
-- [dspic33ak-spi-hal](https://github.com/sulaolab/dspic33ak-spi-hal)
-- [dspic33ak-i2c-hal](https://github.com/sulaolab/dspic33ak-i2c-hal)
-- [dspic33ak-can-hal](https://github.com/sulaolab/dspic33ak-can-hal)
-- [dspic33ak-timer-hal](https://github.com/sulaolab/dspic33ak-timer-hal)
-- [dspic33ak-dma-hal](https://github.com/sulaolab/dspic33ak-dma-hal)
-- [dspic33ak-spi-i2s-tdm-hal](https://github.com/sulaolab/dspic33ak-spi-i2s-tdm-hal)
+- [dspic33ak-hal-gpio](https://github.com/sulaolab/dspic33ak-hal-gpio)
+- [dspic33ak-hal-uart](https://github.com/sulaolab/dspic33ak-hal-uart)
+- [dspic33ak-hal-spi](https://github.com/sulaolab/dspic33ak-hal-spi)
+- [dspic33ak-hal-i2c](https://github.com/sulaolab/dspic33ak-hal-i2c)
+- [dspic33ak-hal-can](https://github.com/sulaolab/dspic33ak-hal-can)
+- [dspic33ak-hal-timer](https://github.com/sulaolab/dspic33ak-hal-timer)
+- [dspic33ak-hal-dma](https://github.com/sulaolab/dspic33ak-hal-dma)
+- [dspic33ak-hal-spi-i2s-tdm](https://github.com/sulaolab/dspic33ak-hal-spi-i2s-tdm)
 
 This starter also currently vendors integration HAL folders such as `hal_clock`,
 `hal_dma`, and the `hal_gpio_event` change-notification layer inside
@@ -360,7 +360,7 @@ validation demos remain starter-specific code, kept deliberately small and
 hand-written. See `docs/source_layout.md` for the ownership rules.
 
 The standalone Timer HAL is maintained at
-[dspic33ak-timer-hal](https://github.com/sulaolab/dspic33ak-timer-hal). The
+[dspic33ak-hal-timer](https://github.com/sulaolab/dspic33ak-hal-timer). The
 copy under `src/hal_timer/` is the version integrated and validated by this
 starter project.
 
