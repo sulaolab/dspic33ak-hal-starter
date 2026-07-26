@@ -1,5 +1,7 @@
 # dspic33ak-hal-starter
 
+**dsPIC33AK HAL Starter with Dual-Partition Firmware Updater**
+
 A ready-to-run MPLAB X starter project for the **dsPIC33AK512MPS512**.
 
 Flash this project, open a serial terminal, and you should immediately see the
