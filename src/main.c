@@ -19,6 +19,7 @@
 #include "dspic33ak_tick_timer.h"
 #include "dspic33ak_high_res_timer.h"
 #include "dspic33ak_uart.h"
+#include "dspic33ak_nvm.h"
 #include "dspic33ak_udid.h"
 #include "dspic33ak_i2c_master.h"
 #include "sst26_min.h"
@@ -33,6 +34,9 @@
 #include "app_config.h"
 #include "tdm_smoke.h"
 #include "tdm_neg_test.h"
+#include "fw_command.h"
+#include "fw_btseq.h"
+#include "fw_uca.h"
 #if HAL_STARTER_ENABLE_UART_ASYNC_SELFTEST
 #include "uart_async_selftest.h"
 #endif
@@ -47,6 +51,8 @@
  * Most config bits use device defaults (the device boots on the FRC, which we
  * then feed into PLL1). Alternate-I2C2 pin mapping is selected for this board. */
 #pragma config FDEVOPT_ALTI2C2 = ON   /* I2C2 on its alternate (board) pins */
+#pragma config BTMODE = DUAL          /* two 256 KB A/B program partitions */
+#pragma config NOBTSWP = ON           /* enable the documented boot-swap path */
 
 static uint8_t s_console_uart_rx_ring[256u];
 
@@ -86,10 +92,9 @@ static void console_uart_init(void)
         .tx_irq_priority = 5u,
     };
 
-    /* UART2: PKOB4 "USB Serial Device". Output mirror (stdio write() retarget
-     * copies console output here) + Phase 2 input: RX enabled so keystrokes on
-     * this port are teed like UART1 (see console_input_tee_poll). RX is polling
-     * (drained in the main loop) -- no ring buffer / RX IRQ. */
+    /* UART2: PKOB4 "USB Serial Device" output mirror. Firmware-update commands
+     * and XMODEM intentionally use UART1 only, so RX is disabled here: a beginner
+     * can never arm on one COM port and accidentally send the image to another. */
     const dspic33ak_uart_config_t cfg2 = {
         .uart_clk_hz = STARTER_CLOCK_SYS_HZ,   /* CLKGEN8 <- PLL1, divide-by-1 */
         .baudrate    = 230400u,
@@ -99,7 +104,7 @@ static void console_uart_init(void)
         .stop_bits   = 1u,
         .parity      = DSPIC33AK_UART_PARITY_NONE,
         .enable_tx   = true,
-        .enable_rx   = true,
+        .enable_rx   = false,
         .rx_mode     = DSPIC33AK_UART_RX_MODE_POLLING,
         .rx_ring_buffer = NULL,
         .rx_ring_buffer_size = 0u,
@@ -194,80 +199,6 @@ static void high_res_timer_boot_test(dspic33ak_high_res_timer_status_t init_stat
     printf("==============================================\n");
 }
 
-/* Write one byte to BOTH console ports (echo to the sender + mirror to the
- * other -- for a byte that is equivalent to writing both). */
-static void console_tee_write(uint8_t c)
-{
-    (void)dspic33ak_uart_write_byte(DSPIC33AK_UART_INST_1, c);
-    (void)dspic33ak_uart_write_byte(DSPIC33AK_UART_INST_2, c);
-}
-
-/* Input port index for per-port tee state. */
-enum { CONSOLE_SRC_UART1 = 0u, CONSOLE_SRC_UART2 = 1u, CONSOLE_SRC_COUNT = 2u };
-
-/* Filter + tee one received byte from port `src`. Accept ASCII printable
- * (0x20-0x7E) and ENTER (CR or LF); drop everything else (ESC, other control,
- * non-ASCII). Escape sequences are NOT interpreted -- this is a per-byte filter.
- * A CR+LF pair is collapsed to a single line break so one Enter key press yields
- * one newline. The CRLF coalescing state is PER PORT (indexed by src): a CR on
- * one port must not swallow a later LF that is a genuine Enter on the other. */
-static void console_tee_feed(uint8_t src, uint8_t c)
-{
-    static bool s_last_was_cr[CONSOLE_SRC_COUNT] = { false, false };
-
-    if ((c == (uint8_t)'\r') || (c == (uint8_t)'\n')) {
-        if ((c == (uint8_t)'\n') && s_last_was_cr[src]) {
-            s_last_was_cr[src] = false;   /* second half of this port's CRLF */
-            return;
-        }
-        s_last_was_cr[src] = (c == (uint8_t)'\r');
-        console_tee_write((uint8_t)'\r');
-        console_tee_write((uint8_t)'\n');
-        return;
-    }
-
-    s_last_was_cr[src] = false;
-
-    if ((c >= 0x20u) && (c <= 0x7Eu)) {
-        console_tee_write(c);   /* printable ASCII -> both ports */
-    }
-    /* else: control / ESC / non-ASCII -> dropped */
-}
-
-/*
- * Console input tee (Phase 2): drain BOTH command ports and tee each accepted
- * byte to both, so "USB Serial Port" (UART1) and "USB Serial Device" (UART2)
- * show one shared session (output + both ports' echoed input). No source lock:
- * the tee is per-byte and stateless (aside from CRLF coalescing), so there is no
- * shared line buffer to corrupt. Intended use is one port at a time.
- */
-static void console_input_tee_poll(void)
-{
-    enum { MAX_BYTES_PER_LOOP = 32 };
-    uint8_t data;
-    uint8_t n;
-
-    for (n = 0u; n < MAX_BYTES_PER_LOOP; n++) {
-        if (!dspic33ak_uart_rx_ready(DSPIC33AK_UART_INST_1)) {
-            break;
-        }
-        if (dspic33ak_uart_read_byte(DSPIC33AK_UART_INST_1, &data) != DSPIC33AK_UART_OK) {
-            break;
-        }
-        console_tee_feed(CONSOLE_SRC_UART1, data);
-    }
-
-    for (n = 0u; n < MAX_BYTES_PER_LOOP; n++) {
-        if (!dspic33ak_uart_rx_ready(DSPIC33AK_UART_INST_2)) {
-            break;
-        }
-        if (dspic33ak_uart_read_byte(DSPIC33AK_UART_INST_2, &data) != DSPIC33AK_UART_OK) {
-            break;
-        }
-        console_tee_feed(CONSOLE_SRC_UART2, data);
-    }
-}
-
 int main(void)
 {
     const dspic33ak_tick_timer_config_t tick_cfg = {
@@ -294,6 +225,7 @@ int main(void)
     }
     high_res_status = dspic33ak_high_res_timer_init(&high_res_cfg);
     console_uart_init();               /* UART1 pins + 230400 8N1, printf retargeted */
+    fw_command_init();
 #if HAL_STARTER_ENABLE_UART_ASYNC_SELFTEST
     bool uart_async_ok = uart_async_selftest_run();
 #endif
@@ -320,6 +252,19 @@ int main(void)
     }
     printf(" sysclk : %lu Hz (FRC -> PLL1)\n", (unsigned long)STARTER_CLOCK_SYS_HZ);
     printf(" uart   : UART1 @ 230400 8N1, RX ISR-ring echo active\n");
+    {
+        fw_uca_report_t uca;
+        bool p2 = DSPIC33AK_NVM_IsPartition2Active();
+        uint16_t seq = fw_btseq_read_active_seq();
+        fw_uca_status_t uca_status = fw_uca_validate_active(&uca);
+        printf(" bank   : P%u active, BTSEQ=0x%03X\n", p2 ? 2u : 1u,
+               (unsigned)seq);
+        printf(" config : active UCA %s (ALTI2C2=%s, NOBTSWP=%s)\n",
+               fw_uca_status_name(uca_status),
+               uca.alti2c2_on ? "ON" : "OFF",
+               uca.nobtswp_on ? "ON" : "OFF");
+    }
+    printf(" update : type *fua5 on UART1, then send reflash_image.bin via XMODEM\n");
 #if HAL_STARTER_ENABLE_UART_ASYNC_SELFTEST
     printf(" uart async self-test: %s\n", uart_async_ok ? "PASS" : "FAIL");
 #endif
@@ -476,17 +421,25 @@ int main(void)
 #endif
     while (1)
     {
+        /* Consume console input first. If *fua5 is present this call owns UART1
+         * until XMODEM finishes and sets quiet before any demo can print. */
+        fw_command_poll();
         rgb_pot_update();
-        led_sw_update();      /* SW1/2 polled; SW3 event state mirrored on LED5 */
-        console_input_tee_poll();
+        if (!fw_command_quiet()) {
+            /* This routine can print switch events, so it is part of the console
+             * quiet boundary as well as the periodic demo calls below. */
+            led_sw_update();  /* SW1/2 polled; SW3 event state mirrored on LED5 */
+        }
 
         uint32_t now = dspic33ak_tick_timer_get_ms();
-        if ((uint32_t)(now - last_term_reset) >= 3000u) {
+        if (!fw_command_quiet() &&
+            ((uint32_t)(now - last_term_reset) >= 3000u)) {
             last_term_reset = now;
             term_init_safe();
         }
 
-        if ((uint32_t)(now - last_beat) >= 1000u) {
+        if (!fw_command_quiet() &&
+            ((uint32_t)(now - last_beat) >= 1000u)) {
             last_beat = now;
             led_sw_toggle(0u);      /* LED0 = heartbeat indicator */
             if ((beat & 1u) == 0u) {
@@ -502,7 +455,8 @@ int main(void)
         }
 
 #if HAL_STARTER_ENABLE_TDM_SMOKE_DEMO
-        if ((uint32_t)(now - last_tdm) >= 5000u) {   /* TDM status line every ~5 s */
+        if (!fw_command_quiet() &&
+            ((uint32_t)(now - last_tdm) >= 5000u)) { /* TDM status line every ~5 s */
             last_tdm = now;
             tdm_smoke_status_print();
         }

@@ -323,6 +323,48 @@ try {
     Invoke-CheckedCommand -Description "Build $Configuration" -Command {
         & $($makeTool.Path) -f "nbproject/Makefile-$Configuration.mk" SUBPROJECTS= .build-conf
     }
+
+    # A successful compiler/linker run is not yet a complete Dual Bank release:
+    # the initial PKOB4 image must provision both physical UCA copies, and the
+    # serial updater needs a partition-agnostic DBFW package. Generate and verify
+    # both artifacts automatically so a beginner has one build command.
+    $projectName = Split-Path -Leaf $projectDir
+    $productionDir = Join-Path $projectDir "dist\$Configuration\production"
+    $productionHex = Join-Path $productionDir "$projectName.production.hex"
+    $reflashImage = Join-Path $productionDir 'reflash_image.bin'
+    $provisionScript = Join-Path $repoRoot 'buildtools\provision.ps1'
+    $extractScript = Join-Path $repoRoot 'tools\extract_p1_image.py'
+
+    if (-not (Test-Path -LiteralPath $productionHex)) {
+        throw "Build succeeded but production HEX is missing: $productionHex"
+    }
+    foreach ($required in @($provisionScript, $extractScript)) {
+        if (-not (Test-Path -LiteralPath $required)) {
+            throw "Post-build tool not found: $required"
+        }
+    }
+
+    $pythonCommand = Get-Command python -ErrorAction SilentlyContinue
+    if ($null -eq $pythonCommand) {
+        $pythonCommand = Get-Command py -ErrorAction SilentlyContinue
+    }
+    if ($null -eq $pythonCommand) {
+        throw 'Python 3 was not found on PATH; it is required to generate verified Dual Bank artifacts.'
+    }
+    $pythonExe = $pythonCommand.Source
+
+    Write-Host "==> Generate + verify dual-partition provisioning bundle"
+    & $provisionScript -Configuration $Configuration -Root $repoRoot `
+        -ProjectDir $projectDir -Hex $productionHex -Python $pythonExe
+
+    Invoke-CheckedCommand -Description 'Generate reflash_image.bin' -Command {
+        & $pythonExe $extractScript $productionHex $reflashImage
+    }
+
+    Write-Host ''
+    Write-Host 'Dual Bank artifacts: PASS'
+    Write-Host "  initial flash : $($productionHex -replace '\.hex$', '.bundle.hex')"
+    Write-Host "  XMODEM image  : $reflashImage"
 }
 finally {
     Pop-Location

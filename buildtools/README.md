@@ -12,8 +12,9 @@ project without opening the IDE.
 
 | Script | Purpose |
 | --- | --- |
-| `build.ps1` | Generate MPLAB X makefiles when needed, then build the production HEX. |
-| `flashauto.ps1` | Auto-detect the production HEX and PKOB4 serial, flash the target, then reset it. |
+| `build.ps1` | Build, provision/verify both banks' UCA, and generate `reflash_image.bin`. |
+| `provision.ps1` | Regenerate and independently verify the P1+P2 UCA bundle. |
+| `flashauto.ps1` | Flash the verified bundle through PKOB4, then reset. |
 
 ## Common Commands
 
@@ -32,7 +33,7 @@ Run these from the repository root:
 # Regenerate MPLAB X makefiles only
 .\buildtools\build.ps1 -Generate
 
-# Flash the built HEX, then reset
+# Flash the verified dual-partition bundle, then reset
 .\buildtools\flashauto.ps1
 
 # Reset only
@@ -49,6 +50,15 @@ Run these from the repository root:
 ```
 
 ## Flash/Reset Tool Lookup
+
+The default flash path is
+`firmware.X/dist/dsPIC33AK512/production/firmware.X.production.bundle.hex`.
+`flashauto.ps1` also requires its `.verify_report.txt` to contain `PASS` and a
+matching bundle SHA-256; it refuses an unverified or stale-paired initial image.
+`build.ps1` creates both plus
+`reflash_image.bin` automatically. The binary carries a small DBFW project-ID and
+CRC trailer checked by the firmware before `*fca5` is enabled. Python 3 is
+required for these dependency-free Intel HEX tools.
 
 `flashauto.ps1` looks for `flash_pkob4.exe` and `reset_pkob4.exe` in this order:
 

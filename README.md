@@ -51,16 +51,15 @@ can remain reusable, but the starter board path shown here is the AK512 setup.
 
 ## What runs after programming?
 
-After programming the board, open either (or both) of the two Windows serial
-ports at **230400 8N1**:
+After programming the board, the two Windows serial ports are:
 
-* **"USB Serial Port"**   — UART1 / MCP2221A
-* **"USB Serial Device"** — UART2 / PKOB4
+* **"USB Serial Port"**   — UART1 / MCP2221A, read/write command and XMODEM port
+* **"USB Serial Device"** — UART2 / PKOB4, output mirror only
 
-Console output is mirrored to both ports. Printable ASCII and Enter received
-from either port are echoed and teed to both ports (CRLF is coalesced per input
-port; ESC, other control bytes, and non-ASCII are dropped). Type on one input
-port at a time.
+Console output is mirrored to both ports. Connect Tera Term directly to
+**USB Serial Port (UART1)** at **230400 8N1, no flow control** for commands and
+Dual Bank XMODEM updates. UART2 RX is intentionally disabled so an update cannot
+be armed on one COM port and accidentally sent to the other.
 
 The firmware demonstrates:
 
@@ -77,12 +76,12 @@ The firmware demonstrates:
    Timer2 is also initialized as a free-running high-resolution counter and
    checked after the boot banner.
 
-3. **Dual-port UART console and RX paths**
-   `printf()` output at 230400 8N1 is mirrored to both Windows ports. Input
-   from either port is teed to both (see above). The two ports use different RX
-   backends on purpose: **UART1 RX = ISR-ring**, **UART2 RX = polling**; both
-   feed the same foreground tee. An opt-in boot self-test validates UART1 async
-   TX/RX, completion callbacks, counts, abort, and recovery.
+3. **UART console and Dual Bank command path**
+   `printf()` output at 230400 8N1 is mirrored to both Windows ports. UART1 uses
+   an ISR-ring RX backend and owns the beginner-facing `*fua5` / `*fca5`
+   commands plus XMODEM-CRC. UART2 is an output-only mirror. An opt-in boot
+   self-test validates UART1 async TX/RX, completion callbacks, counts, abort,
+   and recovery.
 
 4. **SPI flash access**
    Reads the SST26 JEDEC ID and verifies sector erase/write/read-back
@@ -215,7 +214,7 @@ make and project-generator tools; the generated project makefiles invoke XC-DSC.
 # Regenerate MPLAB X makefiles only (use after adding/moving source files)
 .\buildtools\build.ps1 -Generate
 
-# Flash the built HEX to the connected board (auto-detects PKOB4 serial)
+# Flash the verified P1+P2 UCA bundle (auto-detects PKOB4 serial)
 .\buildtools\flashauto.ps1
 
 # Reset the board without flashing
@@ -239,6 +238,51 @@ or pass `-ToolsDir`; the legacy root `./_flash_reset_tools` and sibling
 auto-detects the serial number if only one PKOB4 is connected; pass
 `-Serial <PKOB4_SERIAL>` when multiple boards are attached.
 
+The build requires Python 3 for the dependency-free Intel HEX tools. Every
+successful build automatically creates and validates these artifacts under
+`firmware.X/dist/dsPIC33AK512/production/`:
+
+* `firmware.X.production.hex` — compiler output containing P1 program + config
+* `firmware.X.production.bundle.hex` — initial PKOB4 image with matching P1/P2 UCA
+* `firmware.X.production.bundle.verify_report.txt` — must say `PASS`
+* `reflash_image.bin` — partition-independent, DBFW-manifested XMODEM payload
+
+`flashauto.ps1` refuses to flash by default unless the verified bundle and PASS
+report are both present and their SHA-256 values match. An explicit advanced
+`-Hex` path remains available for diagnostics.
+
+## Dual Bank update from Tera Term
+
+The running application writes only the inactive 256 KB Flash partition. The
+active partition remains executable and bootable until a fully validated receive
+is explicitly committed.
+
+1. Connect Tera Term directly to **USB Serial Port (UART1)** at `230400 8N1`,
+   no flow control, local echo off.
+2. Type `*fua5` and press Enter. Commands are case-insensitive. The heartbeat and
+   all periodic console messages stop, and UART1 becomes an XMODEM-only channel.
+3. In Tera Term select **File > Transfer > XMODEM > Send** and choose
+   `firmware.X/dist/dsPIC33AK512/production/reflash_image.bin`.
+4. Leave **1K unchecked** so the generated 128-byte-aligned package is sent with
+   standard 128-byte XMODEM-CRC packets and no CPMEOF padding.
+5. Wait for `Firmware receive: PASS` and `Validation: PASS`. The firmware verifies
+   every XMODEM block, the generated file's DBFW project ID + payload CRC, Flash
+   programming, and the complete read-back CRC.
+6. Type `*fca5`. The firmware validates the inactive partition's UCA, writes and
+   verifies its BTSEQ, then resets into the newly selected partition.
+
+> [!WARNING]
+> Do not use **File > Send file**. That is an unframed byte stream, not XMODEM.
+> If detected before arming it is discarded with an instruction message. If sent
+> after `*fua5`, validation fails and `*fca5` remains blocked; type `*fua5` again
+> and use **File > Transfer > XMODEM > Send**.
+
+The same `reflash_image.bin` works in both directions: P1 writes P2 when P1 is
+active, and P2 writes P1 when P2 is active. It is not a P2-specific image.
+The DBFW trailer rejects accidental wrong-project, truncated, or modified files;
+it is an integrity/identity guard for this beginner workflow, not a cryptographic
+signature or secure-boot mechanism.
+
 ## Expected serial output
 
 ```
@@ -249,6 +293,9 @@ auto-detects the serial number if only one PKOB4 is connected; pass
  udid   : ...
  sysclk : 200000000 Hz (FRC -> PLL1)
  uart   : UART1 @ 230400 8N1
+ bank   : P1 active, BTSEQ=0xFFF
+ config : active UCA OK (ALTI2C2=ON, NOBTSWP=ON)
+ update : type *fua5 on UART1, then send reflash_image.bin via XMODEM
 ==============================================
  HRT: init=0 present=1 initialized=1 clk=100000000 Hz
  HRT: count0=... count1=... count2=... d1=... d10=...
@@ -299,8 +346,10 @@ the CAN1 controller is `error-passive` and retransmits — the TX queue fills
 ## Layout
 
 ```
-firmware.X/             MPLAB X project (single config, dsPIC33AK512MPS512)
+firmware.X/             MPLAB X Dual Boot project (single config, dsPIC33AK512MPS512)
 buildtools/             command-line build, clean, flash, and reset scripts
+tools/                  dependency-free HEX provisioning, verification, and
+                        reflash-image extraction tools
 .vscode/clean.ps1       robust MPLAB X output cleanup helper (used by build.ps1)
 src/
   main.c                boot sequence + main loop
@@ -313,8 +362,10 @@ src/
   board_components/     board-specific component helpers built on HALs
                         or minimal device-level code
                         (LED/SW, RGB/POT, SST26 SPI-NOR)
-  console/              starter UART glue: printf write() retarget plus
-                        application-owned UART1 RX/TX interrupt-vector forwarding
+  console/              UART printf/interrupt glue plus the minimal Dual Bank
+                        command processor and wrong-file-send guard
+  fw_update/            DBFW + XMODEM-CRC receive, inactive-bank programming/
+                        read-back, per-bank UCA validation, and BTSEQ commit/reset
   hal_clock/            vendored generic dsPIC33AK Clock HAL:
                         logical PLL / CLKGEN programming through core,
                         device, and register-adaptation layers
@@ -325,6 +376,7 @@ src/
   hal_uart/             vendored UART HAL
   hal_spi/              vendored SPI HAL (blocking master; SST26 flash on SPI4)
   hal_i2c/              vendored I2C HAL
+  hal_nvm/              dsPIC33AK RTSP Flash erase/program/read primitives
   hal_can/              vendored CAN FD HAL: dspic33ak_canfd_* (node + optional ISR layer)
   hal_timer/            vendored Timer HAL
                         (Timer1 1 ms tick, default IRQ priority macro,

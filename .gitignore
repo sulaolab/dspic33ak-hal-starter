@@ -21,3 +21,7 @@ MPLABXLog.xml.lck
 *.d
 *.elf
 *.map
+
+# Python host-tool cache
+__pycache__/
+*.pyc

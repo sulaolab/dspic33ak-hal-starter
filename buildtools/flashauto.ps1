@@ -178,10 +178,29 @@ function Resolve-ProductionHex {
     }
 
     $projectName = Split-Path -Leaf $ProjectDir
-    $hexPath = Join-Path $ProjectDir "dist\$Configuration\production\$projectName.production.hex"
+    $prodDir = Join-Path $ProjectDir "dist\$Configuration\production"
+    $hexPath = Join-Path $prodDir "$projectName.production.bundle.hex"
+    $verifyReport = Join-Path $prodDir "$projectName.production.bundle.verify_report.txt"
+
     if (-not (Test-Path -LiteralPath $hexPath)) {
-        Write-Status "Expected HEX: $hexPath"
-        throw "HEX file not found: $hexPath. Build first or pass -Hex."
+        Write-Status "Expected verified bundle: $hexPath"
+        throw "Dual-partition bundle not found. Run buildtools\build.ps1 first."
+    }
+    if (-not (Test-Path -LiteralPath $verifyReport)) {
+        throw "Bundle verification report not found: $verifyReport"
+    }
+    $reportText = [System.IO.File]::ReadAllText($verifyReport)
+    if ($reportText -notmatch '(?m)^\s*PASS') {
+        throw "Bundle verification is not PASS: $verifyReport. Refusing to flash."
+    }
+    $hashMatch = [regex]::Match($reportText, '(?im)^\s*\[INFO\]\s+bundle_sha256=([0-9a-f]{64})\s*$')
+    if (-not $hashMatch.Success) {
+        throw "Bundle verification report has no SHA-256 attestation: $verifyReport. Rebuild before flashing."
+    }
+    $actualHash = (Get-FileHash -LiteralPath $hexPath -Algorithm SHA256).Hash
+    if (-not $actualHash.Equals($hashMatch.Groups[1].Value,
+                                [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Bundle SHA-256 does not match its PASS report. Rebuild before flashing."
     }
 
     return (Resolve-Path -LiteralPath $hexPath).Path
