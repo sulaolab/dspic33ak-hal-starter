@@ -3,6 +3,9 @@
 Command-line helpers for building, flashing, and resetting this MPLAB X firmware
 project without opening the IDE.
 
+For the complete first-time provisioning and Tera Term update procedure, see
+the [Dual-Partition Firmware Update Guide](../docs/dual_partition_update.md).
+
 > [!TIP]
 > Fresh clones can flash/reset immediately. The PKOB4 helper executables are
 > vendored under [`_flash_reset_tools`](./_flash_reset_tools/), and
@@ -12,7 +15,7 @@ project without opening the IDE.
 
 | Script | Purpose |
 | --- | --- |
-| `build.ps1` | Build, provision/verify both banks' UCA, and generate `reflash_image.bin`. |
+| `build.ps1` | Build, provision/verify both partitions' UCA, and generate `reflash_image.bin`. |
 | `provision.ps1` | Regenerate and independently verify the P1+P2 UCA bundle. |
 | `flashauto.ps1` | Flash the verified bundle through PKOB4, then reset. |
 

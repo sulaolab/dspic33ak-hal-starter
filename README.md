@@ -58,7 +58,7 @@ After programming the board, the two Windows serial ports are:
 
 Console output is mirrored to both ports. Connect Tera Term directly to
 **USB Serial Port (UART1)** at **230400 8N1, no flow control** for commands and
-Dual Bank XMODEM updates. UART2 RX is intentionally disabled so an update cannot
+dual-partition XMODEM updates. UART2 RX is intentionally disabled so an update cannot
 be armed on one COM port and accidentally sent to the other.
 
 The firmware demonstrates:
@@ -76,7 +76,7 @@ The firmware demonstrates:
    Timer2 is also initialized as a free-running high-resolution counter and
    checked after the boot banner.
 
-3. **UART console and Dual Bank command path**
+3. **UART console and dual-partition command path**
    `printf()` output at 230400 8N1 is mirrored to both Windows ports. UART1 uses
    an ISR-ring RX backend and owns the beginner-facing `*fua5` / `*fca5`
    commands plus XMODEM-CRC. UART2 is an output-only mirror. An opt-in boot
@@ -251,37 +251,31 @@ successful build automatically creates and validates these artifacts under
 report are both present and their SHA-256 values match. An explicit advanced
 `-Hex` path remains available for diagnostics.
 
-## Dual Bank update from Tera Term
+## Dual-partition firmware update
 
-The running application writes only the inactive 256 KB Flash partition. The
-active partition remains executable and bootable until a fully validated receive
-is explicitly committed.
+The running application can receive `reflash_image.bin` through UART1 and write
+only the inactive 256 KB Flash partition. It validates the package and complete
+Flash read-back before `*fca5` is allowed to change BTSEQ and reset into the
+updated partition. The same image filename works in both directions; there is no
+separate P1 or P2 update image.
+
+Quick serial-update workflow:
 
 1. Connect Tera Term directly to **USB Serial Port (UART1)** at `230400 8N1`,
    no flow control, local echo off.
-2. Type `*fua5` and press Enter. Commands are case-insensitive. The heartbeat and
-   all periodic console messages stop, and UART1 becomes an XMODEM-only channel.
-3. In Tera Term select **File > Transfer > XMODEM > Send** and choose
+2. Type `*fua5` and press Enter.
+3. Select **File > Transfer > XMODEM > Send** and choose
    `firmware.X/dist/dsPIC33AK512/production/reflash_image.bin`.
-4. Leave **1K unchecked** so the generated 128-byte-aligned package is sent with
-   standard 128-byte XMODEM-CRC packets and no CPMEOF padding.
-5. Wait for `Firmware receive: PASS` and `Validation: PASS`. The firmware verifies
-   every XMODEM block, the generated file's DBFW project ID + payload CRC, Flash
-   programming, and the complete read-back CRC.
-6. Type `*fca5`. The firmware validates the inactive partition's UCA, writes and
-   verifies its BTSEQ, then resets into the newly selected partition.
+4. Leave **1K unchecked**.
+5. Wait for both `Firmware receive: PASS` and `Validation: PASS`.
+6. Type `*fca5`; the device validates UCA and BTSEQ, then resets into the update.
+
+See the **[Dual-Partition Firmware Update Guide](docs/dual_partition_update.md)**
+for first-time PKOB4 provisioning, exact Tera Term settings, artifact naming,
+verified-bundle selection, expected output, recovery steps, and security scope.
 
 > [!WARNING]
-> Do not use **File > Send file**. That is an unframed byte stream, not XMODEM.
-> If detected before arming it is discarded with an instruction message. If sent
-> after `*fua5`, validation fails and `*fca5` remains blocked; type `*fua5` again
-> and use **File > Transfer > XMODEM > Send**.
-
-The same `reflash_image.bin` works in both directions: P1 writes P2 when P1 is
-active, and P2 writes P1 when P2 is active. It is not a P2-specific image.
-The DBFW trailer rejects accidental wrong-project, truncated, or modified files;
-it is an integrity/identity guard for this beginner workflow, not a cryptographic
-signature or secure-boot mechanism.
+> Use **File > Transfer > XMODEM > Send**, not **File > Send file**.
 
 ## Expected serial output
 
@@ -362,7 +356,7 @@ src/
   board_components/     board-specific component helpers built on HALs
                         or minimal device-level code
                         (LED/SW, RGB/POT, SST26 SPI-NOR)
-  console/              UART printf/interrupt glue plus the minimal Dual Bank
+  console/              UART printf/interrupt glue plus the minimal dual-partition
                         command processor and wrong-file-send guard
   fw_update/            DBFW + XMODEM-CRC receive, inactive-bank programming/
                         read-back, per-bank UCA validation, and BTSEQ commit/reset
