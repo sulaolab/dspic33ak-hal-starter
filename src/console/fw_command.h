@@ -3,7 +3,7 @@
 
 #include <stdbool.h>
 
-/* Minimal UART1 command processor for the beginner-facing Dual Bank workflow.
+/* Minimal UART1 command processor for the beginner-facing dual-partition workflow.
  *
  * Public commands (case-insensitive):
  *   *fua5  receive and validate an image into the inactive partition
@@ -12,9 +12,9 @@
 void fw_command_init(void);
 void fw_command_poll(void);
 
-/* True after *fua5 (and while accidental raw-file data is being discarded).
- * The application uses this to suppress every periodic console/demo message so
- * XMODEM control bytes remain the only traffic on UART1. */
+/* True during *fua5, after a successful receive while commit is pending, and
+ * while accidental raw-file data is being discarded. A failed receive or
+ * commit clears quiet after its diagnostics so normal starter output resumes. */
 bool fw_command_quiet(void);
 
 #endif /* FW_COMMAND_H */

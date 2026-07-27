@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Minimal, dependency-free Intel HEX helpers shared by the dual-partition UCA
-provisioning tools (gen/verify/test). Deliberately hand-rolled (no `intelhex`
-dependency) to match the existing tools/extract_p1_image.py and tools/scan_uca.py.
+"""Minimal, dependency-free Intel HEX helpers shared by the dual-partition UCA,
+reflash-image, and diagnostic tools. Deliberately hand-rolled (no `intelhex`
+dependency) so every public HEX consumer uses the same checksum-validating parser.
 
 Address space here is the *byte* address as it appears in the HEX (type-04 upper
 16 bits + record offset). For this device the config/UCA words appear at their

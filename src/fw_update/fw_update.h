@@ -4,7 +4,7 @@
 //===========================================================
 // fw_update.{c,h}
 //
-// Serial Dual Bank update orchestrator. Receives a firmware image over
+// Serial dual-partition update orchestrator. Receives a firmware image over
 // XMODEM-CRC (UART1) and programs it into the INACTIVE flash partition, then
 // reads it back and CRC-checks it. It NEVER touches the active partition (the
 // code currently executing) nor the partition's last 128-bit word (BTSEQ) --

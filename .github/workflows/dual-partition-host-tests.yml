@@ -1,0 +1,30 @@
+name: Dual-partition host tests
+
+on:
+  push:
+    paths:
+      - "tools/**"
+      - "buildtools/**"
+      - "firmware.X/nbproject/configurations.xml"
+      - ".github/workflows/dual-partition-host-tests.yml"
+  pull_request:
+    paths:
+      - "tools/**"
+      - "buildtools/**"
+      - "firmware.X/nbproject/configurations.xml"
+      - ".github/workflows/dual-partition-host-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Run dual-partition HEX and package tests
+        run: python tools/test_dual_partition_hex.py

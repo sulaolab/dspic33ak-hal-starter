@@ -78,6 +78,7 @@ _Static_assert(
 static int32_t  s_sine_lut[TDM_SMOKE_LUT_N];
 static float    s_tx_ref_meansq;            // mean-square of (lut>>16), the 0 dB reference
 static bool     s_started;
+static bool     s_paused_for_update;
 static dspic33ak_spi_i2s_tdm_error_t s_init_error = DSPIC33AK_SPI_I2S_TDM_ERR_NONE;
 
 // Published by the block callback (debug aid). Read non-atomically from the main loop: on this
@@ -163,6 +164,7 @@ bool tdm_smoke_init(void)
     dspic33ak_spi_i2s_tdm_inst_t *inst;
 
     s_started    = false;
+    s_paused_for_update = false;
     s_init_error = DSPIC33AK_SPI_I2S_TDM_ERR_NONE;
     s_phase      = 0u;
     s_rx_sumsq   = 0u;
@@ -301,6 +303,40 @@ bool tdm_smoke_init(void)
     printf(" [FS-SW] RP70R after re-start       = %u (expect 78=CLC10OUT)\n", (unsigned)RPOR17bits.RP70R);
 #endif
 
+    return true;
+}
+
+bool tdm_smoke_pause_for_update(void)
+{
+    if (s_paused_for_update || !s_started)
+    {
+        return true;
+    }
+    if (!dspic33ak_spi_i2s_tdm_stop_all_domains())
+    {
+        s_init_error = dspic33ak_spi_i2s_tdm_get_last_error();
+        return false;
+    }
+    s_started = false;
+    s_paused_for_update = true;
+    s_init_error = DSPIC33AK_SPI_I2S_TDM_ERR_NONE;
+    return true;
+}
+
+bool tdm_smoke_resume_after_update_failure(void)
+{
+    if (!s_paused_for_update)
+    {
+        return true;
+    }
+    if (!dspic33ak_spi_i2s_tdm_start_all_domains())
+    {
+        s_init_error = dspic33ak_spi_i2s_tdm_get_last_error();
+        return false;
+    }
+    s_started = true;
+    s_paused_for_update = false;
+    s_init_error = DSPIC33AK_SPI_I2S_TDM_ERR_NONE;
     return true;
 }
 

@@ -6,7 +6,7 @@
 // dsPIC33AK512MPS512 internal Flash program memory.
 //
 // This is the low-level flash program/erase/read primitive used by the serial
-// self-flash Dual Bank update feature. It is deliberately application-agnostic: it
+// self-flash dual-partition update feature. It is deliberately application-agnostic: it
 // erases pages and programs words/rows at absolute program-memory addresses and
 // verifies by read-back. The A/B (dual partition) policy -- always writing the
 // *inactive* partition -- lives one layer up in fw_update/.

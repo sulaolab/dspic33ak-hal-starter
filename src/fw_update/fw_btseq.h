@@ -4,7 +4,7 @@
 //===========================================================
 // fw_btseq.{c,h} -- Boot Sequence Number (BTSEQ) / partition manager.
 //
-// The last link of the Dual Bank update chain: after fw_update has received and
+// The last link of the dual-partition update chain: after fw_update has received and
 // read-back-verified a firmware image into the INACTIVE partition, this module
 // COMMITS the swap -- it stamps the inactive partition's BTSEQ word so that
 // partition wins boot selection, then triggers a device reset so the board boots
@@ -40,7 +40,7 @@
 extern "C" {
 #endif
 
-// Partition geometry / BTSEQ word addresses (Dual Boot: 256 KB per partition).
+// Partition geometry / BTSEQ word addresses (Flash Dual Partition: 256 KB each).
 #define FW_BTSEQ_PARTITION_BYTES  UINT32_C(0x40000)
 #define FW_BTSEQ_ACTIVE_ADR       (DSPIC33AK_NVM_ACTIVE_BASE + FW_BTSEQ_PARTITION_BYTES - DSPIC33AK_NVM_WORD_BYTES)   // 0x83FFF0
 #define FW_BTSEQ_INACTIVE_ADR     (DSPIC33AK_NVM_TO_INACTIVE(FW_BTSEQ_ACTIVE_ADR))                                    // 0xC3FFF0

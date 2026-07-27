@@ -288,9 +288,9 @@ verified-bundle selection, expected output, recovery steps, and security scope.
  device : dsPIC33AK512MPS512
  udid   : ...
  sysclk : 200000000 Hz (FRC -> PLL1)
- uart   : UART1 @ 230400 8N1
+ uart   : UART1 @ 230400 8N1, RX ISR-ring echo active
  bank   : P1 active, BTSEQ=0xFFF
- config : active UCA OK (ALTI2C2=ON, NOBTSWP=ON)
+ config : active UCA OK (ALTI2C2=ON, BOOTSWP=ENABLED)
  update : type *fua5 on UART1, then send reflash_image.bin via XMODEM
 ==============================================
  HRT: init=0 present=1 initialized=1 clk=100000000 Hz
@@ -342,7 +342,8 @@ the CAN1 controller is `error-passive` and retransmits — the TX queue fills
 ## Layout
 
 ```
-firmware.X/             MPLAB X Dual Boot project (single config, dsPIC33AK512MPS512)
+firmware.X/             MPLAB X Flash Dual Partition project
+                        (single config, dsPIC33AK512MPS512)
 buildtools/             command-line build, clean, flash, and reset scripts
 tools/                  dependency-free HEX provisioning, verification, and
                         reflash-image extraction tools
@@ -360,8 +361,8 @@ src/
                         (LED/SW, RGB/POT, SST26 SPI-NOR)
   console/              UART printf/interrupt glue plus the minimal dual-partition
                         command processor and wrong-file-send guard
-  fw_update/            DBFW + XMODEM-CRC receive, inactive-bank programming/
-                        read-back, per-bank UCA validation, and BTSEQ commit/reset
+  fw_update/            DBFW + XMODEM-CRC receive, inactive-partition programming/
+                        read-back, per-partition UCA validation, and BTSEQ commit/reset
   hal_clock/            vendored generic dsPIC33AK Clock HAL:
                         logical PLL / CLKGEN programming through core,
                         device, and register-adaptation layers
@@ -389,6 +390,7 @@ src/
                         can_loopback, can_bus_test (two-board); app_config.h
                         (demo toggles); tdm_smoke (SPI1 TDM8 smoke demo)
 docs/
+  dual_partition_update.md complete first-flash and serial-update user guide
   images/
     serial-console.png        live full startup serial-console screenshot
     tdm8-scope-mikrobus-a.png oscilloscope capture of the MikroBUS-A TDM8 smoke demo

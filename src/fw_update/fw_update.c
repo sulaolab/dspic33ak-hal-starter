@@ -1,5 +1,5 @@
 //===========================================================
-// fw_update.c -- serial Dual Bank update orchestrator (see fw_update.h)
+// fw_update.c -- serial dual-partition update orchestrator (see fw_update.h)
 //===========================================================
 
 #include "fw_update.h"

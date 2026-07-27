@@ -26,6 +26,8 @@ Usage:
 import sys
 import struct
 
+import ihex_lite
+
 PART_BASE = 0x800000
 PART_END  = 0x840000  # one partition = 256 KB; never include past this
 
@@ -93,37 +95,17 @@ def validate_package(packaged):
         return False, "crc"
     return True, "ok"
 
-def parse_hex(path):
-    mem = {}
-    ulba = 0
-    with open(path, "r") as f:
-        for line in f:
-            line = line.strip()
-            if not line or line[0] != ":":
-                continue
-            b = bytes.fromhex(line[1:])
-            count = b[0]
-            offset = (b[1] << 8) | b[2]
-            rectype = b[3]
-            data = b[4:4 + count]
-            if rectype == 0x00:      # data
-                base = (ulba << 16) + offset
-                for i, byte in enumerate(data):
-                    mem[base + i] = byte
-            elif rectype == 0x04:    # extended linear address
-                ulba = (data[0] << 8) | data[1]
-            elif rectype == 0x01:    # EOF
-                break
-            # ignore 02/03/05
-    return mem
-
 def main():
     if len(sys.argv) < 2:
         print(f"usage: {sys.argv[0]} <production.hex> [{DEFAULT_BIN}]", file=sys.stderr)
         sys.exit(2)
     hexpath = sys.argv[1]
     binpath = sys.argv[2] if len(sys.argv) > 2 else DEFAULT_BIN
-    mem = parse_hex(hexpath)
+    try:
+        mem = ihex_lite.parse_hex(hexpath)
+    except (OSError, ValueError) as exc:
+        print(f"cannot parse {hexpath}: {exc}", file=sys.stderr)
+        sys.exit(1)
     prog = {a: v for a, v in mem.items() if PART_BASE <= a < PART_END}
     if not prog:
         print("no program bytes in [0x800000,0x840000)", file=sys.stderr)

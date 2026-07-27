@@ -324,7 +324,7 @@ try {
         & $($makeTool.Path) -f "nbproject/Makefile-$Configuration.mk" SUBPROJECTS= .build-conf
     }
 
-    # A successful compiler/linker run is not yet a complete Dual Bank release:
+    # A successful compiler/linker run is not yet a complete dual-partition release:
     # the initial PKOB4 image must provision both physical UCA copies, and the
     # serial updater needs a partition-agnostic DBFW package. Generate and verify
     # both artifacts automatically so a beginner has one build command.
@@ -349,7 +349,7 @@ try {
         $pythonCommand = Get-Command py -ErrorAction SilentlyContinue
     }
     if ($null -eq $pythonCommand) {
-        throw 'Python 3 was not found on PATH; it is required to generate verified Dual Bank artifacts.'
+        throw 'Python 3 was not found on PATH; it is required to generate verified dual-partition artifacts.'
     }
     $pythonExe = $pythonCommand.Source
 
@@ -362,7 +362,7 @@ try {
     }
 
     Write-Host ''
-    Write-Host 'Dual Bank artifacts: PASS'
+    Write-Host 'Dual-partition artifacts: PASS'
     Write-Host "  initial flash : $($productionHex -replace '\.hex$', '.bundle.hex')"
     Write-Host "  XMODEM image  : $reflashImage"
 }

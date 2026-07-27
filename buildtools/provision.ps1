@@ -8,7 +8,8 @@
 #
 # This wrapper runs, for a dual-partition configuration:
 #   1) tools/gen_dual_partition_hex.py   -> <config>.production.bundle.hex (+ gen report)
-#   2) tools/verify_dual_partition_hex.py (read-only) on the bundle
+#   2) tools/verify_dual_partition_hex.py (read-only) on the bundle, including
+#      selected MPLAB X device / DFP / compiler metadata versus manifest pins
 # It FAILS LOUDLY (non-zero exit) if verify != PASS. Only a verified bundle is a
 # publishable provisioning artifact (design doc section 5.4). Build-success and
 # bundle-verify-success are deliberately separate: a green build does NOT imply a
@@ -37,7 +38,7 @@ function Write-Status {
     if (-not $Quiet) { Write-Host $Message }
 }
 
-# Only these configurations are Dual Boot and thus need a P2 UCA. Guard rather than
+# Only these configurations use Flash Dual Partition and thus need a P2 UCA. Guard rather than
 # silently produce a meaningless single-partition "bundle".
 $DualPartitionConfigs = @('dsPIC33AK512')
 
@@ -96,7 +97,7 @@ $toolsDir   = Join-Path $repoRoot 'tools'
 $python     = Resolve-Python -Requested $Python
 
 if ($DualPartitionConfigs -notcontains $Configuration) {
-    throw "Configuration '$Configuration' is not a dual-partition config ($($DualPartitionConfigs -join ', ')). Provisioning a P2 UCA is only meaningful for Dual Boot builds."
+    throw "Configuration '$Configuration' is not a dual-partition config ($($DualPartitionConfigs -join ', ')). Provisioning a P2 UCA is only meaningful for Flash Dual Partition builds."
 }
 
 # P1 production hex (the freshly built single-partition image).
@@ -115,14 +116,11 @@ foreach ($s in @($genScript, $verifyScript)) {
     if (-not (Test-Path -LiteralPath $s)) { throw "Provisioning tool not found: $s" }
 }
 
-# Device / DFP expectations pinned from the manifest (single source of truth).
-$expectDevice = 'dsPIC33AK512MPS512'
-$expectDfp    = 'dsPIC33AK-MP_DFP/1.3.185'
-
 # Bundle / report paths mirror gen_dual_partition_hex.py's own default naming.
 $bundleHex = ($Hex -replace '\.hex$', '') + '.bundle.hex'
 $genReport = ($bundleHex -replace '\.hex$', '') + '.gen_report.txt'
 $verReport = ($bundleHex -replace '\.hex$', '') + '.verify_report.txt'
+$configXml = Join-Path $projectDir 'nbproject\configurations.xml'
 
 Write-Status "provision: dual-partition UCA"
 Write-Status "  config : $Configuration"
@@ -135,6 +133,9 @@ Write-Status "  bundle : $bundleHex"
 if (Test-Path -LiteralPath $verReport) {
     Remove-Item -LiteralPath $verReport -Force
 }
+if (-not (Test-Path -LiteralPath $configXml)) {
+    throw "MPLAB X project configuration not found: $configXml"
+}
 
 # 1) Generate the bundle (clones P1 UCA -> P2 UCA). Refuses on missing/broken P1 UCA.
 $genArgs = @($genScript, $Hex, '-o', $bundleHex, '--report', $genReport)
@@ -143,9 +144,10 @@ if ($rc -ne 0) {
     throw "gen_dual_partition_hex.py FAILED (exit $rc). No bundle produced."
 }
 
-# 2) Verify the bundle (read-only). FAIL LOUDLY on anything but PASS.
+# 2) Verify the bundle and independently compare the selected MPLAB X
+# device/DFP/compiler settings with the manifest pins. FAIL LOUDLY unless all pass.
 $verArgs = @($verifyScript, $bundleHex, '--report', $verReport,
-             '--expect-device', $expectDevice, '--expect-dfp', $expectDfp)
+             '--project-config', $configXml, '--configuration', $Configuration)
 $rc = Invoke-CheckedPython -Python $python -Arguments $verArgs
 if ($rc -ne 0) {
     throw "verify_dual_partition_hex.py did NOT PASS (exit $rc). The bundle is NOT a publishable provisioning artifact. See: $verReport"

@@ -9,6 +9,10 @@
 #include "dspic33ak_tick_timer.h"
 #include "fw_update.h"
 #include "fw_btseq.h"
+#include "app_config.h"
+#if HAL_STARTER_ENABLE_TDM_SMOKE_DEMO
+#include "tdm_smoke.h"
+#endif
 
 #define COMMAND_UART               DSPIC33AK_UART_INST_1
 #define COMMAND_LINE_CAPACITY      32u
@@ -105,14 +109,35 @@ static void print_receive_result(const fw_update_result_t *result)
     }
 }
 
+static void resume_starter_after_update_failure(void)
+{
+#if HAL_STARTER_ENABLE_TDM_SMOKE_DEMO
+    if (!tdm_smoke_resume_after_update_failure()) {
+        printf("WARNING: TDM demo restart failed (%s); reset the board.\r\n",
+               tdm_smoke_last_error_str());
+    }
+#endif
+    s_quiet = false;
+    printf("Periodic starter output resumed.\r\n");
+}
+
 static void receive_firmware(void)
 {
     fw_update_result_t result;
 
-    /* This remains set after the transfer so no heartbeat/terminal-reset text
-     * can appear while the beginner reads the validation result and types
-     * *fca5. A reset after commit restores normal output. */
+    /* A successful transfer remains quiet until *fca5/reset. A failed transfer
+     * resumes the starter after its result and recovery text have printed. */
     s_quiet = true;
+#if HAL_STARTER_ENABLE_TDM_SMOKE_DEMO
+    /* The smoke stream runs autonomously on DMA/ISR. Stop it before any erase or
+     * program operation so CPU stalls cannot leave transport state ambiguous. */
+    if (!tdm_smoke_pause_for_update()) {
+        printf("\r\nFirmware update refused: TDM/DMA could not be stopped.\r\n");
+        printf("Reset the board before retrying.\r\n");
+        s_quiet = false;
+        return;
+    }
+#endif
     printf("\r\nFirmware update armed.\r\n");
     printf("Tera Term: File > Transfer > XMODEM > Send\r\n");
     printf("Select reflash_image.bin with 1K unchecked.\r\n");
@@ -120,6 +145,10 @@ static void receive_firmware(void)
 
     (void)fw_update_receive(&result);
     print_receive_result(&result);
+    if (result.status != FW_UPDATE_OK) {
+        resume_starter_after_update_failure();
+        printf("Type *fua5 to retry.\r\n");
+    }
 }
 
 static void commit_firmware(void)
@@ -149,6 +178,7 @@ static void commit_firmware(void)
             printf("Run *fua5 and transfer reflash_image.bin again before retrying.\r\n");
         }
     }
+    resume_starter_after_update_failure();
 }
 
 static void process_line(void)

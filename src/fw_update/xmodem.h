@@ -4,7 +4,7 @@
 //===========================================================
 // xmodem.{c,h}
 //
-// Blocking XMODEM-CRC receiver for the serial Dual Bank update feature.
+// Blocking XMODEM-CRC receiver for the serial dual-partition update feature.
 //
 // Pure transport: it drives the sender with 'C' (CRC mode), receives 128-byte
 // (SOH) or 1024-byte (STX) blocks, validates the sequence number + CRC-16-CCITT,

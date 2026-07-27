@@ -52,7 +52,7 @@
  * then feed into PLL1). Alternate-I2C2 pin mapping is selected for this board. */
 #pragma config FDEVOPT_ALTI2C2 = ON   /* I2C2 on its alternate (board) pins */
 #pragma config BTMODE = DUAL          /* two 256 KB A/B program partitions */
-#pragma config NOBTSWP = ON           /* enable the documented boot-swap path */
+#pragma config NOBTSWP = ON           /* DFP spelling: raw bit15=0, BOOTSWP instruction enabled */
 
 static uint8_t s_console_uart_rx_ring[256u];
 
@@ -259,10 +259,10 @@ int main(void)
         fw_uca_status_t uca_status = fw_uca_validate_active(&uca);
         printf(" bank   : P%u active, BTSEQ=0x%03X\n", p2 ? 2u : 1u,
                (unsigned)seq);
-        printf(" config : active UCA %s (ALTI2C2=%s, NOBTSWP=%s)\n",
+        printf(" config : active UCA %s (ALTI2C2=%s, BOOTSWP=%s)\n",
                fw_uca_status_name(uca_status),
                uca.alti2c2_on ? "ON" : "OFF",
-               uca.nobtswp_on ? "ON" : "OFF");
+               uca.bootswp_enabled ? "ENABLED" : "DISABLED");
     }
     printf(" update : type *fua5 on UART1, then send reflash_image.bin via XMODEM\n");
 #if HAL_STARTER_ENABLE_UART_ASYNC_SELFTEST

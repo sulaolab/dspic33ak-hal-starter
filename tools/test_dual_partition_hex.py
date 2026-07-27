@@ -10,8 +10,10 @@ and asserts the expected PASS/FAIL outcome for each case:
   4. P2 main != backup                                 -> verify FAIL
   5. FDEVOPT.ALTI2C2 = OFF (bit4=1) on P1              -> gen refuses (exit!=0)
   6. wrong DFP expectation                             -> verify FAIL
-  7. deterministic regen (same input => identical out) -> byte-identical
-  8. XMODEM extraction excludes UCA/UCB                 -> extract only 0x800000+
+  7. MPLAB project device/DFP/compiler mismatch         -> verify FAIL
+  8. deterministic regen (same input => identical out) -> byte-identical
+  9. XMODEM extraction excludes UCA/UCB                 -> extract only 0x800000+
+ 10. corrupt Intel HEX checksum                         -> extract FAIL
 
 Run: python tools/test_dual_partition_hex.py
 Exit 0 = all pass.
@@ -31,6 +33,8 @@ PY = sys.executable
 GEN = os.path.join(HERE, "gen_dual_partition_hex.py")
 VERIFY = os.path.join(HERE, "verify_dual_partition_hex.py")
 EXTRACT = os.path.join(HERE, "extract_p1_image.py")
+PROJECT_CONFIG = os.path.join(HERE, "..", "firmware.X", "nbproject",
+                              "configurations.xml")
 
 PASS = 0
 FAIL = 1
@@ -128,7 +132,27 @@ def main():
                    "--expect-device", M.DEVICE])
     check("verify correct DFP+device PASS", rc == PASS, out)
 
-    # --- 7: deterministic regen
+    # --- 7: production verification checks actual MPLAB X project metadata.
+    rc, out = run([PY, VERIFY, bundle, "--project-config", PROJECT_CONFIG,
+                   "--configuration", "dsPIC33AK512"])
+    check("verify project device+DFP+compiler PASS", rc == PASS, out)
+    with open(PROJECT_CONFIG, "r", encoding="utf-8") as f:
+        project_xml = f.read()
+    metadata_mutations = (
+        ("device", M.DEVICE, "dsPIC33AK256MPS512"),
+        ("DFP", 'version="1.3.185"', 'version="0.0.0"'),
+        ("compiler", "<languageToolchainVersion>3.31.01</languageToolchainVersion>",
+         "<languageToolchainVersion>0.0.0</languageToolchainVersion>"),
+    )
+    for label, old, new in metadata_mutations:
+        bad_config = os.path.join(tmp, f"bad_{label}.xml")
+        with open(bad_config, "w", encoding="utf-8") as f:
+            f.write(project_xml.replace(old, new, 1))
+        rc, out = run([PY, VERIFY, bundle, "--project-config", bad_config,
+                       "--configuration", "dsPIC33AK512"])
+        check(f"verify project {label} mismatch FAIL", rc == FAIL, out)
+
+    # --- 8: deterministic regen
     b2 = os.path.join(tmp, "p1.bundle2.hex")
     rc, out = run([PY, GEN, p1, "-o", b2])
     with open(bundle, "rb") as f:
@@ -137,7 +161,7 @@ def main():
         b = f.read()
     check("regen byte-identical", a == b)
 
-    # --- 8: XMODEM extract excludes UCA/UCB
+    # --- 9: XMODEM extract excludes UCA/UCB
     mem = synth_p1()
     # add program bytes AND config bytes; extractor must keep only program.
     for i in range(512):
@@ -174,7 +198,24 @@ def main():
         corrupt_ok, _ = E.validate_package(corrupt)
         check("reflash package rejects wrong project ID", not corrupt_ok)
 
-    # --- 9: extractor refuses an over-limit image (writes nothing)
+    # --- 10: every public HEX consumer rejects a bad Intel HEX checksum.
+    bad_checksum_hex = os.path.join(tmp, "extract_bad_checksum.hex")
+    with open(h, "r", encoding="ascii") as f:
+        lines = f.readlines()
+    for index, line in enumerate(lines):
+        record = bytearray.fromhex(line.strip()[1:])
+        if record[3] == 0x00:
+            record[-1] ^= 0x01
+            lines[index] = ":" + record.hex().upper() + "\n"
+            break
+    with open(bad_checksum_hex, "w", encoding="ascii") as f:
+        f.writelines(lines)
+    bad_checksum_bin = os.path.join(tmp, "bad_checksum.bin")
+    rc, out = run([PY, EXTRACT, bad_checksum_hex, bad_checksum_bin])
+    check("extract rejects bad Intel HEX checksum", rc == FAIL, out)
+    check("bad-checksum extract wrote no file", not os.path.exists(bad_checksum_bin))
+
+    # --- 11: extractor refuses an over-limit image (writes nothing)
     mem = synth_p1()
     # populate a byte in the last row so the rounded slice would exceed 0x3FE00.
     mem[M.PROGRAM_REGION_LO + 0x3FE00] = 0x5A
@@ -185,7 +226,7 @@ def main():
     check("extract refuses over-limit image", rc == FAIL, out)
     check("extract wrote no file when over limit", not os.path.exists(big))
 
-    # --- 10: raw program span fits the old limit, but DBFW overhead does not.
+    # --- 12: raw program span fits the old limit, but DBFW overhead does not.
     # This specifically proves the limit is checked after packaging, not merely
     # against the raw P1 slice.
     mem = synth_p1()

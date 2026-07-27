@@ -28,6 +28,13 @@
  */
 bool tdm_smoke_init(void);
 
+/* Stop the autonomous SPI/DMA stream before an NVM update, then optionally
+ * restart it if that update fails. Both calls are idempotent; they are no-ops
+ * when the demo never started. A successful update intentionally stays paused
+ * until the subsequent commit/reset. */
+bool tdm_smoke_pause_for_update(void);
+bool tdm_smoke_resume_after_update_failure(void);
+
 /*
  * Print ONE TDM status line. Call from the main loop (e.g. every ~5 s) -- the heavy math
  * (RMS -> relative dB, formatting) happens here, NOT in the block callback. No-op if the

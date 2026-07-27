@@ -42,7 +42,7 @@ ERASED = 0xFFFFFFFF
 FDEVOPT_ALTI2C2 = 0x10      # bit4: 0 => board-required alternate I2C2 pins. MUST be 0.
 FDEVOPT_ALTI2C1 = 0x08
 FDEVOPT_ALTI2C3 = 0x20
-FICD_NOBTSWP = 0x8000       # bit15: 0 => NOBTSWP ON. Expected 0 for this build.
+FICD_NOBTSWP = 0x8000       # bit15: 0 => BOOTSWP instruction enabled (DFP calls this NOBTSWP=ON).
 FICD_JTAGEN = 0x20
 FBOOT_BTMODE_MASK = 0x3
 FBOOT_BTMODE_DUAL = 0x2
@@ -84,9 +84,9 @@ WORDS = [
         "p2_backup": UCA_P2_BACKUP + OFF_FICD,
         "compare_mask": 0xFFFFFFFF,
         "must_match_p1_p2": True,
-        "expected": None,           # cloned from P1; semantic check: NOBTSWP bit=0
+        "expected": None,           # cloned from P1; raw NOBTSWP bit=0 => BOOTSWP enabled
         "clone": True,
-        "checks": [("NOBTSWP", FICD_NOBTSWP, 0)],
+        "checks": [("NOBTSWP_RAW", FICD_NOBTSWP, 0)],
     },
     {
         "name": "FDEVOPT",

@@ -56,15 +56,15 @@ extern "C" {
 #define FW_UCA_OFF_FWDT    (0x030UL)
 
 //-----------------------------------------------------------
-// Config-bit masks (VERIFIED vs DFP atdf 1.3.185). A cleared bit = feature ON.
+// Config-bit masks (VERIFIED vs DFP atdf 1.3.185). These fields are active-low.
 //-----------------------------------------------------------
 #define FW_UCA_FDEVOPT_ALTI2C2 (0x10U)      // bit4: 0 => board-required alternate I2C2 pins.
-#define FW_UCA_FICD_NOBTSWP    (0x8000U)    // bit15: 0 => NOBTSWP ON (expected for this build).
+#define FW_UCA_FICD_NOBTSWP    (0x8000U)    // bit15: 0 => BOOTSWP instruction enabled.
 #define FW_UCA_WORD_ERASED     (0xFFFFFFFFU)
 
 typedef enum
 {
-    FW_UCA_OK = 0,             // required bits correct (ALTI2C2/NOBTSWP ON), main==backup
+    FW_UCA_OK = 0,             // ALTI2C2 on + BOOTSWP enabled, main==backup
     FW_UCA_ERR_MISMATCH,       // a required config bit is wrong (or UCA is erased)
     FW_UCA_ERR_BACKUP,         // main != backup (UCA integrity)
     FW_UCA_ERR_READ            // reserved (volatile-pointer reads do not fail)
@@ -85,7 +85,7 @@ typedef struct
     fw_uca_snapshot_t snap;
     bool p2;                   // true: this report is for physical Partition 2
     bool alti2c2_on;           // FDEVOPT(main) bit4 == 0
-    bool nobtswp_on;           // FICD(main)    bit15 == 0
+    bool bootswp_enabled;      // FICD.NOBTSWP(main) bit15 == 0
     bool fdevopt_backup_ok;    // FDEVOPT main == backup
     bool ficd_backup_ok;       // FICD    main == backup
     bool fcp_erased_ok;        // FCP main+backup are both erased (build policy)
@@ -98,7 +98,7 @@ typedef struct
 bool fw_uca_read(bool p2, fw_uca_snapshot_t *snap);
 
 // Validate a partition's UCA into *report (may be NULL for status-only). Overall
-// status: MISMATCH if ALTI2C2/NOBTSWP is wrong or FCP/FWDT is unexpectedly
+// status: MISMATCH if ALTI2C2/BOOTSWP policy is wrong or FCP/FWDT is unexpectedly
 // programmed, else BACKUP if FICD/FDEVOPT main!=backup, else OK. No auto-repair.
 fw_uca_status_t fw_uca_validate(bool p2, fw_uca_report_t *report);
 

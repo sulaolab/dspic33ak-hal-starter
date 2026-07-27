@@ -16,7 +16,7 @@ the [Dual-Partition Firmware Update Guide](../docs/dual_partition_update.md).
 | Script | Purpose |
 | --- | --- |
 | `build.ps1` | Build, provision/verify both partitions' UCA, and generate `reflash_image.bin`. |
-| `provision.ps1` | Regenerate and independently verify the P1+P2 UCA bundle. |
+| `provision.ps1` | Regenerate and independently verify the P1+P2 UCA bundle plus MPLAB X device/DFP/compiler pins. |
 | `flashauto.ps1` | Flash the verified bundle through PKOB4, then reset. |
 
 ## Common Commands

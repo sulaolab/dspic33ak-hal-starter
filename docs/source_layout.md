@@ -41,7 +41,7 @@ Code that binds the HALs to this board stays outside the HAL folders:
 | `src/board.c`, `src/board.h`, `src/board_pins.h` | Curiosity board pin names, PPS wiring, and board bring-up entry points. |
 | `src/board_components/` | Board-specific component helpers built on HALs or minimal device-level code, such as `led_sw.*`, `rgb_pot.*`, and `sst26_min.*`. |
 | `src/console/` | Starter UART integration glue: `printf()` retargeting, UART1 interrupt forwarding, and the minimal `*fua5` / `*fca5` command state machine. |
-| `src/fw_update/` | Dual Bank policy above the NVM HAL: DBFW package + XMODEM-CRC receive, inactive-bank programming/read-back, UCA validation, and BTSEQ commit/reset. |
+| `src/fw_update/` | Dual-partition policy above the NVM HAL: DBFW package + XMODEM-CRC receive, inactive-partition programming/read-back, UCA validation, and BTSEQ commit/reset. |
 | `src/clock/` | Starter-specific clock policy: FRC 8 MHz -> PLL1 200 MHz, application CLKGEN routing, and CLKGEN10 /10 for 20 MHz CAN FD FCAN. |
 | `src/app/` | Bus validation demos and application-level orchestration. |
 | `src/hal_udid/` | Local UDID boot-banner helper; not currently a standalone public HAL. |

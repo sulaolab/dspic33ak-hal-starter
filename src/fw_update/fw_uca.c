@@ -46,7 +46,7 @@ fw_uca_status_t fw_uca_validate(bool p2, fw_uca_report_t *report)
     fw_uca_snapshot_t snap;
     fw_uca_status_t   status;
     bool alti2c2_on;
-    bool nobtswp_on;
+    bool bootswp_enabled;
     bool fdevopt_backup_ok;
     bool ficd_backup_ok;
     bool fcp_erased_ok;
@@ -56,7 +56,7 @@ fw_uca_status_t fw_uca_validate(bool p2, fw_uca_report_t *report)
 
     // All comparands are RAM scalars (the mask literals and the read-back words).
     alti2c2_on        = ((snap.fdevopt_main & FW_UCA_FDEVOPT_ALTI2C2) == 0U);
-    nobtswp_on        = ((snap.ficd_main    & FW_UCA_FICD_NOBTSWP)    == 0U);
+    bootswp_enabled   = ((snap.ficd_main    & FW_UCA_FICD_NOBTSWP)    == 0U);
     fdevopt_backup_ok = (snap.fdevopt_main == snap.fdevopt_backup);
     ficd_backup_ok    = (snap.ficd_main    == snap.ficd_backup);
     fcp_erased_ok     = (snap.fcp_main == FW_UCA_WORD_ERASED) &&
@@ -64,10 +64,9 @@ fw_uca_status_t fw_uca_validate(bool p2, fw_uca_report_t *report)
     fwdt_erased_ok    = (snap.fwdt_main == FW_UCA_WORD_ERASED) &&
                         (snap.fwdt_backup == FW_UCA_WORD_ERASED);
 
-    // Both bits are required for this Dual Bank build. In particular, accepting
-    // ALTI2C2 while silently ignoring NOBTSWP would allow a bundle with the wrong
-    // boot-swap policy to pass the runtime pre-commit gate.
-    if ( !alti2c2_on || !nobtswp_on || !fcp_erased_ok || !fwdt_erased_ok )
+    // Both functional policies are required for this dual-partition build. The
+    // DFP names FICD bit15 NOBTSWP, but its cleared state enables BOOTSWP.
+    if ( !alti2c2_on || !bootswp_enabled || !fcp_erased_ok || !fwdt_erased_ok )
     {
         status = FW_UCA_ERR_MISMATCH;
     }
@@ -85,7 +84,7 @@ fw_uca_status_t fw_uca_validate(bool p2, fw_uca_report_t *report)
         report->snap              = snap;
         report->p2                = p2;
         report->alti2c2_on        = alti2c2_on;
-        report->nobtswp_on        = nobtswp_on;
+        report->bootswp_enabled   = bootswp_enabled;
         report->fdevopt_backup_ok = fdevopt_backup_ok;
         report->ficd_backup_ok    = ficd_backup_ok;
         report->fcp_erased_ok     = fcp_erased_ok;

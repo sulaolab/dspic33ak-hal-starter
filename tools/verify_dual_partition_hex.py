@@ -6,13 +6,14 @@ provisioning invariant, emitting PASS/FAIL + a report. Build-success and
 bundle-verify-success are deliberately SEPARATE statuses (exit 0 only on PASS).
 
 Checks:
-  1. device/DFP identity is recorded (manifest constants; printed for audit).
+  1. device/DFP/compiler manifest pins match the selected MPLAB X configuration
+     when --project-config is supplied (the production provision wrapper does so).
   2. P1/P2 FCP/FICD/FDEVOPT/FWDT main+backup evaluated; absent => explicit
      0xFFFFFFFF reported as "NO RECORD=erased" (never silently "unseen").
   3. main == backup within compare_mask (per partition).
   4. P1 == P2 where must_match_p1_p2 (for non-erased words).
   5. FDEVOPT.ALTI2C2 (bit4) == 0  (board-required alternate I2C2 pins), P1 & P2.
-  6. FICD.NOBTSWP (bit15) == 0     (expected for this build), P1 & P2.
+  6. FICD.NOBTSWP (bit15) == 0     (BOOTSWP instruction enabled), P1 & P2.
   7. FBOOT.BTMODE == DUAL (shared UCB).
   8. no conflicting duplicate records (ihex parser is last-writer; we re-scan raw).
   9. program region within [0x800000,0x840000); nothing emitted into UCA/UCB by the
@@ -20,12 +21,14 @@ Checks:
  10. the XMODEM extraction range excludes UCA/UCB (asserted structurally here too).
 
 Usage: verify_dual_partition_hex.py <bundle.hex> [--report r.txt]
+       [--project-config configurations.xml --configuration name]
 Exit: 0 = PASS, 1 = FAIL, 2 = usage/read error.
 """
 import argparse
 import hashlib
 import os
 import sys
+import xml.etree.ElementTree as ET
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ihex_lite
@@ -63,12 +66,40 @@ def raw_conflict_scan(path):
     return [(a, sorted(vs)) for a, vs in seen.items() if len(vs) > 1]
 
 
+def read_project_metadata(path, configuration):
+    """Read the selected MPLAB X configuration instead of trusting manifest text."""
+    root = ET.parse(path).getroot()
+    conf = next((node for node in root.findall("./confs/conf")
+                 if node.get("name") == configuration), None)
+    if conf is None:
+        raise ValueError(f"configuration {configuration!r} not found")
+    tools = conf.find("toolsSet")
+    if tools is None:
+        raise ValueError(f"configuration {configuration!r} has no toolsSet")
+    pack = next((node for node in conf.findall("./packs/pack")
+                 if node.get("name") == M.DFP.split("/", 1)[0]), None)
+    if pack is None:
+        dfp = "(missing)"
+    else:
+        dfp = f"{pack.get('name')}/{pack.get('version')}"
+    return {
+        "device": tools.findtext("targetDevice", default=""),
+        "toolchain": tools.findtext("languageToolchain", default=""),
+        "xcdsc": tools.findtext("languageToolchainVersion", default=""),
+        "dfp": dfp,
+    }
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("bundle_hex")
     ap.add_argument("--report")
     ap.add_argument("--expect-device", help="fail unless manifest device == this")
     ap.add_argument("--expect-dfp", help="fail unless manifest DFP == this")
+    ap.add_argument("--project-config",
+                    help="MPLAB X configurations.xml to compare with manifest pins")
+    ap.add_argument("--configuration", default="dsPIC33AK512",
+                    help="configuration name inside --project-config")
     args = ap.parse_args()
 
     try:
@@ -95,6 +126,21 @@ def main():
     if args.expect_dfp is not None:
         ok(M.DFP == args.expect_dfp,
            f"manifest DFP=={args.expect_dfp} (got {M.DFP})")
+    if args.project_config is not None:
+        try:
+            project = read_project_metadata(args.project_config, args.configuration)
+        except (OSError, ValueError, ET.ParseError) as exc:
+            ok(False, f"read MPLAB X configuration: {exc}")
+        else:
+            log.append(("INFO", "project config "
+                        f"device={project['device']} dfp={project['dfp']} "
+                        f"toolchain={project['toolchain']}/{project['xcdsc']}"))
+            ok(project["device"] == M.DEVICE,
+               f"project device matches manifest ({M.DEVICE})")
+            ok(project["dfp"] == M.DFP,
+               f"project DFP matches manifest ({M.DFP})")
+            ok(project["toolchain"] == "XCDSC" and project["xcdsc"] == M.XCDSC,
+               f"project compiler matches manifest (XCDSC/{M.XCDSC})")
 
     # Per-word evaluation.
     for w in M.WORDS:

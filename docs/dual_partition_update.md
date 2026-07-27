@@ -42,7 +42,7 @@ A successful build ends with:
 
 ```text
 provision: PASS
-Dual Bank artifacts: PASS
+Dual-partition artifacts: PASS
 ```
 
 The script creates these files under
@@ -57,7 +57,8 @@ The script creates these files under
 
 `build.ps1` first builds `firmware.X.production.hex`, then calls
 `provision.ps1`. Provisioning copies the required P1 configuration words to the
-P2 UCA, generates the bundle, and verifies both partitions. Finally,
+P2 UCA, generates the bundle, verifies both partitions, and checks the selected
+MPLAB X configuration's device, DFP, and compiler against the manifest pins. Finally,
 `build.ps1` generates the DBFW-manifested `reflash_image.bin`.
 
 Do not rename individual files in this output set. The scripts deliberately use
@@ -145,12 +146,18 @@ After reset, confirm that the boot banner contains lines similar to:
 
 ```text
 bank   : P1 active, BTSEQ=0xFFF
-config : active UCA OK (ALTI2C2=ON, NOBTSWP=ON)
+config : active UCA OK (ALTI2C2=ON, BOOTSWP=ENABLED)
 update : type *fua5 on UART1, then send reflash_image.bin via XMODEM
 ```
 
 Do not continue with a serial update if the active UCA is reported as invalid.
 Repeat the verified first-flash procedure instead.
+
+`BOOTSWP=ENABLED` is the functional meaning of FICD bit 15 being clear. XC-DSC
+and the DFP spell the configuration pragma `NOBTSWP=ON`; for this device that
+spelling means raw `NOBTSWP=0`, which enables the BOOTSWP instruction. The
+updater commits through BTSEQ followed by reset, but preserves and verifies this
+project configuration consistently in both partition UCAs.
 
 ## 4. Arm the inactive-partition receiver
 
@@ -170,9 +177,13 @@ Select reflash_image.bin with 1K unchecked.
 Waiting for xmodem-crc data on UART1...
 ```
 
-Periodic application output stops while the update channel is armed. This is
-intentional: XMODEM control bytes must be the only board-to-host traffic during
-the transfer.
+Periodic application output stops while the update channel is armed, and the
+background TDM/DMA smoke stream is stopped before Flash erase/program begins.
+This is intentional: XMODEM control bytes must be the only board-to-host traffic
+during the transfer, and autonomous DMA must not run across NVM CPU stalls. A
+failed receive restarts the TDM demo and periodic output; a successful receive
+stays quiet while waiting for `*fca5` and reset. If commit fails and returns,
+the demo and periodic output resume after the failure instructions are printed.
 
 ## 5. Send `reflash_image.bin` with XMODEM
 
@@ -188,8 +199,10 @@ Choose:
 firmware.X\dist\dsPIC33AK512\production\reflash_image.bin
 ```
 
-Use XMODEM-CRC with **1K unchecked**. This selects standard 128-byte blocks and
-avoids extra CPMEOF padding.
+Use XMODEM-CRC with **1K unchecked**. The receiver understands both 128-byte and
+1024-byte XMODEM frames, but `reflash_image.bin` deliberately places its DBFW
+trailer in the final 128-byte block. Tera Term's 1K mode can append CPMEOF
+padding after that trailer, so package validation correctly rejects the file.
 
 > [!WARNING]
 > Do not use **File > Send file**. That command sends an unframed byte stream;
@@ -242,7 +255,7 @@ After reset, verify that the other partition is active and the UCA is valid:
 
 ```text
 bank   : P2 active, BTSEQ=0xFFE
-config : active UCA OK (ALTI2C2=ON, NOBTSWP=ON)
+config : active UCA OK (ALTI2C2=ON, BOOTSWP=ENABLED)
 ```
 
 The next update uses exactly the same steps and the same generated filename.
