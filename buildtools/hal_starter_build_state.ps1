@@ -200,10 +200,18 @@ function Set-HalStarterActiveConfiguration {
     $implMakefile = Join-Path $ProjectDir 'nbproject\Makefile-impl.mk'
     $privateConfig = Join-Path $ProjectDir 'nbproject\private\configurations.xml'
 
-    Update-HalStarterAsciiFileExact `
-        -Path $implMakefile `
-        -Pattern '^(DEFAULTCONF=)[^\r\n]*' `
-        -Replacement { param($m) $m.Groups[1].Value + $name }
+    # Unlike the Sonora original (which tracks Makefile-impl.mk in git, so it
+    # always exists), this repo's .gitignore excludes every generated
+    # nbproject/Makefile-*.mk, including this one -- a fresh clone has none of
+    # them until the first build.ps1/-Generate run or an MPLAB X IDE open. With
+    # a single configuration there is nothing to rewrite yet in that case: the
+    # generator will stamp the only choice as DEFAULTCONF regardless.
+    if (Test-Path -LiteralPath $implMakefile) {
+        Update-HalStarterAsciiFileExact `
+            -Path $implMakefile `
+            -Pattern '^(DEFAULTCONF=)[^\r\n]*' `
+            -Replacement { param($m) $m.Groups[1].Value + $name }
+    }
 
     # Untracked IDE state: absent until MPLAB X has opened the project once.
     if (Test-Path -LiteralPath $privateConfig) {
