@@ -435,9 +435,26 @@ try {
     & $provisionScript -Configuration $Configuration -Root $repoRoot `
         -ProjectDir $projectDir -Hex $productionHex -Python $pythonExe
 
-    Invoke-CheckedCommand -Description 'Generate reflash_image.bin' -Command {
-        & $pythonExe $extractScript $productionHex $reflashImage
+    # Publish reflash_image.bin atomically. The extractor only opens its output
+    # after its input parsing and size checks pass, so generating straight onto the
+    # final path would leave the PREVIOUS build's image in place on failure -- and
+    # that stale file still carries a valid DBFW manifest and CRC, so the board
+    # would happily accept it later. Build into a temp name and rename on success,
+    # deleting the old image first so a failure is fail-closed (no image at all),
+    # matching how provision.ps1 drops the stale verify report before regenerating.
+    $reflashTemp = "$reflashImage.new"
+    foreach ($stale in @($reflashImage, $reflashTemp)) {
+        if (Test-Path -LiteralPath $stale) {
+            Remove-Item -LiteralPath $stale -Force
+        }
     }
+    Invoke-CheckedCommand -Description 'Generate reflash_image.bin' -Command {
+        & $pythonExe $extractScript $productionHex $reflashTemp
+    }
+    if (-not (Test-Path -LiteralPath $reflashTemp)) {
+        throw "Extractor reported success but wrote no image: $reflashTemp"
+    }
+    Move-Item -LiteralPath $reflashTemp -Destination $reflashImage -Force
 
     Write-Host ''
     Write-Host 'Dual-partition artifacts: PASS'

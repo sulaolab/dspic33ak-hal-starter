@@ -187,11 +187,25 @@ through MPLAB X.
 
 ### MPLAB X IDE
 
+Use the IDE for editing, building, and debugging.
+
 1. Open `firmware.X` in MPLAB X (this regenerates the per-machine makefiles).
 2. Build (single configuration `dsPIC33AK512`, device dsPIC33AK512MPS512).
-3. Program to the board with the on-board PKOB4.
-4. Open a serial terminal on either Windows port ("USB Serial Port" / "USB
+3. Open a serial terminal on either Windows port ("USB Serial Port" / "USB
    Serial Device") at **230400 8N1** — output is mirrored to both.
+
+> [!IMPORTANT]
+> Do **not** use the IDE's **Program Device** for initial provisioning. The
+> project deliberately leaves `useAlternateLoadableFile` off, so Program Device
+> writes the raw `firmware.X.production.hex`, which carries the P1 program and P1
+> config words but **not** the cloned P2 UCA. The board runs fine immediately,
+> but the first `*fca5` commit is then refused (`inactive partition config`)
+> because P2's config words were never programmed.
+>
+> Provision with the verified bundle instead — `buildtools/build.ps1` then
+> `buildtools/flashauto.ps1` (see below). The same applies after changing any
+> `#pragma config`: a serial update carries program memory only, so the new
+> config words reach the device only via a fresh bundle flash.
 
 Only `firmware.X/nbproject/{configurations,project}.xml` and the top-level
 `firmware.X/Makefile` are tracked; build output and the per-machine generated
@@ -265,10 +279,15 @@ report are both present and their SHA-256 values match. An explicit advanced
 ## Dual-partition firmware update
 
 The running application can receive `reflash_image.bin` through UART1 and write
-only the inactive 256 KB Flash partition. It validates the package and complete
-Flash read-back before `*fca5` is allowed to change BTSEQ and reset into the
-updated partition. The same image filename works in both directions; there is no
-separate P1 or P2 update image.
+only the inactive 256 KB Flash partition. It validates the package and read-back
+of every programmed row before `*fca5` is allowed to change BTSEQ and reset into
+the updated partition. The same image filename works in both directions; there is
+no separate P1 or P2 update image.
+
+A serial update rewrites **program memory only**: `reflash_image.bin` is a slice
+of `[0x800000, 0x840000)` and contains no UCA, FBOOT, or configuration words, so
+it can never change a partition's fuses. Those are provisioned once by the
+verified bundle over PKOB4.
 
 Quick serial-update workflow:
 
@@ -277,7 +296,7 @@ Quick serial-update workflow:
 2. Type `*fua5` and press Enter.
 3. Select **File > Transfer > XMODEM > Send** and choose
    `firmware.X/dist/dsPIC33AK512/production/reflash_image.bin`.
-4. Leave **1K unchecked**.
+4. **1K** may be checked or unchecked; both work.
 5. Wait for both `Firmware receive: PASS` and `Validation: PASS`.
 6. Type `*fca5`; the device validates UCA and BTSEQ, then resets into the update.
 

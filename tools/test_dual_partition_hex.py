@@ -174,29 +174,59 @@ def main():
     if rc == PASS:
         size = os.path.getsize(binout)
         # image starts at 0x800000; must not contain any 0x7Fxxxx bytes (impossible
-        # by construction) and size stays within the firmware receiver's cap
-        # (partition 0x40000 minus the last 512-byte BTSEQ-protection row).
-        check("extract image within firmware limit", size <= 0x3FE00,
-              f"size=0x{size:X}")
+        # by construction). The firmware's cap applies to the PAYLOAD -- the part
+        # that reaches flash -- not the file: the 16-byte manifest is metadata. The
+        # cap is partition 0x40000 minus the last 512-byte BTSEQ-protection row.
+        check("extract payload within firmware limit",
+              (size - E.PACKAGE_MANIFEST_BYTES) <= E.FW_MAX_IMAGE_BYTES,
+              f"payload=0x{size - E.PACKAGE_MANIFEST_BYTES:X}")
         with open(binout, "rb") as f:
             package = f.read()
         package_ok, reason = E.validate_package(package)
         check("reflash package manifest+CRC valid", package_ok, reason)
-        check("reflash package is XMODEM-block aligned",
-              (len(package) % E.XMODEM_BLOCK_BYTES) == 0,
+        # v2: manifest leads, payload follows and is 512-byte row aligned.
+        check("reflash package payload is row aligned",
+              ((len(package) - E.PACKAGE_MANIFEST_BYTES) % 512) == 0,
               f"size={len(package)}")
         corrupt = bytearray(package)
-        corrupt[0] ^= 0x01
+        corrupt[E.PACKAGE_MANIFEST_BYTES] ^= 0x01
         corrupt_ok, _ = E.validate_package(corrupt)
         check("reflash package detects payload corruption", not corrupt_ok)
         corrupt = bytearray(package)
-        corrupt[-E.PACKAGE_TRAILER_BYTES] ^= 0x01
+        corrupt[0] ^= 0x01
         corrupt_ok, _ = E.validate_package(corrupt)
         check("reflash package rejects wrong magic", not corrupt_ok)
         corrupt = bytearray(package)
-        corrupt[-E.PACKAGE_TRAILER_BYTES + 6] ^= 0x01
+        corrupt[6] ^= 0x01
         corrupt_ok, _ = E.validate_package(corrupt)
         check("reflash package rejects wrong project ID", not corrupt_ok)
+
+        # --- 9b: THE regression the manifest-first (v2) layout exists for.
+        # XMODEM carries no length, so a sender pads its final block to the full
+        # block size, conventionally with 0x1A. Those bytes land after our payload
+        # and MUST NOT cause a rejection -- this is what broke XMODEM-1K under the
+        # v1 trailing-manifest layout on real hardware.
+        for pad_len in (1, 16, 128, 896, 1023, 1024):
+            padded = package + (b"\x1a" * pad_len)
+            padded_ok, padded_reason = E.validate_package(padded)
+            check(f"tolerates {pad_len}B of 0x1A sender padding",
+                  padded_ok, padded_reason)
+        # 0x00-padding senders exist too; same requirement.
+        check("tolerates 0x00 sender padding",
+              E.validate_package(package + (b"\x00" * 896))[0])
+        # The tolerance is bounded, and the bound must match the firmware's
+        # FW_PACKAGE_MAX_TRAILING_PAD exactly -- at the limit PASS, one over FAIL.
+        check("tolerates padding exactly at the cap",
+              E.validate_package(package + (b"\x1a" * E.PACKAGE_MAX_TRAILING_PAD))[0])
+        check("rejects padding one byte over the cap",
+              not E.validate_package(
+                  package + (b"\x1a" * (E.PACKAGE_MAX_TRAILING_PAD + 1)))[0])
+        # But a truncated payload must still fail (padding tolerance is not
+        # permission to accept a short image).
+        check("rejects truncated payload",
+              not E.validate_package(package[:-1])[0])
+        check("rejects manifest-only file",
+              not E.validate_package(package[:E.PACKAGE_MANIFEST_BYTES])[0])
 
     # --- 10: every public HEX consumer rejects a bad Intel HEX checksum.
     bad_checksum_hex = os.path.join(tmp, "extract_bad_checksum.hex")
@@ -226,17 +256,21 @@ def main():
     check("extract refuses over-limit image", rc == FAIL, out)
     check("extract wrote no file when over limit", not os.path.exists(big))
 
-    # --- 12: raw program span fits the old limit, but DBFW overhead does not.
-    # This specifically proves the limit is checked after packaging, not merely
-    # against the raw P1 slice.
+    # --- 12: the limit applies to the PAYLOAD, not the file. Under v2 the 16-byte
+    # manifest is metadata that never reaches flash, so a payload of exactly
+    # FW_MAX_IMAGE_BYTES (partition minus the BTSEQ row) is legal even though the
+    # file is 16 bytes larger. Check 11 above covers the over-limit side.
     mem = synth_p1()
     mem[M.PROGRAM_REGION_LO + 0x3FDFF] = 0xA5  # raw rounds to exactly 0x3FE00
-    h3 = os.path.join(tmp, "extract_package_toobig.hex")
+    h3 = os.path.join(tmp, "extract_at_limit.hex")
     write_hex(h3, mem)
-    package_big = os.path.join(tmp, "package_toobig.bin")
-    rc, out = run([PY, EXTRACT, h3, package_big])
-    check("extract accounts for DBFW overhead in limit", rc == FAIL, out)
-    check("over-limit packaged image wrote no file", not os.path.exists(package_big))
+    at_limit = os.path.join(tmp, "at_limit.bin")
+    rc, out = run([PY, EXTRACT, h3, at_limit])
+    check("extract accepts payload exactly at the limit", rc == PASS, out)
+    if rc == PASS:
+        check("at-limit payload excludes manifest from the cap",
+              os.path.getsize(at_limit) == E.FW_MAX_IMAGE_BYTES + E.PACKAGE_MANIFEST_BYTES,
+              f"size=0x{os.path.getsize(at_limit):X}")
 
     ok = all(c for _, c, _ in results)
     print(f"\n{'ALL PASS' if ok else 'FAILURES PRESENT'}: "

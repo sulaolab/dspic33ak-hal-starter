@@ -159,6 +159,15 @@ update : type *fua5 on UART1, then send reflash_image.bin via XMODEM
 Do not continue with a serial update if the active UCA is reported as invalid.
 Repeat the verified first-flash procedure instead.
 
+To see the same information again later without resetting the board, type
+`?fp` (read-only; does not arm or change anything):
+
+```text
+"?fp" bank     : P1 active, BTSEQ=0xFFF (inactive P2, BTSEQ=0xFFF)
+"?fp" active   : UCA OK (ALTI2C2=ON, BOOTSWP=ENABLED)
+"?fp" inactive : UCA OK (ALTI2C2=ON, BOOTSWP=ENABLED)
+```
+
 `BOOTSWP=ENABLED` is the functional meaning of FICD bit 15 being clear. XC-DSC
 and the DFP spell the configuration pragma `NOBTSWP=ON`; for this device that
 spelling means raw `NOBTSWP=0`, which enables the BOOTSWP instruction. The
@@ -179,17 +188,36 @@ as:
 ```text
 Firmware update armed.
 Tera Term: File > Transfer > XMODEM > Send
-Select reflash_image.bin with 1K unchecked.
+Select reflash_image.bin (1K may be checked or unchecked).
 Waiting for xmodem-crc data on UART1...
 ```
 
-Periodic application output stops while the update channel is armed, and the
-background TDM/DMA smoke stream is stopped before Flash erase/program begins.
-This is intentional: XMODEM control bytes must be the only board-to-host traffic
-during the transfer, and autonomous DMA must not run across NVM CPU stalls. A
-failed receive restarts the TDM demo and periodic output; a successful receive
-stays quiet while waiting for `*fca5` and reset. If commit fails and returns,
-the demo and periodic output resume after the failure instructions are printed.
+> [!IMPORTANT]
+> Start the XMODEM send within about **30 seconds**. The receiver kicks the sender
+> ten times at three-second intervals and then gives up, so if you take too long
+> choosing the file the transfer dialog opens onto a receiver that has already
+> stopped listening. Cancel the dialog, type `*fua5` again, and retry.
+
+Periodic application output stops automatically as soon as `*fua5` is accepted,
+and the background TDM/DMA smoke stream is stopped before Flash erase/program
+begins. This is intentional and needs no separate command: XMODEM control bytes
+must be the only board-to-host traffic during the transfer, and autonomous DMA
+must not run across NVM CPU stalls.
+
+Periodic output does **not** come back on its own -- not after a successful
+receive, not after a failed receive, and not after a failed commit. It only
+resumes on an explicit `*tq0000`, or a reset (a successful `*fca5` commit). The
+TDM/DMA smoke stream is the one thing that *does* restart automatically after a
+failed receive or a failed commit, since otherwise the demo would stay silently
+dead with no way back short of a reset; that restart is independent of the
+output toggle and happens either way.
+
+Use `*tq0000` / `*tq0001` any time, independent of the update workflow:
+
+```text
+*tq0001   -- periodic starter output OFF
+*tq0000   -- periodic starter output ON
+```
 
 ## 5. Send `reflash_image.bin` with XMODEM
 
@@ -205,10 +233,17 @@ Choose:
 firmware.X\dist\dsPIC33AK512\production\reflash_image.bin
 ```
 
-Use XMODEM-CRC with **1K unchecked**. The receiver understands both 128-byte and
-1024-byte XMODEM frames, but `reflash_image.bin` deliberately places its DBFW
-trailer in the final 128-byte block. Tera Term's 1K mode can append CPMEOF
-padding after that trailer, so package validation correctly rejects the file.
+Use XMODEM-CRC. **1K may be checked or unchecked** -- both work, and neither
+needs any particular file size.
+
+XMODEM has no file-length field, so every sender pads its final block out to the
+full block size (128 or 1024 bytes), conventionally with `0x1A` (CP/M EOF). Those
+pad bytes arrive after the real image, which is why `bytes received` in the
+firmware's report is normally a little larger than `reflash_image.bin` itself --
+that is expected, not an error. The DBFW manifest is therefore placed at the
+**front** of the file: the receiver learns the exact payload length before any
+image byte arrives, programs exactly that many bytes, and discards the sender's
+padding without ever writing it to flash.
 
 > [!WARNING]
 > Do not use **File > Send file**. That command sends an unframed byte stream;
@@ -236,10 +271,20 @@ Firmware receive: PASS
   package crc  : ....
 Validation: PASS (DBFW manifest + xmodem-crc + flash read-back)
 Type *fca5 to activate the validated partition.
+Periodic starter output stays off. Type *tq0000 to resume it.
 ```
 
 At this point, the new firmware is present only in the inactive partition. The
-currently running partition remains selected until the commit command.
+currently running partition remains selected until the commit command. Periodic
+output stays off either way (it does not resume on its own after a PASS or a
+FAIL); type `*tq0000` if you want it back before deciding whether to commit.
+
+> [!NOTE]
+> The commit authorization lives only in RAM. If the board resets or loses power
+> after `Validation: PASS` but before `*fca5`, the current partition stays active
+> and safe -- but the authorization is gone, so `*fca5` alone is refused and the
+> image must be transferred again. The received image is still in Flash; only the
+> permission to commit it is not.
 
 ## 7. Commit and boot the updated partition
 
@@ -267,6 +312,29 @@ config : active UCA OK (ALTI2C2=ON, BOOTSWP=ENABLED)
 The next update uses exactly the same steps and the same generated filename.
 When P2 is active, the application writes P1; when P1 is active, it writes P2.
 
+## What each path writes
+
+Serial updates are **code-only**. Knowing which path owns which memory explains
+most surprises:
+
+| | Initial bundle flash (PKOB4) | Serial update (`*fua5` / `*fca5`) |
+| --- | --- | --- |
+| Application, active partition | written | never touched |
+| Application, inactive partition | left erased until the first serial update | written |
+| Per-partition config words (P1 + P2 UCA) | written, P2 cloned from P1 and verified | never touched |
+| Shared boot config (FBOOT / `BTMODE=DUAL`) | written | never touched |
+| BTSEQ (boot selection) | left erased | written by `*fca5` only |
+
+`reflash_image.bin` is a slice of `[0x800000, 0x840000)` and contains no UCA,
+FBOOT, or configuration words at all, so a serial update cannot change a
+partition's fuses even in principle.
+
+> [!IMPORTANT]
+> After editing any `#pragma config`, a serial update will **not** apply it.
+> Rebuild and re-provision over PKOB4 with the verified bundle
+> (`build.ps1`, then `flashauto.ps1`), which rewrites both partitions' config
+> words and re-verifies them.
+
 ## Quick reference
 
 First-time provisioning:
@@ -281,10 +349,19 @@ Later serial updates:
 1. Connect Tera Term directly to **USB Serial Port**, `230400 8N1`, no flow control.
 2. Type `*fua5` and press Enter.
 3. Select **File > Transfer > XMODEM > Send**.
-4. Select `reflash_image.bin` with **1K unchecked**.
+4. Select `reflash_image.bin` (**1K** may be checked or unchecked).
 5. Wait for `Firmware receive: PASS` and `Validation: PASS`.
 6. Type `*fca5` and press Enter.
-7. Confirm the new active partition and `active UCA OK` after reset.
+7. Confirm the new active partition and `active UCA OK` after reset, or check
+   without resetting by typing `?fp`.
+
+Other useful commands, usable any time on UART1:
+
+| Command | Effect |
+| --- | --- |
+| `?fp` | Print which partition is active, both BTSEQ words, and both UCA states. Read-only. |
+| `*tq0001` | Turn periodic starter output off, independent of `*fua5`/`*fca5`. |
+| `*tq0000` | Turn periodic starter output back on. |
 
 ## Troubleshooting
 
@@ -312,8 +389,12 @@ Check all of the following:
 - The serial settings are `230400 8N1`, no flow control.
 - No other terminal has the same COM port open.
 - `*fua5` was accepted before opening the XMODEM dialog.
-- **1K** is unchecked.
 - The selected file is the latest generated `reflash_image.bin` from this project.
+
+The **1K** checkbox does not matter either way (see step 5). If a transfer fails
+with `Firmware receive: FAIL (wrong reflash image format...)`, the usual cause is
+a stale `reflash_image.bin` -- rebuild with `build.ps1` and send the freshly
+generated file.
 
 ### The terminal output is unreadable
 
@@ -334,18 +415,35 @@ pwsh -File .\buildtools\flashauto.ps1 -Configuration dsPIC33AK512
 The active partition is not intentionally modified by the serial receiver. Type
 `*fua5`, send the complete image again, and commit only after both PASS lines.
 
+### XMODEM never starts, or the receiver gave up
+
+The receiver listens for roughly 30 seconds after `*fua5` (ten kicks, three
+seconds apart). If the file-selection dialog took longer than that, cancel it,
+type `*fua5` again, and pick the file promptly.
+
+### `*fca5` is refused after a reset, even though the transfer passed
+
+Expected: the commit authorization is held in RAM only, so a reset or power cycle
+between `Validation: PASS` and `*fca5` clears it. Repeat `*fua5` and the transfer.
+
 ## Safety and security scope
 
 The update path includes:
 
 - XMODEM-CRC transport checking
 - a DBFW format/version/project identifier
-- a package CRC and inverse CRC
+- an exact payload length plus payload CRC and inverse CRC
 - inactive-Flash read-back verification
 - inactive UCA validation
 - BTSEQ program/read-back verification
 - fail-closed commit gating
 
-The DBFW trailer is an integrity and wrong-project guard, not a cryptographic
+The DBFW manifest is an integrity and wrong-project guard, not a cryptographic
 signature. This example is not a secure-boot implementation and does not
 authenticate an untrusted firmware publisher.
+
+Firmware version enforcement and anti-rollback are also **not** implemented: any
+older image from this same project is a perfectly valid package and will be
+accepted and committed. Note that the DBFW `version` field is the *package format*
+version, not a firmware release version, and BTSEQ counts down per commit as a
+boot-selection mechanism -- neither one expresses "newer than what is installed".
