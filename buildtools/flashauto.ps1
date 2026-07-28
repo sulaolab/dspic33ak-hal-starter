@@ -18,7 +18,7 @@ param(
     [string]$Device = 'dsPIC33AK512MPS512',
     [string]$ResetDevice,
     [string]$Hex,
-    [string]$Configuration = $env:MPLABX_CONF,
+    [string]$Configuration,
     [string]$Root = (Get-Location).Path,
     [string]$ProjectDir,
     [string]$ToolsDir = $env:FLASH_RESET_TOOLS,
@@ -27,9 +27,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-if ([string]::IsNullOrWhiteSpace($Configuration)) {
-    $Configuration = 'dsPIC33AK512'
-}
+. (Join-Path $PSScriptRoot 'hal_starter_build_state.ps1')
+
 if ($Verbose -and $Quiet) {
     throw "Use either -Verbose or -Quiet, not both."
 }
@@ -42,48 +41,6 @@ function Write-Status {
     if (-not $Quiet) {
         Write-Host $Message
     }
-}
-
-function Resolve-BuildRoot {
-    param(
-        [string]$RequestedRoot
-    )
-
-    $resolvedRoot = (Resolve-Path -LiteralPath $RequestedRoot).Path
-
-    if ((Split-Path -Leaf $resolvedRoot) -like '*.X' -and
-        (Test-Path -LiteralPath (Join-Path $resolvedRoot 'nbproject'))) {
-        return (Split-Path -Parent $resolvedRoot)
-    }
-
-    return $resolvedRoot
-}
-
-function Resolve-MplabProjectDir {
-    param(
-        [string]$Root,
-        [string]$RequestedProjectDir
-    )
-
-    if (-not [string]::IsNullOrWhiteSpace($RequestedProjectDir)) {
-        if ([System.IO.Path]::IsPathRooted($RequestedProjectDir)) {
-            return (Resolve-Path -LiteralPath $RequestedProjectDir).Path
-        }
-        return (Resolve-Path -LiteralPath (Join-Path $Root $RequestedProjectDir)).Path
-    }
-
-    $projects = @(Get-ChildItem -LiteralPath $Root -Directory -Filter '*.X' |
-        Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName 'nbproject') })
-
-    if ($projects.Count -eq 0) {
-        throw "No MPLAB X project directory (*.X with nbproject) found under: $Root"
-    }
-    if ($projects.Count -gt 1) {
-        $names = ($projects | ForEach-Object { $_.Name }) -join ', '
-        throw "Multiple MPLAB X project directories found: $names. Specify -ProjectDir."
-    }
-
-    return $projects[0].FullName
 }
 
 function Resolve-FlashResetToolsDir {
@@ -249,8 +206,12 @@ function Invoke-ResetJavaCleanup {
     Invoke-CheckedExe -Exe $ResetTool -Arguments $cleanupArgs
 }
 
-$repoRoot = Resolve-BuildRoot -RequestedRoot $Root
-$projectDir = Resolve-MplabProjectDir -Root $repoRoot -RequestedProjectDir $ProjectDir
+$repoRoot = Resolve-HalStarterRepoRoot -RequestedRoot $Root
+$projectDir = Resolve-HalStarterProjectDir -RepoRoot $repoRoot -RequestedProjectDir $ProjectDir
+$configurations = Get-HalStarterConfigurations -ProjectDir $projectDir
+if ([string]::IsNullOrWhiteSpace($Configuration)) {
+    $Configuration = Get-HalStarterActiveConfiguration -ProjectDir $projectDir -Configurations $configurations
+}
 $toolsDir = Resolve-FlashResetToolsDir -RequestedToolsDir $ToolsDir -Root $repoRoot
 $flashTool = Join-Path $toolsDir 'flash_pkob4.exe'
 $resetTool = Join-Path $toolsDir 'reset_pkob4.exe'
@@ -302,6 +263,14 @@ if ($Reset) {
 
 $hexPath = Resolve-ProductionHex -RequestedHex $Hex -ProjectDir $projectDir -Configuration $Configuration
 Write-Status "Configuration: $Configuration"
+# APP_BUILD is not part of the HEX path, so say which variation the last build of
+# this configuration produced (stamped by build.ps1; unknown after an IDE build).
+$builtAppBuild = Get-HalStarterBuiltPreset -ProjectDir $projectDir -Configuration $Configuration
+if ($builtAppBuild) {
+    Write-Status "Last build of this configuration: $builtAppBuild"
+} else {
+    Write-Status "Last build of this configuration: unknown (not built by build.ps1)"
+}
 Write-Status "Flash device token: $Device"
 Write-Status "Reset device token: $resetDeviceToken"
 Write-Status "HEX: $hexPath"

@@ -25,3 +25,8 @@ MPLABXLog.xml.lck
 # Python host-tool cache
 __pycache__/
 *.pyc
+
+# Local build selection (buildtools/switch_config.ps1); the build stamp file
+# under firmware.X/build/<conf>/ is already covered by the build-output rule
+# above.
+buildtools/active_build.json

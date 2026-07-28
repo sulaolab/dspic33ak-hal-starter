@@ -9,7 +9,13 @@
  * These are APPLICATION choices (what the starter firmware does), NOT board facts.
  * Board pin/peripheral facts live in board_pins.h / board.h. Keep build-time demo
  * switches here so they are separate from the board description.
+ *
+ * app_build_config.h is the APP_BUILD variation catalog (selected via
+ * buildtools/switch_config.ps1 / -DAPP_BUILD=...); it #defines every toggle
+ * below for the selected variation. Included first so the #ifndef fallbacks
+ * that follow only apply to a bare build with no APP_BUILD selection at all.
  */
+#include "app_build_config.h"
 
 /*
  * SPI1 framed-mode (TDM8) smoke demo -- default ON.

@@ -30,6 +30,12 @@ Use **USB Serial Port** for every command and XMODEM operation in this guide.
 
 ## 1. Build the firmware and update artifacts
 
+This guide builds the shipped default demo firmware (`APP_BUILD_STARTER_DEFAULT`).
+To build a different demo variant instead (see
+[buildtools/README.md](../buildtools/README.md) for the catalog), run
+`.\buildtools\switch_config.ps1` first; it persists the choice so the commands
+below still apply unchanged.
+
 Open PowerShell 7 in the repository root and run:
 
 ```powershell

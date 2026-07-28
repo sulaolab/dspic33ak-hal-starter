@@ -235,6 +235,7 @@ int main(void)
     printf(" dspic33ak-hal-starter\n");
     printf(" build  : " __DATE__ " " __TIME__ "\n");
     printf(" device : dsPIC33AK512MPS512\n");
+    printf(" app    : %s (%s)\n", APP_BUILD_NAME, APP_BUILD_DETAIL);
     /* Per-die Unique Device ID (board-individual identity). UDID128 is the four
      * read-only words concatenated UDID4..UDID1 (high word first). */
     {

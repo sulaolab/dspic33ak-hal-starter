@@ -115,11 +115,15 @@ The firmware demonstrates:
    `-140 dB rel`. The stream runs on DMA/ISR and prints one status line every ~5 s:
    `[TDM1] TDM8 master exp_fs~48.8kHz exp_bclk~12.5MHz block=... miss=0 rx=... dB rel`.
    The public demo path is focused on framed SPI timing, DMA continuity, and
-   the observable TDM8 data stream. Demo switches live in `src/app/app_config.h`.
-   **This demo holds the MikroBUS-A SPI pins** — to use a real SPI Click board there, set
-   `HAL_STARTER_ENABLE_TDM_SMOKE_DEMO 0` in `src/app/app_config.h`. A start failure is
-   reported but does not stop the other demos. (The MikroBUS-A I2C SDA/SCL pins are
-   different and are unaffected either way.)
+   the observable TDM8 data stream. Demo switches live in `src/app/app_config.h`,
+   collected into the `APP_BUILD` variation catalog in
+   [`src/app/app_build_config.h`](src/app/app_build_config.h) (select with
+   `buildtools/switch_config.ps1`; see [buildtools/README.md](buildtools/README.md)).
+   **This demo holds the MikroBUS-A SPI pins** — to use a real SPI Click board there, run
+   `.\buildtools\switch_config.ps1 -Preset APP_BUILD_TDM_SMOKE_OFF` (or set
+   `HAL_STARTER_ENABLE_TDM_SMOKE_DEMO 0` directly in `src/app/app_config.h`). A start
+   failure is reported but does not stop the other demos. (The MikroBUS-A I2C SDA/SCL
+   pins are different and are unaffected either way.)
 
 ### TDM8 smoke demo on mikroBUS-A
 
@@ -129,10 +133,11 @@ This is intended as a quick oscilloscope-visible bring-up check and a showcase
 that the dsPIC33AK SPI framed-mode path can generate TDM-style audio timing
 without a codec attached.
 
-To use mikroBUS-A as a normal SPI Click interface, set
-`HAL_STARTER_ENABLE_TDM_SMOKE_DEMO` to `0` in `src/app/app_config.h`. That frees
-the mikroBUS-A SPI pins; the I2C pins on the same mikroBUS header are separate
-and remain usable either way.
+To use mikroBUS-A as a normal SPI Click interface, run
+`.\buildtools\switch_config.ps1 -Preset APP_BUILD_TDM_SMOKE_OFF` (or set
+`HAL_STARTER_ENABLE_TDM_SMOKE_DEMO` to `0` directly in `src/app/app_config.h`).
+That frees the mikroBUS-A SPI pins; the I2C pins on the same mikroBUS header are
+separate and remain usable either way.
 
 In short: this is a known-good hardware starter project for checking that the
 board, toolchain, programmer, UART console, and basic HAL drivers are working
@@ -204,7 +209,11 @@ opening MPLAB X. MPLAB X and XC-DSC must be installed. The scripts auto-detect t
 make and project-generator tools; the generated project makefiles invoke XC-DSC.
 
 ```powershell
-# Incremental build (auto-detects MPLAB X version and firmware.X project)
+# Choose what the next build targets (interactive menu; see buildtools/README.md)
+.\buildtools\switch_config.ps1
+
+# Incremental build (auto-detects MPLAB X version and firmware.X project;
+# follows the switch_config.ps1 selection above)
 .\buildtools\build.ps1
 
 # Full clean-build: regenerate makefiles, clean outputs, rebuild
@@ -388,7 +397,9 @@ src/
                         near the top of src/ so it is easy to find in MPLAB X.
   app/                  bus validation samples: i2c_scan, i2c_loopback,
                         can_loopback, can_bus_test (two-board); app_config.h
-                        (demo toggles); tdm_smoke (SPI1 TDM8 smoke demo)
+                        (demo toggles); app_build_config.h (APP_BUILD variation
+                        catalog, selected via buildtools/switch_config.ps1);
+                        tdm_smoke (SPI1 TDM8 smoke demo)
 docs/
   dual_partition_update.md complete first-flash and serial-update user guide
   images/
