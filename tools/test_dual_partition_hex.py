@@ -23,6 +23,7 @@ and asserts the expected PASS/FAIL outcome for each case:
  12. payload exactly at the limit                        -> extract PASS (the cap
      applies to the payload; the 16-byte manifest never reaches flash)
  13. the DBFW constants in src/fw_update/fw_update.c match this toolchain's
+     constants, and the payload-cap macro still has its expected formula
 
 Section 13 is the one that guards against silent C-vs-Python drift: the package
 format is defined twice (firmware + host tool) and nothing else would catch an
@@ -334,18 +335,34 @@ def main():
         csrc = nvmsrc = ""
 
     if csrc and nvmsrc:
-        def cdef(text, name):
-            """Value of `#define <name> ...`, tolerating UINT32_C()/u suffixes.
-
-            The UINTxx_C() wrapper must be stripped BEFORE looking for the literal,
-            or the width digits in the macro name get parsed as the value.
-            """
+        def cmacro(text, name):
+            """Raw replacement text of `#define <name> ...`, comment stripped."""
             m = re.search(r"^#define\s+" + re.escape(name) + r"\s+(.+?)\s*(?://.*)?$",
                           text, re.MULTILINE)
-            if not m:
+            return m.group(1).strip() if m else None
+
+        def cdef(text, name):
+            """Integer value of `#define <name> <literal>`, else None.
+
+            Deliberately STRICT: after peeling wrapping parens, UINTxx_C() and
+            u/U/l/L suffixes, the remainder must be a single integer literal or this
+            returns None and the comparison below fails. A lenient "first number
+            wins" parser would read `(2u + 1u)` as 2 and silently agree with a
+            Python-side 2 -- precisely the drift this section exists to catch. It
+            would also mis-read UINT32_C(...) as 32.
+            """
+            expr = cmacro(text, name)
+            if expr is None:
                 return None
-            expr = re.sub(r"\bUINT\d+_C\b", "", m.group(1))
-            m2 = re.search(r"0[xX][0-9a-fA-F]+|\d+", expr)
+            for _ in range(6):                        # peel until stable
+                before = expr
+                expr = re.sub(r"\bUINT\d+_C\s*\(([^()]*)\)", r"\1", expr).strip()
+                if expr.startswith("(") and expr.endswith(")"):
+                    expr = expr[1:-1].strip()
+                expr = re.sub(r"(?<=[0-9a-fA-F])[uUlL]+\Z", "", expr).strip()
+                if expr == before:
+                    break
+            m2 = re.fullmatch(r"0[xX][0-9a-fA-F]+|\d+", expr)
             return int(m2.group(0), 0) if m2 else None
 
         row_bytes = cdef(nvmsrc, "DSPIC33AK_NVM_ROW_BYTES")
@@ -364,9 +381,18 @@ def main():
             check(f"firmware and host agree on {label}",
                   c_val is not None and c_val == py_val,
                   f"C={c_val!r} python={py_val!r}")
-        # FW_MAX_IMAGE_BYTES is computed in C; recompute and compare to the manifest.
+        # FW_MAX_IMAGE_BYTES is an expression, so comparing recomputed values is not
+        # enough: C could become (FW_PARTITION_BYTES - 2 * ROW_BYTES) while both
+        # operands keep their values, and a value-only check would still pass. Pin
+        # the formula itself, then check the value it yields.
+        cap_expr = cmacro(csrc, "FW_MAX_IMAGE_BYTES")
+        expected_expr = "(FW_PARTITION_BYTES - DSPIC33AK_NVM_ROW_BYTES)"
+        normalize = lambda s: re.sub(r"\s+", " ", s).strip() if s else s
+        check("firmware payload cap is still partition minus exactly one row",
+              normalize(cap_expr) == normalize(expected_expr),
+              f"C={cap_expr!r} expected={expected_expr!r}")
         if partition is not None and row_bytes is not None:
-            check("firmware and host agree on the payload cap",
+            check("firmware and host agree on the payload cap value",
                   (partition - row_bytes) == M.MAX_PAYLOAD_BYTES,
                   f"C={partition - row_bytes:#x} python={M.MAX_PAYLOAD_BYTES:#x}")
 

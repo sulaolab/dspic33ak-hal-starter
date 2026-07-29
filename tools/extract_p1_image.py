@@ -39,16 +39,20 @@ import struct
 import ihex_lite
 import uca_manifest
 
-PART_BASE = 0x800000
-PART_END  = 0x840000  # one partition = 256 KB; never include past this
+# Program-flash slice bounds. Taken from the manifest rather than re-typed, so the
+# extractor and verify_dual_partition_hex.py cannot disagree about what "the
+# application region" means.
+PART_BASE = uca_manifest.PROGRAM_REGION_LO   # 0x800000
+PART_END  = uca_manifest.PROGRAM_REGION_HI   # 0x840000; one partition = 256 KB
 
 # Max PAYLOAD bytes the firmware *fua5 XMODEM receiver accepts (fw_update.c): one
 # partition (0x40000) MINUS the last 512-byte row, which holds BTSEQ and is
 # write-protected by the receiver. The 16-byte manifest is metadata and never
 # reaches flash, so it does NOT count against this cap. A payload larger than this
 # would be refused by the board, so we refuse to emit one here instead.
-# Sourced from the manifest so this tool, verify_dual_partition_hex.py, and the
-# firmware cannot drift apart.
+# Host-side source of truth, shared with verify_dual_partition_hex.py. The firmware
+# has its own independent definition; test_dual_partition_hex.py compares the two and
+# fails on drift (it cannot prevent it).
 FW_MAX_IMAGE_BYTES = uca_manifest.MAX_PAYLOAD_BYTES
 
 PACKAGE_MAGIC = b"DBFW"
