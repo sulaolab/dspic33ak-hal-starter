@@ -141,7 +141,8 @@ static void print_partition_status(void)
 // active partition unchanged (a failed receive, or a failed commit). This is a
 // hardware-safety action, not a console-noise decision -- it must run regardless
 // of the quiet flag below, or the demo would stay silently dead until reset.
-// Transfer progress on the 8 user LEDs, as a left-to-right bar.
+// Transfer progress on the 8 user LEDs, as a bar that grows from LED7 toward LED0
+// (matching the board's physical left-to-right orientation).
 //
 // This is the display side of fw_update's progress hook. LEDs are used rather than
 // the console because xmodem_receive() owns UART1 for the whole transfer: the
@@ -163,8 +164,9 @@ static void update_progress_leds(uint32_t done, uint32_t total)
     }
     /* done <= total <= FW_MAX_IMAGE_BYTES (0x3FE00), so done * 8 cannot overflow. */
     lit = (uint8_t)((done * (uint32_t)LED_SW_LED_COUNT) / total);
+    /* Fill from the LED7 end: LED7 lights first, LED0 last. */
     for (i = 0u; i < LED_SW_LED_COUNT; i++) {
-        led_sw_set(i, (i < lit));
+        led_sw_set(i, (i >= (uint8_t)(LED_SW_LED_COUNT - lit)));
     }
 }
 
@@ -199,7 +201,7 @@ static void receive_firmware(void)
     printf("\r\nFirmware update armed.\r\n");
     printf("Tera Term: File > Transfer > XMODEM > Send\r\n");
     printf("Select reflash_image.bin (1K may be checked or unchecked).\r\n");
-    printf("LED0..LED7 show transfer progress as a bar.\r\n");
+    printf("LED7..LED0 show transfer progress as a bar.\r\n");
     printf("Waiting for xmodem-crc data on UART1...\r\n");
 
     /* Start from an empty bar, then let the hook grow it as blocks land. */
