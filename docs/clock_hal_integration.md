@@ -33,16 +33,12 @@ waived item is not classified as a Clock HAL blocker.
 The Starter `main` branch was not modified. The integration branch was created
 from the verified starting HEAD.
 
-### Perseus Source Provenance
+### Source Provenance
 
-The generic Clock HAL was imported from the pinned Perseus readiness source:
-
-| Item | Value |
-|---|---|
-| Source repository | `sulaolab/perseus_512_96K` |
-| Source branch | `exp/perseus-clock-hal-starter-readiness` |
-| Source commit | `89c2b88f44f0830ece99dcc9649b5e16382f3421` |
-| Source report | `docs/pll2_frc_cold_start_findings.md`, `§13 Clock HAL Starter-Migration Readiness Review` |
+The generic Clock HAL was imported unmodified from an upstream internal audio
+project, at a pinned commit reviewed for Starter migration readiness. The blob
+hashes below are what makes that import auditable here: they identify the exact
+file contents, independently of where they came from.
 
 The imported files are:
 
@@ -56,7 +52,7 @@ The imported files are:
 | `src/hal_clock/dspic33ak_clock_reg.c` | `ab5a3d42476d2e22cee318ac611ffacf856de2d8` |
 
 Final preparation verification confirmed all six local blobs are byte-identical
-to the pinned Perseus commit. No Starter-local change was made inside
+to the pinned upstream commit. No Starter-local change was made inside
 `src/hal_clock/`.
 
 ### Architecture
@@ -287,8 +283,8 @@ regression check.
 |---|---|
 | Hardware smoke | PASS with I2C loopback data-path waiver |
 | Starter mainline merge | Not performed by design |
-| Three-way mainline transition | Deferred until Starter, Perseus readiness, and standalone HAL publication are coordinated |
-| Generic HAL divergence | None; HAL files remain byte-identical to the pinned Perseus source |
+| Three-way mainline transition | Deferred until Starter, upstream readiness, and standalone HAL publication are coordinated |
+| Generic HAL divergence | None; HAL files remain byte-identical to the pinned upstream source |
 
 ### Branch and Push State
 
