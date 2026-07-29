@@ -189,6 +189,7 @@ as:
 Firmware update armed.
 Tera Term: File > Transfer > XMODEM > Send
 Select reflash_image.bin (1K may be checked or unchecked).
+LED0..LED7 show transfer progress as a bar.
 Waiting for xmodem-crc data on UART1...
 ```
 
@@ -244,6 +245,18 @@ that is expected, not an error. The DBFW manifest is therefore placed at the
 **front** of the file: the receiver learns the exact payload length before any
 image byte arrives, programs exactly that many bytes, and discards the sender's
 padding without ever writing it to flash.
+
+While the transfer runs, the board fills **LED0..LED7** left to right as a
+progress bar, one step per eighth of the payload. The bar is left standing when
+the transfer ends, so it doubles as a result indicator at a glance: a full bar
+means the whole payload was received and programmed, and a partial bar shows how
+far a failed transfer got. LED0 goes back to being the heartbeat indicator after
+`*tq0000`.
+
+Progress is shown on the LEDs rather than as characters on the console because
+the XMODEM transport owns UART1 for the whole transfer: the sender is waiting for
+`ACK`/`NAK`, so any extra byte the board printed there would corrupt the protocol.
+Tera Term's own transfer dialog remains the byte-accurate progress display.
 
 > [!WARNING]
 > Do not use **File > Send file**. That command sends an unframed byte stream;

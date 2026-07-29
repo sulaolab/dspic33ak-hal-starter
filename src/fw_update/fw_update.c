@@ -85,6 +85,14 @@ static fw_ctx_t s_ctx;
 // or after a failed/absent receive.
 static bool s_last_receive_good = false;
 
+// Optional display hook (see fw_update.h). NULL = no progress reporting.
+static fw_update_progress_fn s_progress = NULL;
+
+void fw_update_set_progress( fw_update_progress_fn fn )
+{
+    s_progress = fn;
+}
+
 bool fw_update_receive_verified(void)
 {
     return s_last_receive_good;
@@ -301,6 +309,13 @@ static int fw_sink( uint32_t off, const uint8_t* data, uint16_t len, void* vctx 
     }
 
     c->bytes_rx += len;
+
+    // One notification per block. Cheap by contract, and deliberately after the
+    // block's bytes are programmed so the display reflects flash, not just RX.
+    if ( s_progress != NULL )
+    {
+        s_progress( c->payload_seen, c->payload_bytes );
+    }
     return 0;
 }
 

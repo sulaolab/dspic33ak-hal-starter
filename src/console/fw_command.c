@@ -10,6 +10,7 @@
 #include "fw_update.h"
 #include "fw_btseq.h"
 #include "fw_uca.h"
+#include "led_sw.h"
 #include "app_config.h"
 #if HAL_STARTER_ENABLE_TDM_SMOKE_DEMO
 #include "tdm_smoke.h"
@@ -140,6 +141,33 @@ static void print_partition_status(void)
 // active partition unchanged (a failed receive, or a failed commit). This is a
 // hardware-safety action, not a console-noise decision -- it must run regardless
 // of the quiet flag below, or the demo would stay silently dead until reset.
+// Transfer progress on the 8 user LEDs, as a left-to-right bar.
+//
+// This is the display side of fw_update's progress hook. LEDs are used rather than
+// the console because xmodem_receive() owns UART1 for the whole transfer: the
+// sender is waiting for ACK/NAK, so printing progress characters there would
+// corrupt the protocol (and a terminal in XMODEM-send mode consumes them as
+// protocol bytes rather than displaying them anyway). The LEDs are free during an
+// update -- the heartbeat that normally owns LED0 is gated off while quiet.
+//
+// The bar is deliberately NOT cleared when the transfer ends: a full bar means the
+// whole payload arrived, and a partial bar shows how far a failed transfer got,
+// which is useful at a glance. LED0 returns to heartbeat duty after *tq0000.
+static void update_progress_leds(uint32_t done, uint32_t total)
+{
+    uint8_t lit;
+    uint8_t i;
+
+    if (total == 0u) {
+        return;                 /* manifest not parsed yet; nothing to scale against */
+    }
+    /* done <= total <= FW_MAX_IMAGE_BYTES (0x3FE00), so done * 8 cannot overflow. */
+    lit = (uint8_t)((done * (uint32_t)LED_SW_LED_COUNT) / total);
+    for (i = 0u; i < LED_SW_LED_COUNT; i++) {
+        led_sw_set(i, (i < lit));
+    }
+}
+
 static void restart_tdm_after_failed_attempt(void)
 {
 #if HAL_STARTER_ENABLE_TDM_SMOKE_DEMO
@@ -171,9 +199,14 @@ static void receive_firmware(void)
     printf("\r\nFirmware update armed.\r\n");
     printf("Tera Term: File > Transfer > XMODEM > Send\r\n");
     printf("Select reflash_image.bin (1K may be checked or unchecked).\r\n");
+    printf("LED0..LED7 show transfer progress as a bar.\r\n");
     printf("Waiting for xmodem-crc data on UART1...\r\n");
 
+    /* Start from an empty bar, then let the hook grow it as blocks land. */
+    led_sw_all(false);
+    fw_update_set_progress(update_progress_leds);
     (void)fw_update_receive(&result);
+    fw_update_set_progress(NULL);
     print_receive_result(&result);
     if (result.status != FW_UPDATE_OK) {
         restart_tdm_after_failed_attempt();

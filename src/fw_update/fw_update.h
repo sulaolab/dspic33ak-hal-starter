@@ -59,6 +59,21 @@ typedef struct
     uint8_t  last_wrec;        // NVM WREC after the last flash op (0 = clean)
 } fw_update_result_t;
 
+// Optional progress hook, invoked once per received XMODEM block with the payload
+// bytes accepted so far and the total the manifest declared. `total` is 0 until
+// the 16-byte manifest has been parsed. Kept as a callback so this module stays
+// board-agnostic: the application decides how to display progress (the starter
+// drives the 8 user LEDs as a bar; see fw_command.c).
+//
+// CONSTRAINT: the hook must be cheap and must NOT write to the console UART.
+// xmodem_receive() owns UART1 for the whole transfer and the sender is waiting for
+// ACK/NAK, so any extra byte injected there corrupts the protocol. Drive GPIO/LEDs,
+// or a genuinely separate UART instance, and nothing else.
+typedef void (*fw_update_progress_fn)( uint32_t done, uint32_t total );
+
+// Register (NULL clears) the progress hook. Set it before fw_update_receive().
+void fw_update_set_progress( fw_update_progress_fn fn );
+
 // Receive an image over XMODEM-CRC (UART1) into the inactive partition, program
 // + verify it row by row, then read it back and CRC-check. Blocking. Result in
 // *out (may be NULL). Returns out->status.
