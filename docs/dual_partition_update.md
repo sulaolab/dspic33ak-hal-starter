@@ -237,6 +237,19 @@ firmware.X\dist\dsPIC33AK512\production\reflash_image.bin
 Use XMODEM-CRC. **1K may be checked or unchecked** -- both work, and neither
 needs any particular file size.
 
+<img src="images/dual-partition-xmodem-1k-transfer.png" alt="Tera Term sending reflash_image.bin over XMODEM-1K: the console shows *fua5 accepted, the armed instructions, and the receiver's repeated C handshake characters, while the XMODEM Send dialog reports protocol XMODEM (1k), packet 62, 63488 bytes transferred at 16.38 KB/s, 75.6 percent complete" width="640">
+
+A transfer in progress with **1K** checked. The dialog's packet count and byte
+total are Tera Term's own accounting of what it has sent.
+
+The `ccc` visible on the console is normal and worth recognising: in XMODEM the
+*receiver* starts the conversation, and the character `C` means "ready, and use
+CRC-16 rather than the original checksum". The board repeats it every three
+seconds until the sender responds, so the number of `C`s you see is simply how
+long the file dialog took. Once blocks start flowing the `C`s stop, and the
+board's per-block replies (`ACK`/`NAK`) are control bytes that a terminal does
+not display.
+
 XMODEM has no file-length field, so every sender pads its final block out to the
 full block size (128 or 1024 bytes), conventionally with `0x1A` (CP/M EOF). Those
 pad bytes arrive after the real image, which is why `bytes received` in the

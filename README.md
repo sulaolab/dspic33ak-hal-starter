@@ -296,6 +296,13 @@ of `[0x800000, 0x840000)` and contains no UCA, FBOOT, or configuration words, so
 it can never change a partition's fuses. Those are provisioned once by the
 verified bundle over PKOB4.
 
+<img src="docs/images/dual-partition-xmodem-1k-transfer.png" alt="Tera Term sending reflash_image.bin to the inactive partition over XMODEM-1K: the console shows *fua5 accepted and the receiver's repeated C handshake characters, while the XMODEM Send dialog reports protocol XMODEM (1k), packet 62, 63488 bytes transferred at 16.38 KB/s, 75.6 percent complete" width="640">
+
+A transfer in progress. The console has accepted `*fua5` and is emitting the
+XMODEM-CRC handshake character `C` until the sender starts; the dialog confirms
+the receiver works with **XMODEM (1k)** as well as the classic 128-byte blocks.
+Progress also appears on the board itself, as a bar on LED7..LED0.
+
 Quick serial-update workflow:
 
 1. Connect Tera Term directly to **USB Serial Port (UART1)** at `230400 8N1`,
