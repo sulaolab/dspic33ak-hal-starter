@@ -52,11 +52,29 @@ FBOOT_BTMODE_DUAL = 0x2
 PROGRAM_REGION_LO = 0x800000
 PROGRAM_REGION_HI = 0x840000   # exclusive
 
+# The serial updater reserves the LAST 512-byte flash row of a partition for the
+# BTSEQ boot-sequence word that fw_commit() stamps, and refuses to program it. So a
+# bundle whose application reaches into that row could be PKOB4-flashed yet never
+# serially updated -- the verifier rejects that, and the XMODEM extractor caps its
+# payload at the same boundary. Single source of truth for both; keep in sync with
+# FW_MAX_IMAGE_BYTES in src/fw_update/fw_update.c.
+PARTITION_BYTES    = 0x40000
+NVM_ROW_BYTES      = 0x200
+MAX_PAYLOAD_BYTES  = PARTITION_BYTES - NVM_ROW_BYTES            # 0x3FE00
+BTSEQ_PROTECTED_LO = PROGRAM_REGION_LO + MAX_PAYLOAD_BYTES      # 0x83FE00
+
 # Per-word records. `compare_mask` excludes reserved/unimplemented bits so that
 # main==backup and P1==P2 comparisons ignore bits that may float. Words whose P1
 # value is erased today (FCP/FWDT) are marked expected="erased": recorded, not
-# ignored, and NOT cloned to P2 (cloning erased words is a no-op that only adds
-# checksum surface). Only non-erased words (FICD/FDEVOPT) are cloned.
+# ignored.
+#
+# CLONING IS PER-WINDOW, NOT PER-WORD: the generator copies every byte PRESENT in
+# the two P1 UCA windows (see CLONE_WINDOWS) and leaves erased bytes erased, so
+# today FICD/FDEVOPT are cloned and FCP/FWDT are simply absent. There is
+# deliberately no per-word "clone" flag: the verifier requires P1==P2 for EVERY
+# word, so a word that became non-erased but was excluded from cloning would fail
+# verification. Copying the whole window keeps the two partitions identical by
+# construction, whatever a future #pragma config adds.
 #
 # compare_mask = union of documented bitfields for that word (0xFFFFFFFF if we
 # intend an exact full-word compare because the word is either fully erased or
@@ -73,7 +91,6 @@ WORDS = [
         "compare_mask": 0xFFFFFFFF,
         "must_match_p1_p2": True,
         "expected": "erased",
-        "clone": False,
     },
     {
         "name": "FICD",
@@ -85,7 +102,6 @@ WORDS = [
         "compare_mask": 0xFFFFFFFF,
         "must_match_p1_p2": True,
         "expected": None,           # cloned from P1; raw NOBTSWP bit=0 => BOOTSWP enabled
-        "clone": True,
         "checks": [("NOBTSWP_RAW", FICD_NOBTSWP, 0)],
     },
     {
@@ -98,7 +114,6 @@ WORDS = [
         "compare_mask": 0xFFFFFFFF,
         "must_match_p1_p2": True,
         "expected": None,           # cloned from P1; semantic check: ALTI2C2 bit=0
-        "clone": True,
         "checks": [("ALTI2C2", FDEVOPT_ALTI2C2, 0)],
     },
     {
@@ -111,7 +126,6 @@ WORDS = [
         "compare_mask": 0xFFFFFFFF,
         "must_match_p1_p2": True,
         "expected": "erased",
-        "clone": False,
     },
 ]
 
@@ -136,7 +150,7 @@ def dump():
     for w in WORDS:
         print(f"  {w['name']:8s} p1_main=0x{w['p1_main']:06X} p1_bkp=0x{w['p1_backup']:06X}"
               f" p2_main=0x{w['p2_main']:06X} p2_bkp=0x{w['p2_backup']:06X}"
-              f" clone={w['clone']} expected={w['expected']}")
+              f" expected={w['expected']}")
 
 
 if __name__ == "__main__":

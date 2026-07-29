@@ -13,12 +13,26 @@ and asserts the expected PASS/FAIL outcome for each case:
   7. MPLAB project device/DFP/compiler mismatch         -> verify FAIL
   8. deterministic regen (same input => identical out) -> byte-identical
   9. XMODEM extraction excludes UCA/UCB                 -> extract only 0x800000+
+     plus the DBFW v2 package contract: manifest+CRC valid, payload corruption /
+     wrong magic / wrong project ID rejected, and trailing sender block padding
+     tolerated up to the cap but not past it (truncated / manifest-only rejected)
  10. corrupt Intel HEX checksum                         -> extract FAIL
+ 11. over-limit program image                            -> extract FAIL, no file
+     11b. config-only bundle, and code inside the BTSEQ-protection row
+                                                         -> verify FAIL
+ 12. payload exactly at the limit                        -> extract PASS (the cap
+     applies to the payload; the 16-byte manifest never reaches flash)
+ 13. the DBFW constants in src/fw_update/fw_update.c match this toolchain's
+
+Section 13 is the one that guards against silent C-vs-Python drift: the package
+format is defined twice (firmware + host tool) and nothing else would catch an
+edit to one side only.
 
 Run: python tools/test_dual_partition_hex.py
 Exit 0 = all pass.
 """
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -256,6 +270,38 @@ def main():
     check("extract refuses over-limit image", rc == FAIL, out)
     check("extract wrote no file when over limit", not os.path.exists(big))
 
+    # --- 11b: a verified bundle must attest a *serially updatable* image, not just
+    # sane config words. Without these, a config-only bundle -- or one whose code
+    # reaches the BTSEQ-protection row that the updater refuses to program -- would
+    # get a PASS report that flashauto.ps1 accepts.
+    noprog = os.path.join(tmp, "noprog.hex")
+    write_hex(noprog, synth_p1(with_program=False))
+    noprog_bundle = os.path.join(tmp, "noprog.bundle.hex")
+    rc, out = run([PY, GEN, noprog, "-o", noprog_bundle])
+    if rc == PASS:
+        rc, out = run([PY, VERIFY, noprog_bundle])
+        check("verify config-only bundle (no program) FAIL", rc == FAIL, out)
+    else:
+        check("verify config-only bundle (no program) FAIL", True, "gen refused first")
+
+    # One byte inside the protected row must fail; the byte just below it must pass.
+    for label, addr, want in (
+        ("first byte of BTSEQ row", M.BTSEQ_PROTECTED_LO, FAIL),
+        ("last byte below BTSEQ row", M.BTSEQ_PROTECTED_LO - 1, PASS),
+    ):
+        mem = synth_p1()
+        mem[addr] = 0xA5
+        h = os.path.join(tmp, f"row_{addr:06X}.hex")
+        write_hex(h, mem)
+        b = os.path.join(tmp, f"row_{addr:06X}.bundle.hex")
+        rc, out = run([PY, GEN, h, "-o", b])
+        if rc != PASS:
+            check(f"verify {label}", False, f"gen failed: {out}")
+            continue
+        rc, out = run([PY, VERIFY, b])
+        check(f"verify {label} -> {'FAIL' if want == FAIL else 'PASS'}",
+              rc == want, out)
+
     # --- 12: the limit applies to the PAYLOAD, not the file. Under v2 the 16-byte
     # manifest is metadata that never reaches flash, so a payload of exactly
     # FW_MAX_IMAGE_BYTES (partition minus the BTSEQ row) is legal even though the
@@ -271,6 +317,58 @@ def main():
         check("at-limit payload excludes manifest from the cap",
               os.path.getsize(at_limit) == E.FW_MAX_IMAGE_BYTES + E.PACKAGE_MANIFEST_BYTES,
               f"size=0x{os.path.getsize(at_limit):X}")
+
+    # --- 13: the DBFW package contract lives in BOTH src/fw_update/fw_update.c and
+    # this toolchain. Nothing else notices if one side is edited alone, and the
+    # failure mode is nasty: the board silently rejects every image the host builds.
+    # Parse the C defines and compare.
+    fw_c = os.path.join(HERE, "..", "src", "fw_update", "fw_update.c")
+    nvm_h = os.path.join(HERE, "..", "src", "hal_nvm", "dspic33ak_nvm.h")
+    try:
+        with open(fw_c, "r", encoding="utf-8", errors="replace") as f:
+            csrc = f.read()
+        with open(nvm_h, "r", encoding="utf-8", errors="replace") as f:
+            nvmsrc = f.read()
+    except OSError as exc:
+        check("firmware sources readable for constant check", False, str(exc))
+        csrc = nvmsrc = ""
+
+    if csrc and nvmsrc:
+        def cdef(text, name):
+            """Value of `#define <name> ...`, tolerating UINT32_C()/u suffixes.
+
+            The UINTxx_C() wrapper must be stripped BEFORE looking for the literal,
+            or the width digits in the macro name get parsed as the value.
+            """
+            m = re.search(r"^#define\s+" + re.escape(name) + r"\s+(.+?)\s*(?://.*)?$",
+                          text, re.MULTILINE)
+            if not m:
+                return None
+            expr = re.sub(r"\bUINT\d+_C\b", "", m.group(1))
+            m2 = re.search(r"0[xX][0-9a-fA-F]+|\d+", expr)
+            return int(m2.group(0), 0) if m2 else None
+
+        row_bytes = cdef(nvmsrc, "DSPIC33AK_NVM_ROW_BYTES")
+        partition = cdef(csrc, "FW_PARTITION_BYTES")
+        pairs = [
+            ("manifest bytes", cdef(csrc, "FW_PACKAGE_MANIFEST_BYTES"),
+             E.PACKAGE_MANIFEST_BYTES),
+            ("format version", cdef(csrc, "FW_PACKAGE_VERSION"), E.PACKAGE_VERSION),
+            ("project id", cdef(csrc, "FW_PACKAGE_PROJECT_ID"), E.PACKAGE_PROJECT_ID),
+            ("max trailing pad", cdef(csrc, "FW_PACKAGE_MAX_TRAILING_PAD"),
+             E.PACKAGE_MAX_TRAILING_PAD),
+            ("partition bytes", partition, M.PARTITION_BYTES),
+            ("nvm row bytes", row_bytes, M.NVM_ROW_BYTES),
+        ]
+        for label, c_val, py_val in pairs:
+            check(f"firmware and host agree on {label}",
+                  c_val is not None and c_val == py_val,
+                  f"C={c_val!r} python={py_val!r}")
+        # FW_MAX_IMAGE_BYTES is computed in C; recompute and compare to the manifest.
+        if partition is not None and row_bytes is not None:
+            check("firmware and host agree on the payload cap",
+                  (partition - row_bytes) == M.MAX_PAYLOAD_BYTES,
+                  f"C={partition - row_bytes:#x} python={M.MAX_PAYLOAD_BYTES:#x}")
 
     ok = all(c for _, c, _ in results)
     print(f"\n{'ALL PASS' if ok else 'FAILURES PRESENT'}: "

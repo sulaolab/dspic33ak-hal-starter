@@ -18,7 +18,9 @@ Checks:
   8. no conflicting duplicate records (ihex parser is last-writer; we re-scan raw).
   9. program region within [0x800000,0x840000); nothing emitted into UCA/UCB by the
      program payload beyond the intended UCA clone.
- 10. the XMODEM extraction range excludes UCA/UCB (asserted structurally here too).
+ 10. the application is present at all, and stays clear of the final 512-byte
+     BTSEQ-protection row -- so the attested bundle is also serially updatable.
+ 11. the XMODEM extraction range excludes UCA/UCB (asserted structurally here too).
 
 Usage: verify_dual_partition_hex.py <bundle.hex> [--report r.txt]
        [--project-config configurations.xml --configuration name]
@@ -193,6 +195,20 @@ def main():
     ok(not stray_hi, f"no records at/above 0x{M.PROGRAM_REGION_HI:06X} "
                      f"({len(stray_hi)} stray)")
     log.append(("INFO", f"program-region bytes present: {len(prog_bytes)}"))
+
+    # A "verified bundle" promises a board that can also be updated over serial, so
+    # the application image itself has to be sane -- not just the config words.
+    # Without these two the verifier would attest a config-only hex, or one whose
+    # code reaches the BTSEQ-protection row that the serial updater refuses to
+    # program, leaving a PASS report next to an image the updater can never replace.
+    ok(bool(prog_bytes), "program region is not empty")
+    in_protected = [a for a in prog_bytes if a >= M.BTSEQ_PROTECTED_LO]
+    ok(not in_protected,
+       f"application clear of the BTSEQ-protection row at/above "
+       f"0x{M.BTSEQ_PROTECTED_LO:06X} ({len(in_protected)} byte(s) inside)")
+    if in_protected:
+        log.append(("FAIL", f"  first offending byte @0x{min(in_protected):06X}; "
+                            f"payload cap is 0x{M.MAX_PAYLOAD_BYTES:X}"))
 
     # UCA/UCB live below the program region -> XMODEM [0x800000,0x840000) can never
     # include them. Assert structurally.

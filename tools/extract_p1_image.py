@@ -37,6 +37,7 @@ import sys
 import struct
 
 import ihex_lite
+import uca_manifest
 
 PART_BASE = 0x800000
 PART_END  = 0x840000  # one partition = 256 KB; never include past this
@@ -46,7 +47,9 @@ PART_END  = 0x840000  # one partition = 256 KB; never include past this
 # write-protected by the receiver. The 16-byte manifest is metadata and never
 # reaches flash, so it does NOT count against this cap. A payload larger than this
 # would be refused by the board, so we refuse to emit one here instead.
-FW_MAX_IMAGE_BYTES = 0x3FE00
+# Sourced from the manifest so this tool, verify_dual_partition_hex.py, and the
+# firmware cannot drift apart.
+FW_MAX_IMAGE_BYTES = uca_manifest.MAX_PAYLOAD_BYTES
 
 PACKAGE_MAGIC = b"DBFW"
 PACKAGE_VERSION = 2

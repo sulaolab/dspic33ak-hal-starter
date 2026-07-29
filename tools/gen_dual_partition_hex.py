@@ -45,7 +45,8 @@ def report_words(mem, p2mem):
         p1b = ihex_lite.word32(mem, w["p1_backup"])
         p2m = ihex_lite.word32(p2mem, w["p2_main"])
         p2b = ihex_lite.word32(p2mem, w["p2_backup"])
-        rows.append((w["name"], w["clone"], p1m, p1b, p2m, p2b))
+        # "cloned" is observed, not declared: did this word land in P2?
+        rows.append((w["name"], p2m is not None, p1m, p1b, p2m, p2b))
     return rows
 
 
@@ -108,8 +109,8 @@ def main():
              f"# cloned {len(p2)} bytes into P2 UCA (main 0x{M.UCA_P2_MAIN:06X}, "
              f"backup 0x{M.UCA_P2_BACKUP:06X})",
              ""]
-    for name, clone, p1m, p1b, p2m, p2b in rows:
-        lines.append(f"  {name:8s} clone={str(clone):5s} "
+    for name, cloned, p1m, p1b, p2m, p2b in rows:
+        lines.append(f"  {name:8s} cloned={str(cloned):5s} "
                      f"P1(main {fmt(p1m)} bkp {fmt(p1b)})  "
                      f"P2(main {fmt(p2m)} bkp {fmt(p2b)})")
     text = "\n".join(lines)

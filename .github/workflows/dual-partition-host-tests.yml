@@ -5,12 +5,24 @@ on:
     paths:
       - "tools/**"
       - "buildtools/**"
+      # The DBFW package contract is defined in the firmware too, and the host
+      # tests assert the two definitions still agree -- so C-side edits must
+      # trigger this workflow as well.
+      - "src/fw_update/**"
+      - "src/console/fw_command.c"
+      - "src/hal_nvm/dspic33ak_nvm.h"
       - "firmware.X/nbproject/configurations.xml"
       - ".github/workflows/dual-partition-host-tests.yml"
   pull_request:
     paths:
       - "tools/**"
       - "buildtools/**"
+      # The DBFW package contract is defined in the firmware too, and the host
+      # tests assert the two definitions still agree -- so C-side edits must
+      # trigger this workflow as well.
+      - "src/fw_update/**"
+      - "src/console/fw_command.c"
+      - "src/hal_nvm/dspic33ak_nvm.h"
       - "firmware.X/nbproject/configurations.xml"
       - ".github/workflows/dual-partition-host-tests.yml"
   workflow_dispatch:

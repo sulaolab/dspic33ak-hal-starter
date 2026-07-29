@@ -137,10 +137,6 @@ static void print_partition_status(void)
            ina_uca.bootswp_enabled ? "ENABLED" : "DISABLED");
 }
 
-// Mechanically restart the TDM/DMA smoke stream after an attempt that leaves the
-// active partition unchanged (a failed receive, or a failed commit). This is a
-// hardware-safety action, not a console-noise decision -- it must run regardless
-// of the quiet flag below, or the demo would stay silently dead until reset.
 // Transfer progress on the 8 user LEDs, as a bar that grows from LED7 toward LED0
 // (matching the board's physical left-to-right orientation).
 //
@@ -170,6 +166,10 @@ static void update_progress_leds(uint32_t done, uint32_t total)
     }
 }
 
+// Mechanically restart the TDM/DMA smoke stream after an attempt that leaves the
+// active partition unchanged (a failed receive, or a failed commit). This is a
+// hardware-safety action, not a console-noise decision -- it must run regardless of
+// the print-quiet flag, or the demo would stay silently dead until reset.
 static void restart_tdm_after_failed_attempt(void)
 {
 #if HAL_STARTER_ENABLE_TDM_SMOKE_DEMO

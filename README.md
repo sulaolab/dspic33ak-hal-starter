@@ -187,7 +187,9 @@ through MPLAB X.
 
 ### MPLAB X IDE
 
-Use the IDE for editing, building, and debugging.
+Use the IDE for editing and building. Hardware programming and debugging from the
+IDE sit outside the verified dual-partition provisioning workflow — see the note
+below.
 
 1. Open `firmware.X` in MPLAB X (this regenerates the per-machine makefiles).
 2. Build (single configuration `dsPIC33AK512`, device dsPIC33AK512MPS512).
@@ -206,6 +208,11 @@ Use the IDE for editing, building, and debugging.
 > `buildtools/flashauto.ps1` (see below). The same applies after changing any
 > `#pragma config`: a serial update carries program memory only, so the new
 > config words reach the device only via a fresh bundle flash.
+>
+> **Debug sessions have the same caveat.** Starting a debug session programs a
+> debug image, not the verified bundle, so the P2 UCA state afterwards is whatever
+> the debugger left behind. Debugging the application logic is fine; just repeat
+> the verified bundle flash before exercising the dual-partition update path again.
 
 Only `firmware.X/nbproject/{configurations,project}.xml` and the top-level
 `firmware.X/Makefile` are tracked; build output and the per-machine generated
