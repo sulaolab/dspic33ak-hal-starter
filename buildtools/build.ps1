@@ -2,16 +2,16 @@ param(
     [switch]$Full,
     [switch]$Clean,
     [switch]$Generate,
-    [string]$Configuration = $env:MPLABX_CONF,
+    [string]$Configuration,
+    [string]$Preset,
     [string]$Root = (Get-Location).Path,
-    [string]$ProjectDir
+    [string]$ProjectDir,
+    [int]$Jobs = [Math]::Min([Environment]::ProcessorCount, 8)
 )
 
 $ErrorActionPreference = 'Stop'
 
-if ([string]::IsNullOrWhiteSpace($Configuration)) {
-    $Configuration = 'dsPIC33AK512'
-}
+. (Join-Path $PSScriptRoot 'hal_starter_build_state.ps1')
 
 function Invoke-CheckedCommand {
     param(
@@ -119,48 +119,6 @@ function Resolve-MplabXTool {
     return $toolMatches[0]
 }
 
-function Resolve-BuildRoot {
-    param(
-        [string]$RequestedRoot
-    )
-
-    $resolvedRoot = (Resolve-Path -LiteralPath $RequestedRoot).Path
-
-    if ((Split-Path -Leaf $resolvedRoot) -like '*.X' -and
-        (Test-Path -LiteralPath (Join-Path $resolvedRoot 'nbproject'))) {
-        return (Split-Path -Parent $resolvedRoot)
-    }
-
-    return $resolvedRoot
-}
-
-function Resolve-MplabProjectDir {
-    param(
-        [string]$Root,
-        [string]$RequestedProjectDir
-    )
-
-    if (-not [string]::IsNullOrWhiteSpace($RequestedProjectDir)) {
-        if ([System.IO.Path]::IsPathRooted($RequestedProjectDir)) {
-            return (Resolve-Path -LiteralPath $RequestedProjectDir).Path
-        }
-        return (Resolve-Path -LiteralPath (Join-Path $Root $RequestedProjectDir)).Path
-    }
-
-    $projects = @(Get-ChildItem -LiteralPath $Root -Directory -Filter '*.X' |
-        Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName 'nbproject') })
-
-    if ($projects.Count -eq 0) {
-        throw "No MPLAB X project directory (*.X with nbproject) found under: $Root"
-    }
-    if ($projects.Count -gt 1) {
-        $names = ($projects | ForEach-Object { $_.Name }) -join ', '
-        throw "Multiple MPLAB X project directories found: $names. Specify -ProjectDir."
-    }
-
-    return $projects[0].FullName
-}
-
 function Remove-ProjectRootIntermediates {
     param(
         [string]$ProjectDir
@@ -241,10 +199,82 @@ function Remove-GeneratedMakefiles {
     Write-Host "cleaned generated makefiles: $removedCount"
 }
 
-$repoRoot = Resolve-BuildRoot -RequestedRoot $Root
-$projectDir = Resolve-MplabProjectDir -Root $repoRoot -RequestedProjectDir $ProjectDir
-$makefile = Join-Path $projectDir "nbproject\Makefile-$Configuration.mk"
+function Invoke-ConfigurationClean {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$CleanScript,
+        [Parameter(Mandatory = $true)]
+        [string]$Configuration
+    )
+
+    # clean.ps1 is also used directly by VS Code and therefore reads its target
+    # from MPLABX_CONF. Scope that env var to just this call (save/restore) so a
+    # build.ps1 -Configuration override cannot leak into a later unqualified
+    # clean.ps1/build.ps1 invocation in the same shell.
+    $hadPrevious = Test-Path Env:MPLABX_CONF
+    $previous = $env:MPLABX_CONF
+    try {
+        $env:MPLABX_CONF = $Configuration
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $CleanScript
+    }
+    finally {
+        if ($hadPrevious) {
+            $env:MPLABX_CONF = $previous
+        }
+        else {
+            Remove-Item Env:MPLABX_CONF -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+$repoRoot = Resolve-HalStarterRepoRoot -RequestedRoot $Root
+$projectDir = Resolve-HalStarterProjectDir -RepoRoot $repoRoot -RequestedProjectDir $ProjectDir
+$configurations = Get-HalStarterConfigurations -ProjectDir $projectDir
+$presetCatalog = Get-HalStarterPresetCatalog -RepoRoot $repoRoot
 $cleanScript = Join-Path $repoRoot '.vscode\clean.ps1'
+
+if ([string]::IsNullOrWhiteSpace($Configuration)) {
+    $Configuration = Get-HalStarterActiveConfiguration -ProjectDir $projectDir -Configurations $configurations
+}
+$configurationEntry = Get-HalStarterConfiguration -Configurations $configurations -Name $Configuration
+
+# --- What APP_BUILD variation is this build? --------------------------------
+# -Preset wins; otherwise the persisted selection for this configuration; only
+# if there is none does the build fall back to the header's own default (no
+# -DAPP_BUILD passed at all, which is what an MPLAB X IDE build does).
+$selectedAppPreset = $null
+$presetSource = $null
+
+if (-not [string]::IsNullOrWhiteSpace($Preset)) {
+    $presetEntry = Get-HalStarterPreset -Catalog $presetCatalog -Name $Preset
+    if ($null -eq $presetEntry) {
+        $allowed = ($presetCatalog.Presets | ForEach-Object { $_.Name }) -join ', '
+        throw "Unknown APP_BUILD variation '$Preset'. Known variations: $allowed"
+    }
+    $selectedAppPreset = $presetEntry.Name
+    $presetSource = '-Preset'
+}
+
+if ($null -eq $selectedAppPreset) {
+    $persistedPreset = Get-HalStarterSelectedPreset -RepoRoot $repoRoot -Configuration $Configuration
+    if ($persistedPreset) {
+        $persistedEntry = Get-HalStarterPreset -Catalog $presetCatalog -Name $persistedPreset
+        if ($null -eq $persistedEntry) {
+            Write-Host "WARNING: ignoring stored APP_BUILD '$persistedPreset' - not a known variation. Re-run ./buildtools/switch_config.ps1."
+        } else {
+            $selectedAppPreset = $persistedEntry.Name
+            $presetSource = 'active selection'
+        }
+    }
+}
+
+$configurationDefaultPreset = Get-HalStarterDefaultPreset -Catalog $presetCatalog
+# Identity of this build's APP_BUILD, used as the build-directory stamp. Without
+# an explicit variation the compiler picks the header's own default, so record
+# that as the stamp instead of a variation name.
+$appBuildIdentity = if ($null -ne $selectedAppPreset) { $selectedAppPreset } else { "(default:$configurationDefaultPreset)" }
+
+$makefile = Join-Path $projectDir "nbproject\Makefile-$Configuration.mk"
 
 if (-not (Test-Path -LiteralPath $projectDir)) {
     throw "MPLAB X project directory not found: $projectDir"
@@ -254,10 +284,33 @@ if ($modeCount -gt 1) {
     throw "Use only one of -Full, -Clean, or -Generate."
 }
 
-$env:MPLABX_CONF = $Configuration
+# The APP_BUILD variations within this configuration share one object directory:
+# objects built with another variation must never be reused. The build directory
+# carries a stamp of what it was built with, so only a real change forces a
+# clean build - rebuilding the same variation stays incremental.
+$builtAppBuild = Get-HalStarterBuiltPreset -ProjectDir $projectDir -Configuration $Configuration
+$buildDirExists = Test-Path -LiteralPath (Get-HalStarterConfigurationBuildDir -ProjectDir $projectDir -Configuration $Configuration)
+if (-not ($Full -or $Clean -or $Generate) -and $buildDirExists) {
+    $promoteReason = $null
+    if ($null -eq $builtAppBuild) {
+        $promoteReason = 'APP_BUILD of the existing objects is unknown (built outside build.ps1?)'
+    } elseif ($builtAppBuild -ne $appBuildIdentity) {
+        $promoteReason = "APP_BUILD changed ($builtAppBuild -> $appBuildIdentity)"
+    }
+    if ($null -ne $promoteReason) {
+        Write-Host "${promoteReason}: promoting to -Full."
+        $Full = $true
+    }
+}
+
 Write-Host "Root: $repoRoot"
 Write-Host "Project: $projectDir"
-Write-Host "Configuration: $Configuration"
+Write-Host "Configuration: $Configuration  ($($configurationEntry.Device))"
+if ($null -ne $selectedAppPreset) {
+    Write-Host "APP_BUILD: $selectedAppPreset  [$presetSource]"
+} else {
+    Write-Host "APP_BUILD: $configurationDefaultPreset  [compile-time default; none selected]"
+}
 
 Push-Location $projectDir
 try {
@@ -267,7 +320,7 @@ try {
         }
 
         Invoke-CheckedCommand -Description "Clean $Configuration outputs" -Command {
-            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $cleanScript
+            Invoke-ConfigurationClean -CleanScript $cleanScript -Configuration $Configuration
         }
         Remove-ProjectRootIntermediates -ProjectDir $projectDir
         Remove-GeneratedMakefiles -ProjectDir $projectDir
@@ -315,14 +368,99 @@ try {
         }
 
         Invoke-CheckedCommand -Description "Clean $Configuration outputs" -Command {
-            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $cleanScript
+            Invoke-ConfigurationClean -CleanScript $cleanScript -Configuration $Configuration
         }
         Remove-ProjectRootIntermediates -ProjectDir $projectDir
     }
 
-    Invoke-CheckedCommand -Description "Build $Configuration" -Command {
-        & $($makeTool.Path) -f "nbproject/Makefile-$Configuration.mk" SUBPROJECTS= .build-conf
+    $extraDefines = @()
+    if ($null -ne $selectedAppPreset) {
+        $extraDefines += "-DAPP_BUILD=$selectedAppPreset"
+        # One preset (APP_BUILD_TDM_NEG_TEST_2LEG) also needs a HAL-layer macro.
+        # That macro is intentionally not set by app_build_config.h (app-layer)
+        # itself -- see hal_starter_build_state.ps1's HalStarterPresetExtraDefines
+        # comment -- so inject it here on the compiler command line instead.
+        foreach ($extra in (Get-HalStarterPresetExtraDefines -PresetName $selectedAppPreset)) {
+            $extraDefines += "-D$extra"
+        }
     }
+
+    $buildCommand = {
+        & $($makeTool.Path) "-j$Jobs" -f "nbproject/Makefile-$Configuration.mk" SUBPROJECTS= .build-conf
+    }
+    if ($extraDefines.Count -gt 0) {
+        $extraCcPre = "MP_EXTRA_CC_PRE=$($extraDefines -join ' ')"
+        $buildCommand = {
+            & $($makeTool.Path) "-j$Jobs" -f "nbproject/Makefile-$Configuration.mk" SUBPROJECTS= $extraCcPre .build-conf
+        }
+    }
+
+    Invoke-CheckedCommand -Description "Build $Configuration (-j$Jobs)" -Command $buildCommand
+
+    # Record what these objects were built with, so the next build knows whether
+    # it can be incremental (see the promotion block above) and flashauto.ps1 can
+    # report which variation the HEX came from.
+    Set-HalStarterBuiltPreset -ProjectDir $projectDir -Configuration $Configuration -Value $appBuildIdentity
+
+    # A successful compiler/linker run is not yet a complete dual-partition release:
+    # the initial PKOB4 image must provision both physical UCA copies, and the
+    # serial updater needs a partition-agnostic DBFW package. Generate and verify
+    # both artifacts automatically so a beginner has one build command.
+    $projectName = Split-Path -Leaf $projectDir
+    $productionDir = Join-Path $projectDir "dist\$Configuration\production"
+    $productionHex = Join-Path $productionDir "$projectName.production.hex"
+    $reflashImage = Join-Path $productionDir 'reflash_image.bin'
+    $provisionScript = Join-Path $repoRoot 'buildtools\provision.ps1'
+    $extractScript = Join-Path $repoRoot 'tools\extract_p1_image.py'
+
+    if (-not (Test-Path -LiteralPath $productionHex)) {
+        throw "Build succeeded but production HEX is missing: $productionHex"
+    }
+    foreach ($required in @($provisionScript, $extractScript)) {
+        if (-not (Test-Path -LiteralPath $required)) {
+            throw "Post-build tool not found: $required"
+        }
+    }
+
+    $pythonCommand = Get-Command python -ErrorAction SilentlyContinue
+    if ($null -eq $pythonCommand) {
+        $pythonCommand = Get-Command py -ErrorAction SilentlyContinue
+    }
+    if ($null -eq $pythonCommand) {
+        throw 'Python 3 was not found on PATH; it is required to generate verified dual-partition artifacts.'
+    }
+    $pythonExe = $pythonCommand.Source
+
+    Write-Host "==> Generate + verify dual-partition provisioning bundle"
+    & $provisionScript -Configuration $Configuration -Root $repoRoot `
+        -ProjectDir $projectDir -Hex $productionHex -Python $pythonExe
+
+    # Publish reflash_image.bin atomically. The extractor only opens its output
+    # after its input parsing and size checks pass, so generating straight onto the
+    # final path would leave the PREVIOUS build's image in place on failure -- and
+    # that stale file still carries a valid DBFW manifest and CRC, so the board
+    # would happily accept it later. Build into a temp name and rename on success,
+    # deleting the old image first so a failure is fail-closed (no image at all),
+    # matching how provision.ps1 drops the stale verify report before regenerating.
+    $reflashTemp = "$reflashImage.new"
+    foreach ($stale in @($reflashImage, $reflashTemp)) {
+        if (Test-Path -LiteralPath $stale) {
+            Remove-Item -LiteralPath $stale -Force
+        }
+    }
+    Invoke-CheckedCommand -Description 'Generate reflash_image.bin' -Command {
+        & $pythonExe $extractScript $productionHex $reflashTemp
+    }
+    if (-not (Test-Path -LiteralPath $reflashTemp)) {
+        throw "Extractor reported success but wrote no image: $reflashTemp"
+    }
+    Move-Item -LiteralPath $reflashTemp -Destination $reflashImage -Force
+
+    Write-Host ''
+    Write-Host 'Dual-partition artifacts: PASS'
+    Write-Host "  APP_BUILD     : $appBuildIdentity"
+    Write-Host "  initial flash : $($productionHex -replace '\.hex$', '.bundle.hex')"
+    Write-Host "  XMODEM image  : $reflashImage"
 }
 finally {
     Pop-Location

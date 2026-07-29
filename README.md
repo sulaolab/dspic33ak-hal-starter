@@ -1,5 +1,7 @@
 # dspic33ak-hal-starter
 
+## dsPIC33AK HAL Starter with Dual-Partition Firmware Updater
+
 A ready-to-run MPLAB X starter project for the **dsPIC33AK512MPS512**.
 
 Flash this project, open a serial terminal, and you should immediately see the
@@ -51,16 +53,15 @@ can remain reusable, but the starter board path shown here is the AK512 setup.
 
 ## What runs after programming?
 
-After programming the board, open either (or both) of the two Windows serial
-ports at **230400 8N1**:
+After programming the board, the two Windows serial ports are:
 
-* **"USB Serial Port"**   — UART1 / MCP2221A
-* **"USB Serial Device"** — UART2 / PKOB4
+* **"USB Serial Port"**   — UART1 / MCP2221A, read/write command and XMODEM port
+* **"USB Serial Device"** — UART2 / PKOB4, output mirror only
 
-Console output is mirrored to both ports. Printable ASCII and Enter received
-from either port are echoed and teed to both ports (CRLF is coalesced per input
-port; ESC, other control bytes, and non-ASCII are dropped). Type on one input
-port at a time.
+Console output is mirrored to both ports. Connect Tera Term directly to
+**USB Serial Port (UART1)** at **230400 8N1, no flow control** for commands and
+dual-partition XMODEM updates. UART2 RX is intentionally disabled so an update cannot
+be armed on one COM port and accidentally sent to the other.
 
 The firmware demonstrates:
 
@@ -77,12 +78,12 @@ The firmware demonstrates:
    Timer2 is also initialized as a free-running high-resolution counter and
    checked after the boot banner.
 
-3. **Dual-port UART console and RX paths**
-   `printf()` output at 230400 8N1 is mirrored to both Windows ports. Input
-   from either port is teed to both (see above). The two ports use different RX
-   backends on purpose: **UART1 RX = ISR-ring**, **UART2 RX = polling**; both
-   feed the same foreground tee. An opt-in boot self-test validates UART1 async
-   TX/RX, completion callbacks, counts, abort, and recovery.
+3. **UART console and dual-partition command path**
+   `printf()` output at 230400 8N1 is mirrored to both Windows ports. UART1 uses
+   an ISR-ring RX backend and owns the beginner-facing `*fua5` / `*fca5`
+   commands plus XMODEM-CRC. UART2 is an output-only mirror. An opt-in boot
+   self-test validates UART1 async TX/RX, completion callbacks, counts, abort,
+   and recovery.
 
 4. **SPI flash access**
    Reads the SST26 JEDEC ID and verifies sector erase/write/read-back
@@ -114,11 +115,15 @@ The firmware demonstrates:
    `-140 dB rel`. The stream runs on DMA/ISR and prints one status line every ~5 s:
    `[TDM1] TDM8 master exp_fs~48.8kHz exp_bclk~12.5MHz block=... miss=0 rx=... dB rel`.
    The public demo path is focused on framed SPI timing, DMA continuity, and
-   the observable TDM8 data stream. Demo switches live in `src/app/app_config.h`.
-   **This demo holds the MikroBUS-A SPI pins** — to use a real SPI Click board there, set
-   `HAL_STARTER_ENABLE_TDM_SMOKE_DEMO 0` in `src/app/app_config.h`. A start failure is
-   reported but does not stop the other demos. (The MikroBUS-A I2C SDA/SCL pins are
-   different and are unaffected either way.)
+   the observable TDM8 data stream. Demo switches live in `src/app/app_config.h`,
+   collected into the `APP_BUILD` variation catalog in
+   [`src/app/app_build_config.h`](src/app/app_build_config.h) (select with
+   `buildtools/switch_config.ps1`; see [buildtools/README.md](buildtools/README.md)).
+   **This demo holds the MikroBUS-A SPI pins** — to use a real SPI Click board there, run
+   `.\buildtools\switch_config.ps1 -Preset APP_BUILD_TDM_SMOKE_OFF` (or set
+   `HAL_STARTER_ENABLE_TDM_SMOKE_DEMO 0` directly in `src/app/app_config.h`). A start
+   failure is reported but does not stop the other demos. (The MikroBUS-A I2C SDA/SCL
+   pins are different and are unaffected either way.)
 
 ### TDM8 smoke demo on mikroBUS-A
 
@@ -128,10 +133,11 @@ This is intended as a quick oscilloscope-visible bring-up check and a showcase
 that the dsPIC33AK SPI framed-mode path can generate TDM-style audio timing
 without a codec attached.
 
-To use mikroBUS-A as a normal SPI Click interface, set
-`HAL_STARTER_ENABLE_TDM_SMOKE_DEMO` to `0` in `src/app/app_config.h`. That frees
-the mikroBUS-A SPI pins; the I2C pins on the same mikroBUS header are separate
-and remain usable either way.
+To use mikroBUS-A as a normal SPI Click interface, run
+`.\buildtools\switch_config.ps1 -Preset APP_BUILD_TDM_SMOKE_OFF` (or set
+`HAL_STARTER_ENABLE_TDM_SMOKE_DEMO` to `0` directly in `src/app/app_config.h`).
+That frees the mikroBUS-A SPI pins; the I2C pins on the same mikroBUS header are
+separate and remain usable either way.
 
 In short: this is a known-good hardware starter project for checking that the
 board, toolchain, programmer, UART console, and basic HAL drivers are working
@@ -181,11 +187,32 @@ through MPLAB X.
 
 ### MPLAB X IDE
 
+Use the IDE for editing and building. Hardware programming and debugging from the
+IDE sit outside the verified dual-partition provisioning workflow — see the note
+below.
+
 1. Open `firmware.X` in MPLAB X (this regenerates the per-machine makefiles).
 2. Build (single configuration `dsPIC33AK512`, device dsPIC33AK512MPS512).
-3. Program to the board with the on-board PKOB4.
-4. Open a serial terminal on either Windows port ("USB Serial Port" / "USB
+3. Open a serial terminal on either Windows port ("USB Serial Port" / "USB
    Serial Device") at **230400 8N1** — output is mirrored to both.
+
+> [!IMPORTANT]
+> Do **not** use the IDE's **Program Device** for initial provisioning. The
+> project deliberately leaves `useAlternateLoadableFile` off, so Program Device
+> writes the raw `firmware.X.production.hex`, which carries the P1 program and P1
+> config words but **not** the cloned P2 UCA. The board runs fine immediately,
+> but the first `*fca5` commit is then refused (`inactive partition config`)
+> because P2's config words were never programmed.
+>
+> Provision with the verified bundle instead — `buildtools/build.ps1` then
+> `buildtools/flashauto.ps1` (see below). The same applies after changing any
+> `#pragma config`: a serial update carries program memory only, so the new
+> config words reach the device only via a fresh bundle flash.
+>
+> **Debug sessions have the same caveat.** Starting a debug session programs a
+> debug image, not the verified bundle, so the P2 UCA state afterwards is whatever
+> the debugger left behind. Debugging the application logic is fine; just repeat
+> the verified bundle flash before exercising the dual-partition update path again.
 
 Only `firmware.X/nbproject/{configurations,project}.xml` and the top-level
 `firmware.X/Makefile` are tracked; build output and the per-machine generated
@@ -203,7 +230,11 @@ opening MPLAB X. MPLAB X and XC-DSC must be installed. The scripts auto-detect t
 make and project-generator tools; the generated project makefiles invoke XC-DSC.
 
 ```powershell
-# Incremental build (auto-detects MPLAB X version and firmware.X project)
+# Choose what the next build targets (interactive menu; see buildtools/README.md)
+.\buildtools\switch_config.ps1
+
+# Incremental build (auto-detects MPLAB X version and firmware.X project;
+# follows the switch_config.ps1 selection above)
 .\buildtools\build.ps1
 
 # Full clean-build: regenerate makefiles, clean outputs, rebuild
@@ -215,7 +246,7 @@ make and project-generator tools; the generated project makefiles invoke XC-DSC.
 # Regenerate MPLAB X makefiles only (use after adding/moving source files)
 .\buildtools\build.ps1 -Generate
 
-# Flash the built HEX to the connected board (auto-detects PKOB4 serial)
+# Flash the verified P1+P2 UCA bundle (auto-detects PKOB4 serial)
 .\buildtools\flashauto.ps1
 
 # Reset the board without flashing
@@ -239,6 +270,57 @@ or pass `-ToolsDir`; the legacy root `./_flash_reset_tools` and sibling
 auto-detects the serial number if only one PKOB4 is connected; pass
 `-Serial <PKOB4_SERIAL>` when multiple boards are attached.
 
+The build requires Python 3 for the dependency-free Intel HEX tools. Every
+successful build automatically creates and validates these artifacts under
+`firmware.X/dist/dsPIC33AK512/production/`:
+
+* `firmware.X.production.hex` — compiler output containing P1 program + config
+* `firmware.X.production.bundle.hex` — initial PKOB4 image with matching P1/P2 UCA
+* `firmware.X.production.bundle.verify_report.txt` — must say `PASS`
+* `reflash_image.bin` — partition-independent, DBFW-manifested XMODEM payload
+
+`flashauto.ps1` refuses to flash by default unless the verified bundle and PASS
+report are both present and their SHA-256 values match. An explicit advanced
+`-Hex` path remains available for diagnostics.
+
+## Dual-partition firmware update
+
+The running application can receive `reflash_image.bin` through UART1 and write
+only the inactive 256 KB Flash partition. It validates the package and read-back
+of every programmed row before `*fca5` is allowed to change BTSEQ and reset into
+the updated partition. The same image filename works in both directions; there is
+no separate P1 or P2 update image.
+
+A serial update rewrites **program memory only**: `reflash_image.bin` is a slice
+of `[0x800000, 0x840000)` and contains no UCA, FBOOT, or configuration words, so
+it can never change a partition's fuses. Those are provisioned once by the
+verified bundle over PKOB4.
+
+<img src="docs/images/dual-partition-xmodem-1k-transfer.png" alt="Tera Term on COM12 sending reflash_image.bin to the inactive partition over XMODEM-1K. The console shows *fua5 accepted, the armed instructions including the LED progress note, and the receiver's repeated C handshake characters; the XMODEM Send dialog reports protocol XMODEM (1k), packet 62, 63488 bytes transferred at 12.28 KB/s, 75.6 percent complete" width="640">
+
+A transfer in progress. The console has accepted `*fua5` and is emitting the
+XMODEM-CRC handshake character `C` until the sender starts; the dialog confirms
+the receiver works with **XMODEM (1k)** as well as the classic 128-byte blocks.
+Progress also appears on the board itself, as a bar on LED7..LED0.
+
+Quick serial-update workflow:
+
+1. Connect Tera Term directly to **USB Serial Port (UART1)** at `230400 8N1`,
+   no flow control, local echo off.
+2. Type `*fua5` and press Enter.
+3. Select **File > Transfer > XMODEM > Send** and choose
+   `firmware.X/dist/dsPIC33AK512/production/reflash_image.bin`.
+4. **1K** may be checked or unchecked; both work.
+5. Wait for both `Firmware receive: PASS` and `Validation: PASS`.
+6. Type `*fca5`; the device validates UCA and BTSEQ, then resets into the update.
+
+See the **[Dual-Partition Firmware Update Guide](docs/dual_partition_update.md)**
+for first-time PKOB4 provisioning, exact Tera Term settings, artifact naming,
+verified-bundle selection, expected output, recovery steps, and security scope.
+
+> [!WARNING]
+> Use **File > Transfer > XMODEM > Send**, not **File > Send file**.
+
 ## Expected serial output
 
 ```
@@ -248,7 +330,10 @@ auto-detects the serial number if only one PKOB4 is connected; pass
  device : dsPIC33AK512MPS512
  udid   : ...
  sysclk : 200000000 Hz (FRC -> PLL1)
- uart   : UART1 @ 230400 8N1
+ uart   : UART1 @ 230400 8N1, RX ISR-ring echo active
+ bank   : P1 active, BTSEQ=0xFFF
+ config : active UCA OK (ALTI2C2=ON, BOOTSWP=ENABLED)
+ update : type *fua5 on UART1, then send reflash_image.bin via XMODEM
 ==============================================
  HRT: init=0 present=1 initialized=1 clk=100000000 Hz
  HRT: count0=... count1=... count2=... d1=... d10=...
@@ -299,8 +384,11 @@ the CAN1 controller is `error-passive` and retransmits — the TX queue fills
 ## Layout
 
 ```
-firmware.X/             MPLAB X project (single config, dsPIC33AK512MPS512)
+firmware.X/             MPLAB X Flash Dual Partition project
+                        (single config, dsPIC33AK512MPS512)
 buildtools/             command-line build, clean, flash, and reset scripts
+tools/                  dependency-free HEX provisioning, verification, and
+                        reflash-image extraction tools
 .vscode/clean.ps1       robust MPLAB X output cleanup helper (used by build.ps1)
 src/
   main.c                boot sequence + main loop
@@ -313,8 +401,10 @@ src/
   board_components/     board-specific component helpers built on HALs
                         or minimal device-level code
                         (LED/SW, RGB/POT, SST26 SPI-NOR)
-  console/              starter UART glue: printf write() retarget plus
-                        application-owned UART1 RX/TX interrupt-vector forwarding
+  console/              UART printf/interrupt glue plus the minimal dual-partition
+                        command processor and wrong-file-send guard
+  fw_update/            DBFW + XMODEM-CRC receive, inactive-partition programming/
+                        read-back, per-partition UCA validation, and BTSEQ commit/reset
   hal_clock/            vendored generic dsPIC33AK Clock HAL:
                         logical PLL / CLKGEN programming through core,
                         device, and register-adaptation layers
@@ -325,6 +415,7 @@ src/
   hal_uart/             vendored UART HAL
   hal_spi/              vendored SPI HAL (blocking master; SST26 flash on SPI4)
   hal_i2c/              vendored I2C HAL
+  hal_nvm/              dsPIC33AK RTSP Flash erase/program/read primitives
   hal_can/              vendored CAN FD HAL: dspic33ak_canfd_* (node + optional ISR layer)
   hal_timer/            vendored Timer HAL
                         (Timer1 1 ms tick, default IRQ priority macro,
@@ -339,8 +430,11 @@ src/
                         near the top of src/ so it is easy to find in MPLAB X.
   app/                  bus validation samples: i2c_scan, i2c_loopback,
                         can_loopback, can_bus_test (two-board); app_config.h
-                        (demo toggles); tdm_smoke (SPI1 TDM8 smoke demo)
+                        (demo toggles); app_build_config.h (APP_BUILD variation
+                        catalog, selected via buildtools/switch_config.ps1);
+                        tdm_smoke (SPI1 TDM8 smoke demo)
 docs/
+  dual_partition_update.md complete first-flash and serial-update user guide
   images/
     serial-console.png        live full startup serial-console screenshot
     tdm8-scope-mikrobus-a.png oscilloscope capture of the MikroBUS-A TDM8 smoke demo

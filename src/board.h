@@ -28,8 +28,8 @@ void board_ports_digital_default(void);
  * digital input, plus PPS routing. Returns false if any step failed. */
 bool board_uart1_pins_init(void);
 
-/* Configure the UART2 PKOB4 console pins: U2TX digital output (idle high) and
- * U2RX digital input, plus PPS routing. Returns false if any step failed. */
+/* Configure the UART2 PKOB4 output-mirror pin: U2TX digital output (idle high),
+ * with PPS routing. UART2 RX is intentionally unused. */
 bool board_uart2_pins_init(void);
 
 /* Configure the SST26 SPI4 pins: SDO/SCK digital outputs (idle low), SDI digital
