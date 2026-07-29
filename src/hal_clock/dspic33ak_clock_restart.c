@@ -101,6 +101,66 @@ static dspic33ak_clock_status_t solve_pll_dividers(
     return DSPIC33AK_CLOCK_ERR_UNREPRESENTABLE;
 }
 
+bool dspic33ak_clock_pll_stop_report_is_clean(
+    const dspic33ak_clock_pll_stop_report_t *report)
+{
+    if (report == NULL) {
+        return false;
+    }
+    return (report->post_stop_pllswen == 0u) &&
+           (report->post_stop_foutswen == 0u) &&
+           (report->post_stop_oswen == 0u) &&
+           (report->post_stop_divswen == 0u);
+}
+
+dspic33ak_clock_status_t
+dspic33ak_clock_pll_force_stop(
+    dspic33ak_clock_pll_t pll,
+    dspic33ak_clock_pll_stop_report_t *report)
+{
+    uint32_t poll;
+    uint32_t t0;
+
+    if (report == NULL) {
+        return DSPIC33AK_CLOCK_ERR_INVALID_ARG;
+    }
+    report->stop_time_us = 0u;
+    report->post_stop_pllswen = 0u;
+    report->post_stop_foutswen = 0u;
+    report->post_stop_oswen = 0u;
+    report->post_stop_divswen = 0u;
+
+    if (pll == DSPIC33AK_CLOCK_PLL_1) {
+        return DSPIC33AK_CLOCK_ERR_NOT_SUPPORTED;
+    }
+    if (pll != DSPIC33AK_CLOCK_PLL_2) {
+        return DSPIC33AK_CLOCK_ERR_INVALID_ARG;
+    }
+
+    t0 = dspic33ak_high_res_timer_get_count();
+    PLL2CONbits.ON = 0;
+    OSCCTRLbits.PLL2EN = 0;
+
+    poll = RESTART_POLL_LIMIT;
+    while ((OSCCTRLbits.PLL2RDY != 0u) || (PLL2CONbits.CLKRDY != 0u)) {
+        if (--poll == 0u) {
+            report->stop_time_us = dspic33ak_high_res_timer_elapsed_us(t0);
+            return DSPIC33AK_CLOCK_ERR_TIMEOUT;
+        }
+    }
+    report->stop_time_us = dspic33ak_high_res_timer_elapsed_us(t0);
+
+    /* Recorded unconditionally, and deliberately NOT cleared: a non-zero bit
+     * means the PLL did not return to a clean handshake state, which is itself
+     * the interesting observation. */
+    report->post_stop_pllswen  = (uint8_t)PLL2CONbits.PLLSWEN;
+    report->post_stop_foutswen = (uint8_t)PLL2CONbits.FOUTSWEN;
+    report->post_stop_oswen    = (uint8_t)PLL2CONbits.OSWEN;
+    report->post_stop_divswen  = (uint8_t)PLL2CONbits.DIVSWEN;
+
+    return DSPIC33AK_CLOCK_OK;
+}
+
 static dspic33ak_clock_status_t fail(
     dspic33ak_clock_pll_restart_report_t *report,
     pll_restart_stage_t stage,
@@ -122,7 +182,6 @@ dspic33ak_clock_pll_restart(
     uint16_t nosc;
     uint32_t poll;
     uint32_t t0;
-    uint32_t t1;
     dspic33ak_clock_status_t status;
 
     report->status = DSPIC33AK_CLOCK_OK;
@@ -153,35 +212,29 @@ dspic33ak_clock_pll_restart(
 
     report->last_stage = PLL_RESTART_STAGE_SOURCE_READY;
 
-    /* ---- Force stop ---- */
+    /* ---- Force stop ---- (shared with the forced-stop-only entry point) */
     report->last_stage = PLL_RESTART_STAGE_FORCE_OFF;
-    t0 = dspic33ak_high_res_timer_get_count();
-    PLL2CONbits.ON = 0;
-    OSCCTRLbits.PLL2EN = 0;
+    {
+        dspic33ak_clock_pll_stop_report_t stop_report;
 
-    report->last_stage = PLL_RESTART_STAGE_WAIT_OFF;
-    poll = RESTART_POLL_LIMIT;
-    while ((OSCCTRLbits.PLL2RDY != 0u) || (PLL2CONbits.CLKRDY != 0u)) {
-        if (--poll == 0u) {
-            return fail(report, PLL_RESTART_STAGE_WAIT_OFF, DSPIC33AK_CLOCK_ERR_TIMEOUT);
+        report->last_stage = PLL_RESTART_STAGE_WAIT_OFF;
+        status = dspic33ak_clock_pll_force_stop(pll, &stop_report);
+        report->stop_time_us = stop_report.stop_time_us;
+        report->post_stop_pllswen  = stop_report.post_stop_pllswen;
+        report->post_stop_foutswen = stop_report.post_stop_foutswen;
+        report->post_stop_oswen    = stop_report.post_stop_oswen;
+        report->post_stop_divswen  = stop_report.post_stop_divswen;
+        if (status != DSPIC33AK_CLOCK_OK) {
+            return fail(report, PLL_RESTART_STAGE_WAIT_OFF, status);
         }
-    }
-    t1 = dspic33ak_high_res_timer_get_count();
-    report->stop_time_us = dspic33ak_high_res_timer_elapsed_us(t0);
-    (void)t1;
 
-    /* ---- Check for a stale handshake left over from before the stop ----
-     * Recorded unconditionally, not cleared here: a non-zero bit means the
-     * PLL did not return to a clean state, and this call fails right here
-     * rather than proceeding to reprogram dividers on top of it. */
-    report->last_stage = PLL_RESTART_STAGE_CHECK_STALE_BITS;
-    report->post_stop_pllswen  = (uint8_t)PLL2CONbits.PLLSWEN;
-    report->post_stop_foutswen = (uint8_t)PLL2CONbits.FOUTSWEN;
-    report->post_stop_oswen    = (uint8_t)PLL2CONbits.OSWEN;
-    report->post_stop_divswen  = (uint8_t)PLL2CONbits.DIVSWEN;
-    if ((report->post_stop_pllswen != 0u) || (report->post_stop_foutswen != 0u) ||
-        (report->post_stop_oswen != 0u) || (report->post_stop_divswen != 0u)) {
-        return fail(report, PLL_RESTART_STAGE_CHECK_STALE_BITS, DSPIC33AK_CLOCK_ERR_TIMEOUT);
+        /* A stale request bit means the PLL did not return to a clean state.
+         * Fail right here rather than reprogramming dividers on top of it. */
+        report->last_stage = PLL_RESTART_STAGE_CHECK_STALE_BITS;
+        if (!dspic33ak_clock_pll_stop_report_is_clean(&stop_report)) {
+            return fail(report, PLL_RESTART_STAGE_CHECK_STALE_BITS,
+                        DSPIC33AK_CLOCK_ERR_TIMEOUT);
+        }
     }
 
     /* ---- Program every divider field, and NOSC, while PLL2 is off ---- */
@@ -238,8 +291,13 @@ dspic33ak_clock_pll_restart(
     }
     report->oswen_time_us = dspic33ak_high_res_timer_elapsed_us(t0);
 
-    /* ---- Wait for lock ---- */
+    /* ---- Wait for lock ----
+     * Own timestamp: an earlier version reused the OSWEN stage's t0, so
+     * lock_time_us measured OSWEN-start -> lock rather than the lock wait
+     * alone. That was harmless while oswen_time_us read 0, but it would
+     * silently overstate the lock wait anywhere OSWEN is slow. */
     report->last_stage = PLL_RESTART_STAGE_WAIT_LOCK;
+    t0 = dspic33ak_high_res_timer_get_count();
     poll = RESTART_POLL_LIMIT;
     while ((OSCCTRLbits.PLL2RDY == 0u) || (PLL2CONbits.CLKRDY == 0u)) {
         if (--poll == 0u) {

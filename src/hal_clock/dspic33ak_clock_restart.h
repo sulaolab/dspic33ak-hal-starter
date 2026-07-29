@@ -48,6 +48,25 @@ typedef enum {
     PLL_RESTART_STAGE_DONE
 } pll_restart_stage_t;
 
+/*
+ * Result of the forced-stop half of the sequence on its own. Split out so a
+ * caller can force-stop the PLL and then hand it to some OTHER bring-up path
+ * (e.g. the pinned dspic33ak_clock_pll_configure()) without duplicating the
+ * stop-and-verify logic. dspic33ak_clock_pll_restart() uses this internally, so
+ * there is exactly one implementation of "stop PLL2 and prove it is off".
+ */
+typedef struct {
+    uint32_t stop_time_us;
+
+    /* PLLSWEN/FOUTSWEN/OSWEN/DIVSWEN as observed right after the PLL was
+     * confirmed off. Non-zero means the stop did NOT return the PLL to a clean
+     * handshake state. Recorded, never cleared. */
+    uint8_t post_stop_pllswen;
+    uint8_t post_stop_foutswen;
+    uint8_t post_stop_oswen;
+    uint8_t post_stop_divswen;
+} dspic33ak_clock_pll_stop_report_t;
+
 typedef struct {
     dspic33ak_clock_status_t status;
     pll_restart_stage_t last_stage;
@@ -95,6 +114,30 @@ dspic33ak_clock_pll_restart(
     dspic33ak_clock_pll_t pll,
     const dspic33ak_clock_pll_config_t *config,
     uint32_t *actual_hz);
+
+/*
+ * Force the given PLL off (`ON = 0`, then `PLL2EN = 0`) and wait until both
+ * PLL2RDY and CLKRDY read 0, then record the leftover handshake request bits.
+ *
+ * Returns DSPIC33AK_CLOCK_OK once the PLL is confirmed off, whether or not stale
+ * request bits remain -- inspect the report (or call
+ * dspic33ak_clock_pll_stop_report_is_clean()) to decide that. Returns
+ * DSPIC33AK_CLOCK_ERR_TIMEOUT only if the PLL never reported itself off.
+ * PLL1 is refused with DSPIC33AK_CLOCK_ERR_NOT_SUPPORTED, for the same reason
+ * dspic33ak_clock_pll_restart() refuses it.
+ *
+ * Timing comes from the high-resolution timer if it is running; if it is not,
+ * stop_time_us reads 0 and the stop still works. The wait is bounded by a
+ * self-contained poll counter, so this never depends on any timebase.
+ */
+dspic33ak_clock_status_t
+dspic33ak_clock_pll_force_stop(
+    dspic33ak_clock_pll_t pll,
+    dspic33ak_clock_pll_stop_report_t *report);
+
+/* true when the forced stop left no PLLSWEN/FOUTSWEN/OSWEN/DIVSWEN bit set. */
+bool dspic33ak_clock_pll_stop_report_is_clean(
+    const dspic33ak_clock_pll_stop_report_t *report);
 
 const dspic33ak_clock_pll_restart_report_t *
 dspic33ak_clock_pll_restart_last_report(void);
