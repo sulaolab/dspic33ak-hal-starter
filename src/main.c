@@ -43,6 +43,9 @@
 #if HAL_STARTER_ENABLE_PLL2_RESTART_TEST
 #include "pll2_restart_test.h"
 #endif
+#if HAL_STARTER_ENABLE_PLL2_EARLY_BOOT_TEST
+#include "pll2_early_boot_test.h"
+#endif
 
 /* The optional two-board CAN FD bus test is controlled by CAN_BUS_TEST /
  * CAN_BUS_TEST_ECHO, both defined (default 0) in can_bus_test.h. With
@@ -220,20 +223,44 @@ int main(void)
      * reflects exactly what the previous run (or software reset) left PLL2 in. */
     pll2_restart_test_early_capture();
 #endif
+#if HAL_STARTER_ENABLE_PLL2_EARLY_BOOT_TEST
+    /* Same reason, plus the tripwire/arm bookkeeping this experiment needs to do
+     * before anything else can hang. */
+    pll2_early_boot_test_early_capture();
+    /* P0: the CPU is still on the raw FRC and PLL1 is off. Not merely "earlier
+     * than P1" -- a different condition. The HRT is dead here, so this position
+     * reports zero times; only pass/fail is meaningful. */
+    pll2_early_boot_test_hook(P2E_POS_P0_PRE_CLOCK);
+#endif
     if (!starter_clock_init()) {       /* FRC -> PLL1 200 MHz; route CLKGEN1/5/6/8/9 */
         while (1) {
             Nop();
         }
     }
+    /* Timer2 HRT as early as FCY is valid. It needs only a correct timer_clk_hz
+     * -- no tick timer, no UART, no ISR (it clears its own _T2IE) -- and running
+     * it here rather than after the tick timer makes the PLL2 early-boot
+     * experiment's per-stage timings comparable across boot positions. */
+    high_res_status = dspic33ak_high_res_timer_init(&high_res_cfg);
+#if HAL_STARTER_ENABLE_PLL2_EARLY_BOOT_TEST
+    /* P1: PLL1 up, nothing else. Closest analogue of the reported failure, whose
+     * application had already brought its own clock tree up. */
+    pll2_early_boot_test_hook(P2E_POS_P1_POST_CLOCK);
+#endif
     board_ports_digital_default();     /* all pins digital (needed for I2C SDA/SCL) */
     if (dspic33ak_tick_timer_init(&tick_cfg) != DSPIC33AK_TICK_TIMER_OK) {
         while (1) {
             Nop();
         }
     }
-    high_res_status = dspic33ak_high_res_timer_init(&high_res_cfg);
+#if HAL_STARTER_ENABLE_PLL2_EARLY_BOOT_TEST
+    pll2_early_boot_test_hook(P2E_POS_P2_POST_TICK);   /* tick up, still no UART */
+#endif
     console_uart_init();               /* UART1 pins + 230400 8N1, printf retargeted */
     fw_command_init();
+#if HAL_STARTER_ENABLE_PLL2_EARLY_BOOT_TEST
+    pll2_early_boot_test_hook(P2E_POS_P3_POST_UART);   /* printf now available */
+#endif
 #if HAL_STARTER_ENABLE_UART_ASYNC_SELFTEST
     bool uart_async_ok = uart_async_selftest_run();
 #endif
@@ -289,6 +316,14 @@ int main(void)
      * reset); otherwise this prints the early snapshot + console help and
      * returns into the shared command loop below. */
     pll2_restart_test_run();
+#endif
+#if HAL_STARTER_ENABLE_PLL2_EARLY_BOOT_TEST
+    /* Fires the P4 late control if that is what was armed, then prints the
+     * stored record from whichever position did run -- and is the only place
+     * allowed to issue the software reset for a repeat run, because the reset
+     * path needs a running tick timer. See
+     * docs/pll2_early_boot_position_experiment.md. */
+    pll2_early_boot_test_report();
 #endif
 #else
     /* ---- User LEDs + switches (GPIO) ----
