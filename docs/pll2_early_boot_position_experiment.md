@@ -181,6 +181,11 @@ Board: PKOB4 `020085204RYN000057`, console `COM12` @230400 via the
 | **D** repeat run | `*p2er<p><m>50` | `pass=50 fail=0 hang=0`, then one power cycle with `?p2e` still readable |
 | **E** matrix | — | one row per (position, ordering) in §6, with verbatim `[P2E]` lines |
 
+Phase D was originally gated on Phase B *reproducing* the stall. It was run
+anyway, on the M0 baseline at P1, for the opposite reason: a null result from one
+attempt per cell cannot distinguish "does not happen" from "happens
+intermittently", so the repeat bounds the null instead of the fix.
+
 **Stop and report after Phase B.** If Phase B does not reproduce the stall, Phase C
 still runs for completeness but the result is simply *"the trap did not reproduce
 on hal-starter at P0..P4"* and no claim of any kind is made about ordering.
@@ -190,15 +195,105 @@ during Phase B it will fire on its own.
 
 ## §6 Results
 
-Not yet run.
+Run 2026-07-29 on PKOB4 `020085204RYN000057`, device `dsPIC33AK512MPS512`
+(ID `0xa77c`, rev `0x1`), DFP 1.3.185, XC-DSC 3.31.01, MPLAB X 6.30, console
+`COM12` @230400.
+
+### Verdict: the stall did NOT reproduce
+
+**Every cell passed.** 15/15 single attempts reached
+`status=0`, `hz=520000000`, with `CLKFAIL`/`SCSFAIL`/`CLKDIAG` all zero and every
+handshake request bit clear afterwards. No stage ever timed out, no tripwire ever
+fired (`hang=0` throughout), and no boot had to be rescued.
 
 | Position | M0 pinned | M2 stop+pinned | M1 restart |
 |---|---|---|---|
-| P0 pre-clock | — | — | — |
-| P1 post-clock | — | — | — |
-| P2 post-tick | — | — | — |
-| P3 post-UART | — | — | — |
-| P4 late (control) | — | — | — |
+| P0 pre-clock (PLL1 off) | PASS | PASS | PASS |
+| P1 post-clock | PASS | PASS | PASS |
+| P2 post-tick | PASS | PASS | PASS |
+| P3 post-UART | PASS | PASS | PASS |
+| P4 late (control) | PASS | PASS | PASS |
+
+Because a single pass per cell cannot rule out an intermittent stall, the most
+relevant cell was repeated: **P1/M0 ×50 software resets → `done=50 pass=50
+fail=0 hang=0`.** So the null result is "did not reproduce in 50 consecutive
+boots at the head-to-head position", not "did not reproduce once". Total
+attempts this session: **65, all PASS**.
+
+Representative records, verbatim:
+
+```text
+ [P2E] last P0/M0 status=0 stage=0 hz=520000000
+ [P2E] time off=0us pllsw=0us fout=0us osw=0us lock=0us poststop=0x0
+ [P2E] post OSCCTRL=0000A300 PLL2CON=80028101 PLL2DIV=01004109
+ [P2E] post CLKFAIL=00000000 SCSFAIL=00000000 CLKDIAG=00000000
+
+ [P2E] last P1/M1 status=0 stage=12 hz=520000000
+ [P2E] time off=0us pllsw=0us fout=178us osw=0us lock=0us poststop=0x0
+ [P2E] post OSCCTRL=0000E380 PLL2CON=80028101 PLL2DIV=01004109
+
+ [P2E] rec state=ATTEMPT_DONE armed=P1/M0 rep=0 done=50 pass=50 fail=0 hang=0
+```
+
+`PLL2CON=80028101` and `PLL2DIV=01004109` were **identical in all 15 cells** —
+the same divider geometry and the same locked state regardless of position or
+ordering.
+
+### Three incidental findings worth keeping
+
+**1. The pinned path locks PLL2 with `OSCCTRL.PLL2EN` left at 0.**
+`OSCCTRL` came back `…E300` after M0 and M2, but `…E380` after M1 — bit `0x80`
+differs, and M1 is the only arm that writes `OSCCTRLbits.PLL2EN = 1`. Confirmed
+live afterwards:
+
+```text
+"?p2e" now  en=0 rdy=1 on=1 clk=1 nosc=1 cosc=1 pllsw=0 foutsw=0 osw=0 divsw=0
+```
+
+PLL2 is running and ready (`rdy=1 on=1 clk=1`) with `PLL2EN=0`. So on this
+device `PLL2EN` is not required for PLL2 to lock and be usable via
+`PLL2CON.ON`, and the pinned `configure_pll2()` never touches it. Whether that
+matters for anything downstream is not established here — it is recorded because
+it is a real asymmetry between two paths that both "work".
+
+**2. The true lock wait is under 1 us, not 9 us.**
+[`pll2_soft_reset_restart_experiment.md`](pll2_soft_reset_restart_experiment.md)
+reported `lock=9us`, measured with a timestamp shared with the OSWEN stage. With
+the dedicated timestamp added on this branch, every M1 cell reports `lock=0us`
+while `fout` stays at 178 us. The earlier 9 us was therefore OSWEN-start → lock,
+and PLL2's actual lock wait after the output switch is sub-microsecond. The
+earlier figure was not wrong about the total, only about the attribution.
+
+**3. `P0` reports all-zero times, exactly as designed.**
+At P0 the high-resolution timer is not yet initialized, so `fout` reads 0 for
+P0/M1 while P1..P4/M1 all read 178 us. Pass/fail at P0 is still valid; only its
+timing is blind.
+
+### What this rules out
+
+The trap is not a property of:
+
+- **being early in boot per se** — P0, with `PLL1` off and the CPU on the raw FRC,
+  is earlier than the position where the original failure was seen, and it passed
+  50/50 at P1 and 1/1 at P0;
+- **the pinned `configure_pll2()` sequence in isolation** — M0 is that sequence,
+  unmodified, and it passed at every position;
+- **the FRC → 520 MHz operating point** — the divider geometry solved and locked
+  identically everywhere.
+
+### Consequence
+
+**No claim is made about ordering.** M1 and M2 passing means nothing here,
+because M0 never failed — there was nothing for them to fix. The M2 arm, built
+specifically to separate "the forced stop is what helps" from "programming while
+off is what helps", has no work to do on this board and remains unused evidence
+for whenever a reproduction exists.
+
+The leading explanation stands as anticipated in §7: the discriminator in the
+original evidence was **pin-specific, not temporal** — `REFI1R` 0 → RP16 flipped
+FAIL to PASS while 0 → RP51 did not, and a 5000 ms delay did not help. This board
+has nothing on RP16. That makes the recommended next step the `REFI1R` experiment
+described in §7, not more boot positions.
 
 ## §7 What A Result Would and Would Not Prove
 
