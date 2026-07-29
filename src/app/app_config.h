@@ -98,4 +98,18 @@
 #define HAL_STARTER_ENABLE_TDM_NEG_TEST 0
 #endif
 
+/*
+ * OPT-IN PLL2 forced-stop/restart and software-reset campaign -- default OFF.
+ *
+ * When 1 (APP_BUILD_PLL2_RESTART_TEST only): main() captures RCON/OSCCTRL/PLL2
+ * state before starter_clock_init() runs, then after the normal clock/tick
+ * timer/HRT/UART bring-up and boot banner, hands off to
+ * pll2_restart_test_run() instead of the LED/SST26/I2C/CAN/RGB/TDM demos.
+ * That dedicated console loop never returns; see
+ * docs/pll2_soft_reset_restart_experiment.md.
+ */
+#ifndef HAL_STARTER_ENABLE_PLL2_RESTART_TEST
+#define HAL_STARTER_ENABLE_PLL2_RESTART_TEST 0
+#endif
+
 #endif /* APP_CONFIG_H */

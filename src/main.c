@@ -40,6 +40,9 @@
 #if HAL_STARTER_ENABLE_UART_ASYNC_SELFTEST
 #include "uart_async_selftest.h"
 #endif
+#if HAL_STARTER_ENABLE_PLL2_RESTART_TEST
+#include "pll2_restart_test.h"
+#endif
 
 /* The optional two-board CAN FD bus test is controlled by CAN_BUS_TEST /
  * CAN_BUS_TEST_ECHO, both defined (default 0) in can_bus_test.h. With
@@ -212,6 +215,11 @@ int main(void)
     };
     dspic33ak_high_res_timer_status_t high_res_status;
 
+#if HAL_STARTER_ENABLE_PLL2_RESTART_TEST
+    /* Must run before starter_clock_init() touches PLL1, so the snapshot
+     * reflects exactly what the previous run (or software reset) left PLL2 in. */
+    pll2_restart_test_early_capture();
+#endif
     if (!starter_clock_init()) {       /* FRC -> PLL1 200 MHz; route CLKGEN1/5/6/8/9 */
         while (1) {
             Nop();
@@ -272,6 +280,15 @@ int main(void)
     printf("==============================================\n");
     high_res_timer_boot_test(high_res_status);
 
+#if HAL_STARTER_ENABLE_PLL2_RESTART_TEST
+    /* This build variation replaces the LED/SST26/I2C/CAN/RGB/TDM demos below
+     * with the PLL2 forced-stop/restart experiment; see
+     * docs/pll2_soft_reset_restart_experiment.md. A software-reset campaign
+     * left in progress resumes here and does not return (issues the next
+     * reset); otherwise this prints the early snapshot + console help and
+     * returns into the shared command loop below. */
+    pll2_restart_test_run();
+#else
     /* ---- User LEDs + switches (GPIO) ----
      * Power-on indicator: light all 8 LEDs for 1 s, then clear. Afterwards the
      * main loop polls SW1/SW2 for LED7/LED6 and mirrors the SW3 CN event state
@@ -408,14 +425,17 @@ int main(void)
 #else
     (void)tdm_neg_ok;   /* consumed only by the smoke gate; avoid unused-variable when smoke is off */
 #endif
+#endif /* HAL_STARTER_ENABLE_PLL2_RESTART_TEST */
 
     /* Main loop: update the LED color from the pot continuously, toggle LED0 once
      * per second (visible liveness without a serial port), and on each 1 s beat
      * run ONE peripheral demo, alternating between them: even beats run the I2C
      * master<->slave round trip, odd beats transmit one CAN FD frame on the real
      * CAN bus. Each demo therefore fires every 2 s, offset 1 s from the other. */
+#if !HAL_STARTER_ENABLE_PLL2_RESTART_TEST
     uint32_t beat      = 0u;
     uint32_t last_beat = dspic33ak_tick_timer_get_ms();
+#endif
     uint32_t last_term_reset = dspic33ak_tick_timer_get_ms();
 #if HAL_STARTER_ENABLE_TDM_SMOKE_DEMO
     uint32_t last_tdm  = dspic33ak_tick_timer_get_ms() - 5000u;
@@ -425,12 +445,14 @@ int main(void)
         /* Consume console input first. If *fua5 is present this call owns UART1
          * until XMODEM finishes and sets quiet before any demo can print. */
         fw_command_poll();
+#if !HAL_STARTER_ENABLE_PLL2_RESTART_TEST
         rgb_pot_update();
         if (!fw_command_quiet()) {
             /* This routine can print switch events, so it is part of the console
              * quiet boundary as well as the periodic demo calls below. */
             led_sw_update();  /* SW1/2 polled; SW3 event state mirrored on LED5 */
         }
+#endif
 
         uint32_t now = dspic33ak_tick_timer_get_ms();
         if (!fw_command_quiet() &&
@@ -439,6 +461,7 @@ int main(void)
             term_init_safe();
         }
 
+#if !HAL_STARTER_ENABLE_PLL2_RESTART_TEST
         if (!fw_command_quiet() &&
             ((uint32_t)(now - last_beat) >= 1000u)) {
             last_beat = now;
@@ -454,6 +477,7 @@ int main(void)
             }
             beat++;
         }
+#endif
 
 #if HAL_STARTER_ENABLE_TDM_SMOKE_DEMO
         if (!fw_command_quiet() &&

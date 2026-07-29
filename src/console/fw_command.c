@@ -15,6 +15,9 @@
 #if HAL_STARTER_ENABLE_TDM_SMOKE_DEMO
 #include "tdm_smoke.h"
 #endif
+#if HAL_STARTER_ENABLE_PLL2_RESTART_TEST
+#include "pll2_restart_test.h"
+#endif
 
 #define COMMAND_UART               DSPIC33AK_UART_INST_1
 #define COMMAND_LINE_CAPACITY      32u
@@ -287,11 +290,53 @@ static void process_line(void)
         return;
     }
 
+#if HAL_STARTER_ENABLE_PLL2_RESTART_TEST
+    if (strcmp(s_line, "?p2") == 0) {
+        pll2_restart_test_cmd_status();
+        return;
+    }
+    if (strcmp(s_line, "*p2") == 0) {
+        pll2_restart_test_cmd_single();
+        return;
+    }
+    if (strcmp(s_line, "*p2d") == 0) {
+        pll2_restart_test_cmd_double();
+        return;
+    }
+    if (strcmp(s_line, "*p2x") == 0) {
+        pll2_restart_test_cmd_cancel();
+        return;
+    }
+    if ((s_line_len == 8u) && (strncmp(s_line, "*p2r", 4) == 0)) {
+        uint8_t d;
+        uint16_t count = 0u;
+        bool digits_ok = true;
+
+        for (d = 4u; d < 8u; d++) {
+            char c = s_line[d];
+            if ((c < '0') || (c > '9')) {
+                digits_ok = false;
+                break;
+            }
+            count = (uint16_t)((count * 10u) + (uint16_t)(c - '0'));
+        }
+        if (!digits_ok) {
+            printf("\"*p2r\" needs exactly 4 digits, e.g. *p2r0010.\r\n");
+            return;
+        }
+        (void)pll2_restart_test_cmd_campaign_start(count);
+        return;
+    }
+#endif
+
     /* Spell out the *tq polarity here: the payload is the output enable, so 0000
      * silences and 0001 restores. Discovering that from the console beats having
      * to find it in the guide. */
     printf("Unknown command. Commands: *fua5, *fca5, ?fp,\r\n");
     printf("  *tq0000 (periodic output off) / *tq0001 (on)\r\n");
+#if HAL_STARTER_ENABLE_PLL2_RESTART_TEST
+    printf("  ?p2, *p2, *p2d, *p2r0010/0100/1000, *p2x\r\n");
+#endif
 }
 
 static void begin_raw_file_discard(void)

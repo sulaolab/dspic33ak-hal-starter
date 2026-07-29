@@ -26,6 +26,7 @@
         <itemPath>../src/app/tdm_smoke.c</itemPath>
         <itemPath>../src/app/tdm_neg_test.c</itemPath>
         <itemPath>../src/app/uart_async_selftest.c</itemPath>
+        <itemPath>../src/app/pll2_restart_test.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f11" displayName="board_components" projectFiles="true">
         <itemPath>../src/board_components/led_sw.c</itemPath>
@@ -65,6 +66,10 @@
         <itemPath>../src/hal_clock/dspic33ak_clock.h</itemPath>
         <itemPath>../src/hal_clock/dspic33ak_clock_reg.c</itemPath>
         <itemPath>../src/hal_clock/dspic33ak_clock_reg.h</itemPath>
+        <itemPath>../src/hal_clock/dspic33ak_clock_diag.c</itemPath>
+        <itemPath>../src/hal_clock/dspic33ak_clock_diag.h</itemPath>
+        <itemPath>../src/hal_clock/dspic33ak_clock_restart.c</itemPath>
+        <itemPath>../src/hal_clock/dspic33ak_clock_restart.h</itemPath>
       </logicalFolder>
       <logicalFolder name="f20" displayName="hal_dma" projectFiles="true">
         <itemPath>../src/hal_dma/dspic33ak_dma.c</itemPath>
