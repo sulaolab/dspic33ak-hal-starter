@@ -1,8 +1,8 @@
 # hal_starter_build_state.ps1 - shared build-selection state for the buildtools scripts.
 #
-# Dot-sourced by switch_config.ps1 / build.ps1 / flashauto.ps1. Ported from
-# dsp-sonora-mothership/buildtools/sonora_build_state.ps1, simplified for this
-# repo's single MPLAB configuration / single application:
+# Dot-sourced by switch_config.ps1 / build.ps1 / flashauto.ps1. Ported from an
+# internal multi-configuration project and simplified for this repo's single
+# MPLAB configuration / single application:
 #
 #   1. WHICH MPLAB CONFIGURATION (= device)
 #      Catalog : firmware.X/nbproject/configurations.xml (conf order = the
@@ -22,11 +22,11 @@
 #                APP_BUILD the existing objects were compiled with, so a build
 #                only has to clean when the variation actually changed.
 #
-# There is deliberately NO environment variable in this path (same reasoning as
-# the Sonora original): MPLABX_CONF as a *default source* leaks across a shell
-# session (one explicit -Configuration silently affects every later unqualified
-# build). build.ps1 still sets $env:MPLABX_CONF around the existing clean.ps1
-# call, which is the one place that script still reads it.
+# There is deliberately NO environment variable in this path: MPLABX_CONF as a
+# *default source* leaks across a shell session (one explicit -Configuration
+# silently affects every later unqualified build). build.ps1 still sets
+# $env:MPLABX_CONF around the existing clean.ps1 call, which is the one place that
+# script still reads it.
 
 $ErrorActionPreference = 'Stop'
 
@@ -200,10 +200,10 @@ function Set-HalStarterActiveConfiguration {
     $implMakefile = Join-Path $ProjectDir 'nbproject\Makefile-impl.mk'
     $privateConfig = Join-Path $ProjectDir 'nbproject\private\configurations.xml'
 
-    # Unlike the Sonora original (which tracks Makefile-impl.mk in git, so it
-    # always exists), this repo's .gitignore excludes every generated
-    # nbproject/Makefile-*.mk, including this one -- a fresh clone has none of
-    # them until the first build.ps1/-Generate run or an MPLAB X IDE open. With
+    # Some projects track Makefile-impl.mk in git so it always exists; this repo's
+    # .gitignore instead excludes every generated nbproject/Makefile-*.mk, including
+    # this one -- a fresh clone has none of them until the first
+    # build.ps1/-Generate run or an MPLAB X IDE open. With
     # a single configuration there is nothing to rewrite yet in that case: the
     # generator will stamp the only choice as DEFAULTCONF regardless.
     if (Test-Path -LiteralPath $implMakefile) {
@@ -252,7 +252,7 @@ function Get-HalStarterPresetCatalog {
     }
 
     # 2) one-line description, taken from the boot-banner APP_BUILD_NAME /
-    #    APP_BUILD_DETAIL pairs (same technique as the Sonora original).
+    #    APP_BUILD_DETAIL pairs.
     $details = @{}
     $nameMatches = @([regex]::Matches($text, '#define\s+APP_BUILD_NAME\s+"(APP_BUILD_\w+)"'))
     for ($n = 0; $n -lt $nameMatches.Count; $n++) {

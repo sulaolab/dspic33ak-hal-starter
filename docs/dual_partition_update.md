@@ -145,8 +145,8 @@ Local echo       off
 Transmit newline CR
 ```
 
-This public starter workflow uses a direct COM connection. It does not require
-TCP, Telnet, a local monitor, or `127.0.0.1:23`.
+The serial update needs nothing beyond Tera Term on this port — no extra host
+tooling.
 
 After reset, confirm that the boot banner contains lines similar to:
 
@@ -214,8 +214,7 @@ dead with no way back short of a reset; that restart is independent of the
 output toggle and happens either way.
 
 Use `*tq0000` / `*tq0001` any time, independent of the update workflow. The
-payload is the *output enable*, so `0000` silences and `0001` restores (the same
-polarity the sibling Sonora console uses):
+payload is the *output enable*, so `0000` silences and `0001` restores:
 
 ```text
 *tq0000   -- periodic starter output OFF
