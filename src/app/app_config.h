@@ -112,4 +112,31 @@
 #define HAL_STARTER_ENABLE_PLL2_RESTART_TEST 0
 #endif
 
+/*
+ * OPT-IN PLL2 early-boot position experiment -- default OFF.
+ *
+ * When 1 (APP_BUILD_PLL2_EARLY_BOOT_TEST only): main() gains five one-line hook
+ * calls at boot positions P0..P4, and exactly one of them fires per boot -- the
+ * one a console command armed in persistent RAM before the last software reset.
+ * The hook attempts FRC 8 MHz -> PLL2 520 MHz with one of three orderings (the
+ * pinned dspic33ak_clock_pll_configure(), the forced-stop restart primitive, or
+ * forced-stop-then-pinned-configure), stores the outcome in persistent RAM
+ * WITHOUT printing, and the result is reported once UART1 is up. The point is to
+ * find out whether the known early-boot FRC->PLL2 handshake stall reproduces on
+ * this board, and if so which ordering avoids it. See
+ * docs/pll2_early_boot_position_experiment.md.
+ */
+#ifndef HAL_STARTER_ENABLE_PLL2_EARLY_BOOT_TEST
+#define HAL_STARTER_ENABLE_PLL2_EARLY_BOOT_TEST 0
+#endif
+
+/*
+ * Derived: this build is one of the PLL2 clock experiments, so main() replaces
+ * the LED/SST26/I2C/CAN/RGB/TDM demos with the experiment and its console loop.
+ * Gate demo suppression on THIS, and per-experiment hooks on the specific macro
+ * above, so adding a third experiment does not touch every demo guard again.
+ */
+#define HAL_STARTER_PLL2_EXPERIMENT_BUILD \
+    (HAL_STARTER_ENABLE_PLL2_RESTART_TEST || HAL_STARTER_ENABLE_PLL2_EARLY_BOOT_TEST)
+
 #endif /* APP_CONFIG_H */

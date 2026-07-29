@@ -37,6 +37,7 @@
 #define APP_BUILD_CAN_BUS_TEST_ORIGINATOR      (8) // Two-board CAN FD bus test; this board is the ORIGINATOR (id 0x0A0)
 #define APP_BUILD_CAN_BUS_TEST_ECHO            (9) // Two-board CAN FD bus test; this board is the ECHO (id 0x0B0)
 #define APP_BUILD_PLL2_RESTART_TEST            (10) // PLL2 forced-stop/restart and software-reset campaign (exp/pll2-soft-reset-restart)
+#define APP_BUILD_PLL2_EARLY_BOOT_TEST         (11) // PLL2 early-boot position walk P0..P4 x ordering M0/M1/M2 (exp/pll2-early-boot-position)
 
 #ifndef APP_BUILD
 #define APP_BUILD (APP_BUILD_STARTER_DEFAULT)
@@ -53,6 +54,7 @@
   #define CAN_BUS_TEST                            0
   #define CAN_BUS_TEST_ECHO                       0
   #define HAL_STARTER_ENABLE_PLL2_RESTART_TEST    0
+  #define HAL_STARTER_ENABLE_PLL2_EARLY_BOOT_TEST 0
 #elif (APP_BUILD == APP_BUILD_TDM_SMOKE_OFF)
   #define APP_BUILD_NAME    "APP_BUILD_TDM_SMOKE_OFF"
   #define APP_BUILD_DETAIL  "TDM smoke demo off; MikroBUS-A SPI pins free for a Click board"
@@ -64,6 +66,7 @@
   #define CAN_BUS_TEST                            0
   #define CAN_BUS_TEST_ECHO                       0
   #define HAL_STARTER_ENABLE_PLL2_RESTART_TEST    0
+  #define HAL_STARTER_ENABLE_PLL2_EARLY_BOOT_TEST 0
 #elif (APP_BUILD == APP_BUILD_TDM_SMOKE_FS_PULSE)
   #define APP_BUILD_NAME    "APP_BUILD_TDM_SMOKE_FS_PULSE"
   #define APP_BUILD_DETAIL  "TDM smoke demo with FS_PULSE waveform instead of FS_50PCT"
@@ -75,6 +78,7 @@
   #define CAN_BUS_TEST                            0
   #define CAN_BUS_TEST_ECHO                       0
   #define HAL_STARTER_ENABLE_PLL2_RESTART_TEST    0
+  #define HAL_STARTER_ENABLE_PLL2_EARLY_BOOT_TEST 0
 #elif (APP_BUILD == APP_BUILD_TDM_FS_RUNTIME_SWITCH_TEST)
   #define APP_BUILD_NAME    "APP_BUILD_TDM_FS_RUNTIME_SWITCH_TEST"
   #define APP_BUILD_DETAIL  "Opt-in FS-pin PPS restore self-test (requires FS_50PCT)"
@@ -86,6 +90,7 @@
   #define CAN_BUS_TEST                            0
   #define CAN_BUS_TEST_ECHO                       0
   #define HAL_STARTER_ENABLE_PLL2_RESTART_TEST    0
+  #define HAL_STARTER_ENABLE_PLL2_EARLY_BOOT_TEST 0
 #elif (APP_BUILD == APP_BUILD_UART_ASYNC_SELFTEST)
   #define APP_BUILD_NAME    "APP_BUILD_UART_ASYNC_SELFTEST"
   #define APP_BUILD_DETAIL  "Opt-in UART1 async TX/RX self-test before the boot banner"
@@ -97,6 +102,7 @@
   #define CAN_BUS_TEST                            0
   #define CAN_BUS_TEST_ECHO                       0
   #define HAL_STARTER_ENABLE_PLL2_RESTART_TEST    0
+  #define HAL_STARTER_ENABLE_PLL2_EARLY_BOOT_TEST 0
 #elif (APP_BUILD == APP_BUILD_TDM_NEG_TEST_1LEG)
   #define APP_BUILD_NAME    "APP_BUILD_TDM_NEG_TEST_1LEG"
   #define APP_BUILD_DETAIL  "HAL negative-validation self-test, single-leg matrix; smoke resumes after"
@@ -108,6 +114,7 @@
   #define CAN_BUS_TEST                            0
   #define CAN_BUS_TEST_ECHO                       0
   #define HAL_STARTER_ENABLE_PLL2_RESTART_TEST    0
+  #define HAL_STARTER_ENABLE_PLL2_EARLY_BOOT_TEST 0
 #elif (APP_BUILD == APP_BUILD_TDM_NEG_TEST_2LEG)
   #define APP_BUILD_NAME    "APP_BUILD_TDM_NEG_TEST_2LEG"
   #define APP_BUILD_DETAIL  "HAL negative-validation self-test, 2-leg matrix (needs DSPIC33AK_TDM_USE_SPI2=1); smoke off"
@@ -119,6 +126,7 @@
   #define CAN_BUS_TEST                            0
   #define CAN_BUS_TEST_ECHO                       0
   #define HAL_STARTER_ENABLE_PLL2_RESTART_TEST    0
+  #define HAL_STARTER_ENABLE_PLL2_EARLY_BOOT_TEST 0
 #elif (APP_BUILD == APP_BUILD_CAN_BUS_TEST_ORIGINATOR)
   #define APP_BUILD_NAME    "APP_BUILD_CAN_BUS_TEST_ORIGINATOR"
   #define APP_BUILD_DETAIL  "Two-board CAN FD bus test; this board is the ORIGINATOR (id 0x0A0)"
@@ -130,6 +138,7 @@
   #define CAN_BUS_TEST                            1
   #define CAN_BUS_TEST_ECHO                       0
   #define HAL_STARTER_ENABLE_PLL2_RESTART_TEST    0
+  #define HAL_STARTER_ENABLE_PLL2_EARLY_BOOT_TEST 0
 #elif (APP_BUILD == APP_BUILD_CAN_BUS_TEST_ECHO)
   #define APP_BUILD_NAME    "APP_BUILD_CAN_BUS_TEST_ECHO"
   #define APP_BUILD_DETAIL  "Two-board CAN FD bus test; this board is the ECHO (id 0x0B0)"
@@ -141,6 +150,7 @@
   #define CAN_BUS_TEST                            1
   #define CAN_BUS_TEST_ECHO                       1
   #define HAL_STARTER_ENABLE_PLL2_RESTART_TEST    0
+  #define HAL_STARTER_ENABLE_PLL2_EARLY_BOOT_TEST 0
 #elif (APP_BUILD == APP_BUILD_PLL2_RESTART_TEST)
   #define APP_BUILD_NAME    "APP_BUILD_PLL2_RESTART_TEST"
   #define APP_BUILD_DETAIL  "PLL2 forced-stop/restart and software-reset campaign"
@@ -152,6 +162,19 @@
   #define CAN_BUS_TEST                            0
   #define CAN_BUS_TEST_ECHO                       0
   #define HAL_STARTER_ENABLE_PLL2_RESTART_TEST    1
+  #define HAL_STARTER_ENABLE_PLL2_EARLY_BOOT_TEST 0
+#elif (APP_BUILD == APP_BUILD_PLL2_EARLY_BOOT_TEST)
+  #define APP_BUILD_NAME    "APP_BUILD_PLL2_EARLY_BOOT_TEST"
+  #define APP_BUILD_DETAIL  "PLL2 early-boot position walk P0..P4 x ordering M0/M1/M2"
+  #define HAL_STARTER_ENABLE_TDM_SMOKE_DEMO       0
+  #define APP_TDM_MASTER_FS50_BY_CLC10            1
+  #define APP_TDM_FS_RUNTIME_SWITCH_TEST          0
+  #define HAL_STARTER_ENABLE_UART_ASYNC_SELFTEST  0
+  #define HAL_STARTER_ENABLE_TDM_NEG_TEST         0
+  #define CAN_BUS_TEST                            0
+  #define CAN_BUS_TEST_ECHO                       0
+  #define HAL_STARTER_ENABLE_PLL2_RESTART_TEST    0
+  #define HAL_STARTER_ENABLE_PLL2_EARLY_BOOT_TEST 1
 #else
   #error "APP_BUILD is not a known variation. See app_build_config.h."
 #endif

@@ -280,14 +280,16 @@ int main(void)
     printf("==============================================\n");
     high_res_timer_boot_test(high_res_status);
 
+#if HAL_STARTER_PLL2_EXPERIMENT_BUILD
+    /* The PLL2 clock-experiment build variations replace the LED/SST26/I2C/CAN/
+     * RGB/TDM demos below with one experiment plus the shared console loop. */
 #if HAL_STARTER_ENABLE_PLL2_RESTART_TEST
-    /* This build variation replaces the LED/SST26/I2C/CAN/RGB/TDM demos below
-     * with the PLL2 forced-stop/restart experiment; see
-     * docs/pll2_soft_reset_restart_experiment.md. A software-reset campaign
+    /* See docs/pll2_soft_reset_restart_experiment.md. A software-reset campaign
      * left in progress resumes here and does not return (issues the next
      * reset); otherwise this prints the early snapshot + console help and
      * returns into the shared command loop below. */
     pll2_restart_test_run();
+#endif
 #else
     /* ---- User LEDs + switches (GPIO) ----
      * Power-on indicator: light all 8 LEDs for 1 s, then clear. Afterwards the
@@ -425,14 +427,14 @@ int main(void)
 #else
     (void)tdm_neg_ok;   /* consumed only by the smoke gate; avoid unused-variable when smoke is off */
 #endif
-#endif /* HAL_STARTER_ENABLE_PLL2_RESTART_TEST */
+#endif /* HAL_STARTER_PLL2_EXPERIMENT_BUILD */
 
     /* Main loop: update the LED color from the pot continuously, toggle LED0 once
      * per second (visible liveness without a serial port), and on each 1 s beat
      * run ONE peripheral demo, alternating between them: even beats run the I2C
      * master<->slave round trip, odd beats transmit one CAN FD frame on the real
      * CAN bus. Each demo therefore fires every 2 s, offset 1 s from the other. */
-#if !HAL_STARTER_ENABLE_PLL2_RESTART_TEST
+#if !HAL_STARTER_PLL2_EXPERIMENT_BUILD
     uint32_t beat      = 0u;
     uint32_t last_beat = dspic33ak_tick_timer_get_ms();
 #endif
@@ -445,7 +447,7 @@ int main(void)
         /* Consume console input first. If *fua5 is present this call owns UART1
          * until XMODEM finishes and sets quiet before any demo can print. */
         fw_command_poll();
-#if !HAL_STARTER_ENABLE_PLL2_RESTART_TEST
+#if !HAL_STARTER_PLL2_EXPERIMENT_BUILD
         rgb_pot_update();
         if (!fw_command_quiet()) {
             /* This routine can print switch events, so it is part of the console
@@ -461,7 +463,7 @@ int main(void)
             term_init_safe();
         }
 
-#if !HAL_STARTER_ENABLE_PLL2_RESTART_TEST
+#if !HAL_STARTER_PLL2_EXPERIMENT_BUILD
         if (!fw_command_quiet() &&
             ((uint32_t)(now - last_beat) >= 1000u)) {
             last_beat = now;

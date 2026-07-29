@@ -27,6 +27,7 @@
         <itemPath>../src/app/tdm_neg_test.c</itemPath>
         <itemPath>../src/app/uart_async_selftest.c</itemPath>
         <itemPath>../src/app/pll2_restart_test.c</itemPath>
+        <itemPath>../src/app/pll2_early_boot_test.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f11" displayName="board_components" projectFiles="true">
         <itemPath>../src/board_components/led_sw.c</itemPath>
