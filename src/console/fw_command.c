@@ -18,6 +18,9 @@
 #if HAL_STARTER_ENABLE_PLL2_RESTART_TEST
 #include "pll2_restart_test.h"
 #endif
+#if HAL_STARTER_ENABLE_PLL2_EARLY_BOOT_TEST
+#include "pll2_early_boot_test.h"
+#endif
 
 #define COMMAND_UART               DSPIC33AK_UART_INST_1
 #define COMMAND_LINE_CAPACITY      32u
@@ -329,6 +332,62 @@ static void process_line(void)
     }
 #endif
 
+#if HAL_STARTER_ENABLE_PLL2_EARLY_BOOT_TEST
+    if (strcmp(s_line, "?p2e") == 0) {
+        pll2_early_boot_test_cmd_status();
+        return;
+    }
+    if (strcmp(s_line, "*p2ex") == 0) {
+        pll2_early_boot_test_cmd_clear();
+        return;
+    }
+    /* "*p2eb<p>": run all three orderings here and now, no reset. */
+    if ((s_line_len == 6u) && (strncmp(s_line, "*p2eb", 5) == 0)) {
+        char c = s_line[5];
+
+        if ((c < '0') || (c > '4')) {
+            printf("\"*p2eb\" needs one position digit 0..4, e.g. *p2eb4.\r\n");
+            return;
+        }
+        pll2_early_boot_test_cmd_bench((uint8_t)(c - '0'));
+        return;
+    }
+    /* "*p2ea<p><m>": arm ONE attempt at position p with ordering m, then reset. */
+    if ((s_line_len == 7u) && (strncmp(s_line, "*p2ea", 5) == 0)) {
+        char cp = s_line[5];
+        char cm = s_line[6];
+
+        if ((cp < '0') || (cp > '4') || (cm < '0') || (cm > '2')) {
+            printf("\"*p2ea\" needs <position 0-4><method 0-2>, e.g. *p2ea11.\r\n");
+            return;
+        }
+        (void)pll2_early_boot_test_cmd_arm((uint8_t)(cp - '0'), (uint8_t)(cm - '0'), 1u);
+        return;
+    }
+    /* "*p2er<p><m><NN>": arm NN attempts at that position/ordering, one per boot. */
+    if ((s_line_len == 9u) && (strncmp(s_line, "*p2er", 5) == 0)) {
+        char cp = s_line[5];
+        char cm = s_line[6];
+        uint16_t count;
+
+        if ((cp < '0') || (cp > '4') || (cm < '0') || (cm > '2') ||
+            (s_line[7] < '0') || (s_line[7] > '9') ||
+            (s_line[8] < '0') || (s_line[8] > '9')) {
+            printf("\"*p2er\" needs <position 0-4><method 0-2><2 digits>,"
+                   " e.g. *p2er1150.\r\n");
+            return;
+        }
+        count = (uint16_t)(((uint16_t)(s_line[7] - '0') * 10u) +
+                           (uint16_t)(s_line[8] - '0'));
+        if (count == 0u) {
+            printf("\"*p2er\" repeat count must be 01..99.\r\n");
+            return;
+        }
+        (void)pll2_early_boot_test_cmd_arm((uint8_t)(cp - '0'), (uint8_t)(cm - '0'), count);
+        return;
+    }
+#endif
+
     /* Spell out the *tq polarity here: the payload is the output enable, so 0000
      * silences and 0001 restores. Discovering that from the console beats having
      * to find it in the guide. */
@@ -336,6 +395,10 @@ static void process_line(void)
     printf("  *tq0000 (periodic output off) / *tq0001 (on)\r\n");
 #if HAL_STARTER_ENABLE_PLL2_RESTART_TEST
     printf("  ?p2, *p2, *p2d, *p2r0010/0100/1000, *p2x\r\n");
+#endif
+#if HAL_STARTER_ENABLE_PLL2_EARLY_BOOT_TEST
+    printf("  ?p2e, *p2ea<p><m>, *p2er<p><m><NN>, *p2eb<p>, *p2ex\r\n");
+    printf("    p=0..4 boot position, m=0 pinned / 1 restart / 2 stop+pinned\r\n");
 #endif
 }
 
