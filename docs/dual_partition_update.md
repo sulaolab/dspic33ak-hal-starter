@@ -207,17 +207,19 @@ must not run across NVM CPU stalls.
 
 Periodic output does **not** come back on its own -- not after a successful
 receive, not after a failed receive, and not after a failed commit. It only
-resumes on an explicit `*tq0000`, or a reset (a successful `*fca5` commit). The
+resumes on an explicit `*tq0001`, or a reset (a successful `*fca5` commit). The
 TDM/DMA smoke stream is the one thing that *does* restart automatically after a
 failed receive or a failed commit, since otherwise the demo would stay silently
 dead with no way back short of a reset; that restart is independent of the
 output toggle and happens either way.
 
-Use `*tq0000` / `*tq0001` any time, independent of the update workflow:
+Use `*tq0000` / `*tq0001` any time, independent of the update workflow. The
+payload is the *output enable*, so `0000` silences and `0001` restores (the same
+polarity the sibling Sonora console uses):
 
 ```text
-*tq0001   -- periodic starter output OFF
-*tq0000   -- periodic starter output ON
+*tq0000   -- periodic starter output OFF
+*tq0001   -- periodic starter output ON
 ```
 
 ## 5. Send `reflash_image.bin` with XMODEM
@@ -237,7 +239,7 @@ firmware.X\dist\dsPIC33AK512\production\reflash_image.bin
 Use XMODEM-CRC. **1K may be checked or unchecked** -- both work, and neither
 needs any particular file size.
 
-<img src="images/dual-partition-xmodem-1k-transfer.png" alt="Tera Term sending reflash_image.bin over XMODEM-1K: the console shows *fua5 accepted, the armed instructions, and the receiver's repeated C handshake characters, while the XMODEM Send dialog reports protocol XMODEM (1k), packet 62, 63488 bytes transferred at 16.38 KB/s, 75.6 percent complete" width="640">
+<img src="images/dual-partition-xmodem-1k-transfer.png" alt="Tera Term on COM12 sending reflash_image.bin over XMODEM-1K. The console shows *fua5 accepted, the armed instructions including the LED progress note, and the receiver's repeated C handshake characters; the XMODEM Send dialog reports protocol XMODEM (1k), packet 62, 63488 bytes transferred at 12.28 KB/s, 75.6 percent complete" width="640">
 
 A transfer in progress with **1K** checked. The dialog's packet count and byte
 total are Tera Term's own accounting of what it has sent.
@@ -264,7 +266,7 @@ one step per eighth of the payload, growing from **LED7 toward LED0**. The bar i
 the transfer ends, so it doubles as a result indicator at a glance: a full bar
 means the whole payload was received and programmed, and a partial bar shows how
 far a failed transfer got. LED0 goes back to being the heartbeat indicator after
-`*tq0000`.
+`*tq0001`.
 
 Progress is shown on the LEDs rather than as characters on the console because
 the XMODEM transport owns UART1 for the whole transfer: the sender is waiting for
@@ -297,13 +299,13 @@ Firmware receive: PASS
   payload crc  : ....
 Validation: PASS (DBFW manifest + xmodem-crc + flash read-back)
 Type *fca5 to activate the validated partition.
-Periodic starter output stays off. Type *tq0000 to resume it.
+Periodic starter output stays off. Type *tq0001 to resume it.
 ```
 
 At this point, the new firmware is present only in the inactive partition. The
 currently running partition remains selected until the commit command. Periodic
 output stays off either way (it does not resume on its own after a PASS or a
-FAIL); type `*tq0000` if you want it back before deciding whether to commit.
+FAIL); type `*tq0001` if you want it back before deciding whether to commit.
 
 > [!NOTE]
 > The commit authorization lives only in RAM. If the board resets or loses power
@@ -386,8 +388,8 @@ Other useful commands, usable any time on UART1:
 | Command | Effect |
 | --- | --- |
 | `?fp` | Print which partition is active, both BTSEQ words, and both UCA states. Read-only. |
-| `*tq0001` | Turn periodic starter output off, independent of `*fua5`/`*fca5`. |
-| `*tq0000` | Turn periodic starter output back on. |
+| `*tq0000` | Turn periodic starter output off, independent of `*fua5`/`*fca5`. |
+| `*tq0001` | Turn periodic starter output back on. |
 
 ## Troubleshooting
 

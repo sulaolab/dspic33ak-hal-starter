@@ -149,7 +149,7 @@ static void print_partition_status(void)
 //
 // The bar is deliberately NOT cleared when the transfer ends: a full bar means the
 // whole payload arrived, and a partial bar shows how far a failed transfer got,
-// which is useful at a glance. LED0 returns to heartbeat duty after *tq0000.
+// which is useful at a glance. LED0 returns to heartbeat duty after *tq0001.
 static void update_progress_leds(uint32_t done, uint32_t total)
 {
     uint8_t lit;
@@ -185,7 +185,7 @@ static void receive_firmware(void)
     fw_update_result_t result;
 
     /* Quiet is one-way from here: neither a successful nor a failed receive
-     * clears it. Only an explicit *tq0000, or a reset (a successful *fca5
+     * clears it. Only an explicit *tq0001, or a reset (a successful *fca5
      * commit), brings periodic output back. */
     s_quiet = true;
 #if HAL_STARTER_ENABLE_TDM_SMOKE_DEMO
@@ -214,7 +214,7 @@ static void receive_firmware(void)
         restart_tdm_after_failed_attempt();
         printf("Type *fua5 to retry.\r\n");
     }
-    printf("Periodic starter output stays off. Type *tq0000 to resume it.\r\n");
+    printf("Periodic starter output stays off. Type *tq0001 to resume it.\r\n");
 }
 
 static void commit_firmware(void)
@@ -245,7 +245,7 @@ static void commit_firmware(void)
         }
     }
     restart_tdm_after_failed_attempt();
-    printf("Periodic starter output stays off. Type *tq0000 to resume it.\r\n");
+    printf("Periodic starter output stays off. Type *tq0001 to resume it.\r\n");
 }
 
 static void process_line(void)
@@ -276,18 +276,22 @@ static void process_line(void)
         print_partition_status();
         return;
     }
-    if (strcmp(s_line, "*tq0000") == 0) {
+    if (strcmp(s_line, "*tq0001") == 0) {
         s_quiet = false;
         printf("\"*tq\" periodic starter output ON\r\n");
         return;
     }
-    if (strcmp(s_line, "*tq0001") == 0) {
+    if (strcmp(s_line, "*tq0000") == 0) {
         s_quiet = true;
         printf("\"*tq\" periodic starter output OFF\r\n");
         return;
     }
 
-    printf("Unknown command. Commands: *fua5, *fca5, ?fp, *tq0000/*tq0001\r\n");
+    /* Spell out the *tq polarity here: the payload is the output enable, so 0000
+     * silences and 0001 restores. Discovering that from the console beats having
+     * to find it in the guide. */
+    printf("Unknown command. Commands: *fua5, *fca5, ?fp,\r\n");
+    printf("  *tq0000 (periodic output off) / *tq0001 (on)\r\n");
 }
 
 static void begin_raw_file_discard(void)
