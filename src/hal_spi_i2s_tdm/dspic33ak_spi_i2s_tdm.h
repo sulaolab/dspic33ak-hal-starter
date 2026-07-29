@@ -103,7 +103,7 @@ typedef enum {
 } dspic33ak_spi_i2s_tdm_format_t;
 
 // Bit-clock / frame-sync role.
-//   SLAVE  : MSTEN=0, FRMSYNC=1 (FS input)   -- external BCLK/FS (Perseus today)
+//   SLAVE  : MSTEN=0, FRMSYNC=1 (FS input)   -- external BCLK/FS (upstream today)
 //   MASTER : MSTEN=1, FRMSYNC=0 (FS output)  -- self-clocked (starter target)
 typedef enum {
     DSPIC33AK_SPI_I2S_TDM_ROLE_SLAVE  = 0,
@@ -197,7 +197,7 @@ typedef struct dspic33ak_spi_i2s_tdm_inst_s dspic33ak_spi_i2s_tdm_inst_t;
 // `running` is the true stream-running state -- set by start(), cleared by stop().
 // It is DISTINCT from `active`: `active`
 // (is_active()) is the clock/source-readiness gate (e.g. external USB audio clock
-// present) that the Perseus main loop uses to decide whether streaming *should*
+// present) that the upstream main loop uses to decide whether streaming *should*
 // run, and it can read true while the stream is stopped. Read `running` for "is
 // the engine actually streaming", `active` for "is the clock source ready".
 typedef struct {

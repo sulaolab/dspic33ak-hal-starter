@@ -339,7 +339,7 @@ bool dspic33ak_spi_i2s_tdm_is_active( void )
 
     // Stream-readiness gate routed through the clock port. No port (or no
     // clock_source_ready hook) => always ready (self-clocked, no external gate).
-    // The Perseus platform wires this to the board's USB-audio clock readiness.
+    // The upstream platform wires this to the board's USB-audio clock readiness.
     // Pass the configured role. Before the first configure(), treat the transport
     // explicitly as SLAVE instead of relying on enum zero-initialization.
     if( ( stream->port != NULL ) && ( stream->port->clock_source_ready != NULL ) )
@@ -379,7 +379,7 @@ dspic33ak_spi_i2s_tdm_clock_event_t dspic33ak_spi_i2s_tdm_consume_clock_event( v
     const tdm_stream_t *stream = &s_stream;
 
     // Routed through the clock port. No port (or no hook) => NONE (no external
-    // clock to detect). The Perseus platform wires this to the board's RB15/CN edge.
+    // clock to detect). The upstream platform wires this to the board's RB15/CN edge.
     if( ( stream->port != NULL ) && ( stream->port->consume_clock_event != NULL ) )
     {
         return stream->port->consume_clock_event();
