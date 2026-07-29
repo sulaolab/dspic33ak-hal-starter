@@ -35,7 +35,7 @@
 
 /* ---- UART2 (PKOB4 "USB Serial Device" -- console output mirror only) ----
  *   U2TX = RH0 (RP113)
- * Same Curiosity motherboard + dsPIC33AK512 DIM as the perseus firmware; this is
+ * Same Curiosity motherboard + dsPIC33AK512 DIM as the upstream audio firmware; this is
  * the PKOB4 back-channel UART. TX mirrors console output. RX is intentionally
  * not routed or enabled so commands/XMODEM have one beginner-facing input port.
  */

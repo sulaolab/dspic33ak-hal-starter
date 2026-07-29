@@ -1,6 +1,6 @@
 # dspic33ak_spi_i2s_tdm — SPI framed-mode I2S/TDM transport HAL
 
-A compact, reusable SPI/I2S/TDM **transport** HAL for dsPIC33AK, carved from the Perseus
+A compact, reusable SPI/I2S/TDM **transport** HAL for dsPIC33AK, carved from the upstream
 audio project. It moves audio frames over a framed SPI peripheral with DMA ping-pong and
 a per-instance block callback. It is intentionally **small**: it does not try to be a
 turnkey "drop-in and forget" audio stack. Board-specific, failsafe, and CMSIS-SAI
@@ -66,7 +66,7 @@ needs.
   count, optional SPI3/4 rows or explicit SPI34 bank selection, per-instance DMA channels, and
   per-leg `SYNC_DOMAIN` defaults. `*.h_example` is never compiled.
 - The template is self-contained (no app-config dependency). A project MAY instead derive
-  the `DSPIC33AK_TDM_*` macros from its own app config (Perseus does this in
+  the `DSPIC33AK_TDM_*` macros from its own app config (the upstream project does this in
   `src/dspic33ak_spi_i2s_tdm_conf.h`); that is the integrator's choice and does not make
   the HAL core app-dependent (dependency is app → conf.h → HAL, never HAL → app).
 
@@ -148,7 +148,7 @@ TX is interrupt-less (no TX interrupt is enabled by the transport).
 
 State honestly:
 
-- The default Perseus configuration is stable (boot, blocks advancing, `miss=0`, audio
+- The default upstream configuration is stable (boot, blocks advancing, `miss=0`, audio
   unchanged).
 - An exhaustive format/role matrix test is **not** complete.
 - Validated / currently intended envelope:
@@ -160,7 +160,7 @@ State honestly:
     50%-duty FS) was bench-verified on a dsPIC33AK Curiosity board (BCLK/FS = 256, `miss=0`).
     Other master rate/format combinations should still be confirmed on the target board.
 - This snapshot is the **system-topology** model (transactional `configure_system()`,
-  `open()` with no role, per-domain framing validation), HW-verified in the upstream Perseus
+  `open()` with no role, per-domain framing validation), HW-verified in the upstream audio
   source (co-clocked A/B, 94% load, deterministic phase-locked startup, CMSIS single-instance
   loopback) and bench-verified via the starter on a dsPIC33AK Curiosity board (TDM8 master
   smoke, `FS_PULSE`/`FS_50PCT`, stop→restart, negative-config self-test matrix).

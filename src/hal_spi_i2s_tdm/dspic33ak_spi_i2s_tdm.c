@@ -422,7 +422,7 @@ TDM_COMPILEASSERT( TDM_ARRAY_SIZE(s_spi_legs) <= (size_t)TDM_SPI_INST_COUNT );
 
 // Per-instance geometry sanity (compile-time), one set per leg: slots/blk
 // fit their leg fields (uint8_t / uint16_t), the 2*slots*blk word count cannot overflow
-// int32 indexing, and the generated buffer is exactly that size. The Perseus rows use the
+// int32 indexing, and the generated buffer is exactly that size. The upstream rows use the
 // stream-wide macros (already range-checked in conf.h); these guard a standalone carve-out
 // that gives a row its own slots/blk -- so the per-instance-geometry promise has teeth.
 TDM_COMPILEASSERT( (DSPIC33AK_TDM_SLOTS_PER_FS) > 0 && (DSPIC33AK_TDM_SLOTS_PER_FS) <= 255 );
@@ -489,7 +489,7 @@ bool dspic33ak_spi_i2s_tdm_is_active( void )
 
     // Stream-readiness gate routed through the clock port. No port (or no
     // clock_source_ready hook) => always ready (self-clocked, no external gate).
-    // The Perseus platform wires this to the board's USB-audio clock readiness.
+    // The upstream platform wires this to the board's USB-audio clock readiness.
     // Pass the configured role. Before the first configure(), treat the transport
     // explicitly as SLAVE instead of relying on enum zero-initialization.
     if( ( stream->port != NULL ) && ( stream->port->clock_source_ready != NULL ) )
@@ -519,7 +519,7 @@ bool dspic33ak_spi_i2s_tdm_is_active( void )
  * it does NOT carry its own source-readiness. So even a nominally "independent" master domain
  * (e.g. an ASRC SPI2 on sync_domain 1) is gated on the primary leg's readiness here: if the
  * primary's external clock is not ready, start_domain() on any domain returns CLOCK_NOT_READY.
- * That matches the Perseus product policy ("no A clock -> hold the whole transport"). Per-domain
+ * That matches the upstream product policy ("no A clock -> hold the whole transport"). Per-domain
  * source readiness is intentionally NOT supported; revisit (a per-domain readiness hook) before
  * relying on truly independent async domains in a generic standalone reuse.
  */
@@ -1168,7 +1168,7 @@ bool dspic33ak_spi_i2s_tdm_configure_system( const dspic33ak_spi_i2s_tdm_leg_set
         // sync_domain must fit the 0..31 range that start_all_domains()'s 32-bit dedup/rollback
         // mask can track. A domain id >= 32 would be silently dropped from the started-mask, so
         // its legs could be started twice or skipped on rollback. Reject at configure (fail
-        // closed) rather than misbehave at start. (Perseus uses 0/1; this guards public reuse.)
+        // closed) rather than misbehave at start. (Upstream uses 0/1; this guards public reuse.)
         if( setups[i].sync_domain >= 32u )
         {
             tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_TOPOLOGY );
