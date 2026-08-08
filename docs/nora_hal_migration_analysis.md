@@ -254,7 +254,7 @@ were three deltas, because two of them are **behavioural, behind an unchanged
 name**:
 
 1. **`clear_rx_overflow` missing** (predicted). Ported upstream per the owner's
-   decision: sonora `feat/canfd-clear-rx-overflow` `c26ecb0` adds
+   decision: sonora `feat/canfd-isr-fixes-and-tdm-sumprof-gate` `c26ecb0` adds
    `nora_canfd_clear_rx_overflow()` *and* an `rx_overflow` field on
    `nora_canfd_bus_status_t` — the function alone would have been useless, since
    a polling caller could not see the sticky flag either.
@@ -288,7 +288,7 @@ that catches class 3 is reading the backend, or a hardware test that happens to
 assert on it — which this starter, unusually, has.
 
 Two sonora commits are therefore prerequisites of this step and are **not yet
-pushed**: `c26ecb0` and `427e406` on `feat/canfd-clear-rx-overflow`, in the
+pushed**: `c26ecb0` and `427e406` on `feat/canfd-isr-fixes-and-tdm-sumprof-gate`, in the
 worktree `_wt_nora_canfd_ovf` (a separate worktree because the mothership's main
 tree carries another session's uncommitted edits). Until they land in the
 mothership, this starter's `src/hal_can/` is *not* reproducible from sonora
