@@ -27,13 +27,13 @@ SFR names, or dsPIC33A register definitions.
 
 The current implementation is the dsPIC33A backend:
 
-- `nora_i2c_dspic33a_master.c`
-- `nora_i2c_dspic33a_slave.c`
-- `nora_i2c_dspic33a_common.c`
-- `nora_i2c_dspic33a_device.c`
-- `nora_i2c_dspic33a_reg.h`
-- `nora_i2c_dspic33a_internal.h`
-- `nora_i2c_dspic33a_device.h`
+- `nora_i2c_dspic33ak_master.c`
+- `nora_i2c_dspic33ak_slave.c`
+- `nora_i2c_dspic33ak_common.c`
+- `nora_i2c_dspic33ak_device.c`
+- `nora_i2c_dspic33ak_reg.h`
+- `nora_i2c_dspic33ak_internal.h`
+- `nora_i2c_dspic33ak_device.h`
 
 The last two headers and the register header are backend-internal. They are not
 application include files. A CK backend may implement the same public API while

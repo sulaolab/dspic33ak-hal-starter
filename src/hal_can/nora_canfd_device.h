@@ -4,13 +4,13 @@
  *
  * Maps an instance enum to its register pointer table. This is the only
  * boundary between the instance-agnostic HAL logic and the concrete MCU
- * register set; only nora_canfd_device_dspic33a.c names raw C1.../C2... symbols.
+ * register set; only nora_canfd_device_dspic33ak.c names raw C1.../C2... symbols.
  */
 #ifndef NORA_CANFD_DEVICE_H
 #define NORA_CANFD_DEVICE_H
 
 #include "nora_canfd.h"
-#include "nora_canfd_dspic33a_reg.h"
+#include "nora_canfd_dspic33ak_reg.h"
 
 #ifdef __cplusplus
 extern "C" {

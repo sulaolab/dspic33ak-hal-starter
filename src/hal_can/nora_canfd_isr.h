@@ -5,7 +5,7 @@
  * This file is entirely additive and OPTIONAL. The basic CAN HAL
  * (nora_canfd_node.h: blocking init / transmit / receive) works on its own
  * and is unchanged by this layer - a user who only needs simple blocking CAN
- * never has to include this header or compile nora_canfd_isr_dspic33a.c.
+ * never has to include this header or compile nora_canfd_isr_dspic33ak.c.
  *
  * This layer adds what an event-driven driver needs (and what a CMSIS-Driver CAN
  * wrapper maps onto): a user event callback, interrupt enable/disable, a queued

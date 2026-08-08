@@ -4,7 +4,7 @@
 //===========================================================
 // Public diagnostics contract for the native SPI/I2S/TDM transport. It exposes per-stream
 // health counters and ISR load snapshots only. The dsPIC33A TDMsum state and ISR fast path live
-// in nora_spi_i2s_tdm_dspic33a_diag_fast.h and are not part of this public contract.
+// in nora_spi_i2s_tdm_dspic33ak_diag_fast.h and are not part of this public contract.
 //
 // CONCURRENCY: counters are updated from the block-completion ISR. The 32-bit reads in
 // *_get_load()/*_read_counts() are NOT atomic on this 16-bit core, so the CALLER must mask the

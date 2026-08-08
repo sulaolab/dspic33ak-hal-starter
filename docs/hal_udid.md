@@ -1,6 +1,6 @@
 # hal_udid -- dsPIC33AK Unique Device ID (board-individual identity)
 
-`src/hal_udid/nora_udid_dspic33a.c / nora_udid.h` reads the dsPIC33AK **UDID**: a 128-bit,
+`src/hal_udid/nora_udid_dspic33ak.c / nora_udid.h` reads the dsPIC33AK **UDID**: a 128-bit,
 factory-programmed, read-only value that is **unique per physical die**. Use it to
 tell one board apart from another (provisioning, per-unit logs, "which board am I?"
 diagnostics).

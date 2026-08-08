@@ -3,7 +3,7 @@
 
 //===========================================================
 // nora_spi_i2s_tdm.h = the public native SPI/I2S/TDM transport contract. Its dsPIC33A
-// implementation lives in nora_spi_i2s_tdm_dspic33a.*. The same source is published standalone
+// implementation lives in nora_spi_i2s_tdm_dspic33ak.*. The same source is published standalone
 // and vendored into the starter project and the CMSIS-SAI driver.
 // It does: SPI framed-mode (I2S/TDM) setup, DMA + ping-pong buffers, block callback,
 // start/stop/configure/get_status, and deadline-miss + load diagnostics. It is RATE-AGNOSTIC

@@ -12,7 +12,7 @@ callbacks, and runtime status without exposing compiler SFR types or register na
   console UART or require one logical instance to map to the same physical UART on
   every NORA-supported device.
 - The dsPIC33A backend owns register access, IRQ mappings and device availability.
-  Its headers and source use explicit `nora_uart_dspic33a_*` names.
+  Its headers and source use explicit `nora_uart_dspic33ak_*` names.
 - Platform-owned interrupt vectors forward to `nora_uart_rx_irq_handler()` and
   `nora_uart_tx_irq_handler()`. The handlers are ordinary functions, not vectors.
 

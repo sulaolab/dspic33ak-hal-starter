@@ -53,58 +53,58 @@
         <itemPath>../src/fw_update/xmodem.h</itemPath>
       </logicalFolder>
       <logicalFolder name="f6" displayName="hal_can" projectFiles="true">
-        <itemPath>../src/hal_can/nora_canfd_common_dspic33a.c</itemPath>
-        <itemPath>../src/hal_can/nora_canfd_device_dspic33a.c</itemPath>
-        <itemPath>../src/hal_can/nora_canfd_node_dspic33a.c</itemPath>
-        <itemPath>../src/hal_can/nora_canfd_isr_dspic33a.c</itemPath>
+        <itemPath>../src/hal_can/nora_canfd_common_dspic33ak.c</itemPath>
+        <itemPath>../src/hal_can/nora_canfd_device_dspic33ak.c</itemPath>
+        <itemPath>../src/hal_can/nora_canfd_node_dspic33ak.c</itemPath>
+        <itemPath>../src/hal_can/nora_canfd_isr_dspic33ak.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f22" displayName="hal_clock" projectFiles="true">
         <itemPath>../src/hal_clock/nora_clock.h</itemPath>
         <itemPath>../src/hal_clock/nora_clock_device.h</itemPath>
-        <itemPath>../src/hal_clock/nora_clock_device_dspic33a.c</itemPath>
-        <itemPath>../src/hal_clock/nora_clock_dspic33a.c</itemPath>
-        <itemPath>../src/hal_clock/nora_clock_dspic33a.h</itemPath>
-        <itemPath>../src/hal_clock/nora_clock_dspic33a_reg.c</itemPath>
-        <itemPath>../src/hal_clock/nora_clock_dspic33a_reg.h</itemPath>
+        <itemPath>../src/hal_clock/nora_clock_device_dspic33ak.c</itemPath>
+        <itemPath>../src/hal_clock/nora_clock_dspic33ak.c</itemPath>
+        <itemPath>../src/hal_clock/nora_clock_dspic33ak.h</itemPath>
+        <itemPath>../src/hal_clock/nora_clock_dspic33ak_reg.c</itemPath>
+        <itemPath>../src/hal_clock/nora_clock_dspic33ak_reg.h</itemPath>
       </logicalFolder>
       <logicalFolder name="f20" displayName="hal_dma" projectFiles="true">
-        <itemPath>../src/hal_dma/nora_dma_dspic33a.c</itemPath>
+        <itemPath>../src/hal_dma/nora_dma_dspic33ak.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f3" displayName="hal_gpio" projectFiles="true">
-        <itemPath>../src/hal_gpio/nora_gpio_dspic33a.c</itemPath>
-        <itemPath>../src/hal_gpio/nora_gpio_event_dspic33a.c</itemPath>
-        <itemPath>../src/hal_gpio/nora_pps_dspic33a.c</itemPath>
+        <itemPath>../src/hal_gpio/nora_gpio_dspic33ak.c</itemPath>
+        <itemPath>../src/hal_gpio/nora_gpio_event_dspic33ak.c</itemPath>
+        <itemPath>../src/hal_gpio/nora_pps_dspic33ak.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f10" displayName="hal_i2c" projectFiles="true">
-        <itemPath>../src/hal_i2c/nora_i2c_dspic33a_common.c</itemPath>
-        <itemPath>../src/hal_i2c/nora_i2c_dspic33a_master.c</itemPath>
-        <itemPath>../src/hal_i2c/nora_i2c_dspic33a_slave.c</itemPath>
-        <itemPath>../src/hal_i2c/nora_i2c_dspic33a_device.c</itemPath>
+        <itemPath>../src/hal_i2c/nora_i2c_dspic33ak_common.c</itemPath>
+        <itemPath>../src/hal_i2c/nora_i2c_dspic33ak_master.c</itemPath>
+        <itemPath>../src/hal_i2c/nora_i2c_dspic33ak_slave.c</itemPath>
+        <itemPath>../src/hal_i2c/nora_i2c_dspic33ak_device.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f24" displayName="hal_nvm" projectFiles="true">
-        <itemPath>../src/hal_nvm/nora_nvm_dspic33a.c</itemPath>
+        <itemPath>../src/hal_nvm/nora_nvm_dspic33ak.c</itemPath>
         <itemPath>../src/hal_nvm/nora_nvm.h</itemPath>
       </logicalFolder>
       <logicalFolder name="f9" displayName="hal_spi" projectFiles="true">
-        <itemPath>../src/hal_spi/nora_spi_dspic33a.c</itemPath>
+        <itemPath>../src/hal_spi/nora_spi_dspic33ak.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f21" displayName="hal_spi_i2s_tdm" projectFiles="true">
-        <itemPath>../src/hal_spi_i2s_tdm/nora_spi_i2s_tdm_dspic33a.c</itemPath>
-        <itemPath>../src/hal_spi_i2s_tdm/nora_spi_i2s_tdm_dspic33a_hw.c</itemPath>
-        <itemPath>../src/hal_spi_i2s_tdm/nora_spi_i2s_tdm_dspic33a_fs_clc.c</itemPath>
-        <itemPath>../src/hal_spi_i2s_tdm/nora_spi_i2s_tdm_dspic33a_diag.c</itemPath>
+        <itemPath>../src/hal_spi_i2s_tdm/nora_spi_i2s_tdm_dspic33ak.c</itemPath>
+        <itemPath>../src/hal_spi_i2s_tdm/nora_spi_i2s_tdm_dspic33ak_hw.c</itemPath>
+        <itemPath>../src/hal_spi_i2s_tdm/nora_spi_i2s_tdm_dspic33ak_fs_clc.c</itemPath>
+        <itemPath>../src/hal_spi_i2s_tdm/nora_spi_i2s_tdm_dspic33ak_diag.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f7" displayName="hal_timer" projectFiles="true">
-        <itemPath>../src/hal_timer/nora_tick_timer_dspic33a.c</itemPath>
-        <itemPath>../src/hal_timer/nora_high_res_timer_dspic33a.c</itemPath>
+        <itemPath>../src/hal_timer/nora_tick_timer_dspic33ak.c</itemPath>
+        <itemPath>../src/hal_timer/nora_high_res_timer_dspic33ak.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f5" displayName="hal_uart" projectFiles="true">
-        <itemPath>../src/hal_uart/nora_uart_dspic33a.c</itemPath>
-        <itemPath>../src/hal_uart/nora_uart_dspic33a_device.c</itemPath>
-        <itemPath>../src/hal_uart/nora_uart_dspic33a_rx_isr_ring.c</itemPath>
+        <itemPath>../src/hal_uart/nora_uart_dspic33ak.c</itemPath>
+        <itemPath>../src/hal_uart/nora_uart_dspic33ak_device.c</itemPath>
+        <itemPath>../src/hal_uart/nora_uart_dspic33ak_rx_isr_ring.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f8" displayName="hal_udid" projectFiles="true">
-        <itemPath>../src/hal_udid/nora_udid_dspic33a.c</itemPath>
+        <itemPath>../src/hal_udid/nora_udid_dspic33ak.c</itemPath>
       </logicalFolder>
       <itemPath>../src/nora_spi_i2s_tdm_conf.h</itemPath>
       <itemPath>../src/board.c</itemPath>

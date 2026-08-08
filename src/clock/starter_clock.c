@@ -1,11 +1,11 @@
 #include "starter_clock.h"
 
 #include "nora_clock.h"
-#include "nora_clock_dspic33a.h"   /* CLKGEN: AK-specific, board bring-up only */
+#include "nora_clock_dspic33ak.h"   /* CLKGEN: AK-specific, board bring-up only */
 
 #define STARTER_CLOCK_FRC_HZ (8000000UL)
 
-static bool configure_app_clkgen(nora_clock_dspic33a_clkgen_t clkgen);
+static bool configure_app_clkgen(nora_clock_dspic33ak_clkgen_t clkgen);
 
 bool starter_clock_init(void)
 {
@@ -26,31 +26,31 @@ bool starter_clock_init(void)
         return false;
     }
 
-    return configure_app_clkgen(NORA_CLOCK_DSPIC33A_CLKGEN_1) &&
-           configure_app_clkgen(NORA_CLOCK_DSPIC33A_CLKGEN_5) &&
-           configure_app_clkgen(NORA_CLOCK_DSPIC33A_CLKGEN_6) &&
-           configure_app_clkgen(NORA_CLOCK_DSPIC33A_CLKGEN_8) &&
-           configure_app_clkgen(NORA_CLOCK_DSPIC33A_CLKGEN_9);
+    return configure_app_clkgen(NORA_CLOCK_DSPIC33AK_CLKGEN_1) &&
+           configure_app_clkgen(NORA_CLOCK_DSPIC33AK_CLKGEN_5) &&
+           configure_app_clkgen(NORA_CLOCK_DSPIC33AK_CLKGEN_6) &&
+           configure_app_clkgen(NORA_CLOCK_DSPIC33AK_CLKGEN_8) &&
+           configure_app_clkgen(NORA_CLOCK_DSPIC33AK_CLKGEN_9);
 }
 
 bool starter_clock_can_init(void)
 {
-    const nora_clock_dspic33a_clkgen_config_t can_clk = {
+    const nora_clock_dspic33ak_clkgen_config_t can_clk = {
         .source = NORA_CLOCK_SOURCE_PLL1,
         .divide_by = 10u,
     };
 
-    return nora_clock_dspic33a_clkgen_configure(
-               NORA_CLOCK_DSPIC33A_CLKGEN_10,
+    return nora_clock_dspic33ak_clkgen_configure(
+               NORA_CLOCK_DSPIC33AK_CLKGEN_10,
                &can_clk) == NORA_CLOCK_OK;
 }
 
-static bool configure_app_clkgen(nora_clock_dspic33a_clkgen_t clkgen)
+static bool configure_app_clkgen(nora_clock_dspic33ak_clkgen_t clkgen)
 {
-    const nora_clock_dspic33a_clkgen_config_t app_clk = {
+    const nora_clock_dspic33ak_clkgen_config_t app_clk = {
         .source = NORA_CLOCK_SOURCE_PLL1,
         .divide_by = 1u,
     };
 
-    return nora_clock_dspic33a_clkgen_configure(clkgen, &app_clk) == NORA_CLOCK_OK;
+    return nora_clock_dspic33ak_clkgen_configure(clkgen, &app_clk) == NORA_CLOCK_OK;
 }

@@ -36,7 +36,7 @@
  * required by this codebase (U1TX/RX, U2TX/RX, SPI1-4, CLC1-3, PWM1H/2H/3H,
  * PWM5H/5L-8H/8L, REFI1, CAN1TX/RX); they do NOT represent every PPS-capable
  * peripheral the device supports. Add a new signal by extending the enum and the
- * matching case in nora_pps_dspic33a.c. Routing a signal absent on the selected
+ * matching case in nora_pps_dspic33ak.c. Routing a signal absent on the selected
  * device returns false.
  *
  * Pairing with hal_gpio: PPS routing does NOT configure the pin's direction or

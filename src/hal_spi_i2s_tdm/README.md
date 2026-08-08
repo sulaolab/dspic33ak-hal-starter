@@ -106,7 +106,7 @@ silicon facts in the HW layer (`nora_spi_i2s_tdm_hw.{c,h}`):
 - DMA trigger CHSEL values
 - CPU IRQ `IEC`/`IFS` masks
 
-The vendor part macro is confined to one `NORA_SPI_I2S_TDM_DSPIC33A_DEVICE` adapter
+The vendor part macro is confined to one `NORA_SPI_I2S_TDM_DSPIC33AK_DEVICE` adapter
 (opaque-tag derivation); app/HW code selects on that, not on the raw `__dsPIC33AK*__`.
 
 ## 6. DMA and SPI transport-health diagnostics

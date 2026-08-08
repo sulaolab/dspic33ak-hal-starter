@@ -7,17 +7,43 @@ Donor: `dsp-sonora-mothership` @ `2d02359` (`main`).
 ## 1. What NORA-HAL is
 
 `docs/nora_hal_public_api.md` in sonora: NORA = Native On-chip Resource
-Assistant, the public HAL brand for the dsPIC33A family (AK + CK).
+Assistant, the public HAL brand for the on-chip resource layer shared by
+dsPIC33AK (dsPIC33**A** family) and dsPIC33CK (dsPIC33**C** family) projects.
+The brand spans the two families; it is not a synonym for either one, and NORA
+is not "the dsPIC33A HAL". (This line used to read "the public HAL brand for the
+dsPIC33A family (AK + CK)", which is where the baseless `_dspic33a` backend tag
+came from — see §1a.)
 
 - public headers `nora_<periph>.h`; functions/types `nora_*`; macros `NORA_*`
 - target backends keep a silicon suffix in the **file/implementation** name
-  (`nora_gpio_dspic33a.c`) — never in a public header/type/function/macro
+  (`nora_gpio_dspic33ak.c`) — never in a public header/type/function/macro
 - ISR fast paths: `static inline` in `<module>_<backend>_fast.h`, named
   `<portable name>_hot`; the out-of-line portable version calls the inline
 - backend-private helpers with no portable twin keep the chip in their name
-  (`nora_uart_dspic33a_reg_set`, `nora_ccp_dspic33a_hot_regs`)
+  (`nora_uart_dspic33ak_reg_set`, `nora_ccp_dspic33ak_hot_regs`)
 - migration rule: **no compatibility aliases** — the old `dspic33ak_*` /
   `DSPIC33AK_*` public namespace is replaced, not shadowed
+
+### 1a. The backend tag is `_dspic33ak`, not `_dspic33a` (2026-08-09)
+
+This clone was migrated with a `_dspic33a` backend tag, taken from the broken
+sentence quoted above. It has been normalised to **`_dspic33ak`**, naming the
+part series the backend is actually written and validated against: nothing
+validates a family-wide dsPIC33A backend, and the code is per-part where it has
+to be (`NORA_SPI_I2S_TDM_DSPIC33AK_DEV_AK512` / `..._DEV_AK128`). There is no
+`_dspic33c` counterpart either — the CK project keeps `dspic33ck_*` as a
+**declared divergence** (audited: zero identifiers, macros or file names there
+carry a bare `33c`), so we never write the short form `dspic33c` in our own
+names. `dsPIC33A` / `dsPIC33C` still appear in this repo where they are facts
+about the silicon ("CLKGEN is a dsPIC33A block") or real Microchip paths
+(`xc16/support/dsPIC33A/h/…`); those are left alone.
+
+sonora normalised first (it is the superset), and this clone follows as a
+**re-sync of the same bytes** rather than an independent rename — after the
+rename, 69 of the 71 shared `src/hal_*` files are byte-identical to sonora's,
+the two exceptions being `hal_spi_i2s_tdm/README.md` and `hal_timer/README.md`,
+which already differed before it. The plan and sonora's verification numbers are
+in sonora `docs/nora_chiptag_normalisation_and_standalone_publish.md`.
 
 ## 2. Module inventory
 
@@ -43,8 +69,8 @@ Compared exported `dspic33ak_*` vs `nora_*` names with the prefix normalised.
 | hal_spi_i2s_tdm | ✅ 56 | +12 (diag deadline, `sumprof_*`, `tdmsum_*`) | – |
 | hal_udid | ✅ | (header-declared in sonora) | – |
 | hal_can | ✅ 31 | – | `canfd_clear_rx_overflow` |
-| hal_clock | mostly | +`get_fcy_hz`, `get_fosc_hz`, `switch_source` | `clkgen_configure` → renamed `nora_clock_dspic33a_clkgen_configure` |
-| hal_uart | 32 shared | – | 24 names moved to backend-private `nora_uart_dspic33a_*` (`reg_*`, `rx_isr_*`, `device_*`, `get_device`, `instance_is_present`, `async_*`) |
+| hal_clock | mostly | +`get_fcy_hz`, `get_fosc_hz`, `switch_source` | `clkgen_configure` → renamed `nora_clock_dspic33ak_clkgen_configure` |
+| hal_uart | 32 shared | – | 24 names moved to backend-private `nora_uart_dspic33ak_*` (`reg_*`, `rx_isr_*`, `device_*`, `get_device`, `instance_is_present`, `async_*`) |
 | hal_i2c | 53 shared | +7 `nora_i2c_device_*_irq_*` | 4 `nora_i2c_reg_irq_*` → replaced by the `device_*_irq_*` set |
 
 So the substance of the work is **three real deltas**, not eleven:
@@ -52,7 +78,7 @@ So the substance of the work is **three real deltas**, not eleven:
 1. **uart** — the starter's `*_reg_*` / `*_rx_isr_*` / `*_device_*` helpers are
    *portable-looking* names in the starter but *backend-private* in NORA.
    Consumers (`src/console`, `src/app`) that call them must move to
-   `nora_uart_dspic33a_*` or stop calling them.
+   `nora_uart_dspic33ak_*` or stop calling them.
 2. **i2c** — starter's `reg_irq_*` quartet is superseded by sonora's
    per-direction `device_*_irq_*` set. A call-site translation, not a
    feature loss.
@@ -124,7 +150,7 @@ header (or compiling it out).
 ## 8. Module ordering constraint (measured)
 
 Cross-module `#include` among sonora `src/hal_*` is a single edge:
-`hal_spi_i2s_tdm` → `nora_dma.h`, `nora_dma_dspic33a_fast.h`,
+`hal_spi_i2s_tdm` → `nora_dma.h`, `nora_dma_dspic33ak_fast.h`,
 `nora_high_res_timer.h`, `nora_tick_timer.h`. Every other module includes only
 its own headers. So the §6 order is sound as long as **dma and timer precede
 spi_i2s_tdm**; all other modules are independent and may be reordered freely.
@@ -185,28 +211,28 @@ profiling behind a conf macro upstream in Sonora. The last one was chosen — se
 ## 11b. Clock: CLKGEN left the portable header (step 4, measured)
 
 The §3 row "one renamed entry point" understated it. NORA **moved the whole
-CLKGEN surface out of `nora_clock.h` into `nora_clock_dspic33a.h`** — the enum,
+CLKGEN surface out of `nora_clock.h` into `nora_clock_dspic33ak.h`** — the enum,
 the config struct and the call — on the grounds that CLKGEN is a dsPIC33A block
 with no CK counterpart, so a portable header could not honour it. Concretely:
 
 | starter | NORA |
 |---|---|
-| `dspic33ak_clock_clkgen_t` | `nora_clock_dspic33a_clkgen_t` (+ `CLKGEN_13`, the CCP time base) |
-| `dspic33ak_clock_clkgen_config_t` | `nora_clock_dspic33a_clkgen_config_t` (fields unchanged: `source`, `divide_by`) |
-| `dspic33ak_clock_clkgen_configure()` | `nora_clock_dspic33a_clkgen_configure()` |
+| `dspic33ak_clock_clkgen_t` | `nora_clock_dspic33ak_clkgen_t` (+ `CLKGEN_13`, the CCP time base) |
+| `dspic33ak_clock_clkgen_config_t` | `nora_clock_dspic33ak_clkgen_config_t` (fields unchanged: `source`, `divide_by`) |
+| `dspic33ak_clock_clkgen_configure()` | `nora_clock_dspic33ak_clkgen_configure()` |
 | — | `nora_clock_switch_source()`, `nora_clock_get_fosc_hz()`, `nora_clock_get_fcy_hz()` |
 | `DSPIC33AK_CLOCK_ERR_TIMEOUT` (one value) | + 10 specific `..._ERR_*_TIMEOUT` / `..._READBACK` values |
 
 `nora_clock_pll_config_t` and the source/PLL enums are unchanged, so
 `starter_clock_init()`'s PLL1 call is a pure prefix swap. The only structural
 edit in the consumer is the second include: `src/clock/starter_clock.c` now
-includes `nora_clock_dspic33a.h` as well, which is correct by NORA's own rule —
+includes `nora_clock_dspic33ak.h` as well, which is correct by NORA's own rule —
 it is board bring-up code, and it now says so at the call site.
 
-File-name mapping (starter → NORA): `dspic33ak_clock.c` → `nora_clock_dspic33a.c`,
-`dspic33ak_clock_device.c` → `nora_clock_device_dspic33a.c`,
-`dspic33ak_clock_reg.*` → `nora_clock_dspic33a_reg.*`, plus the new
-`nora_clock_dspic33a.h`. Seven files where the starter had six.
+File-name mapping (starter → NORA): `dspic33ak_clock.c` → `nora_clock_dspic33ak.c`,
+`dspic33ak_clock_device.c` → `nora_clock_device_dspic33ak.c`,
+`dspic33ak_clock_reg.*` → `nora_clock_dspic33ak_reg.*`, plus the new
+`nora_clock_dspic33ak.h`. Seven files where the starter had six.
 
 `docs/clock_hal_integration.md` was left untouched on purpose: it is a
 historical import record (blob SHA-1s, "removed legacy files"), so renaming
@@ -227,7 +253,7 @@ which conflates "this name changed" with "a caller has to change".
 - **uart** — of the 32 identifiers the starter's consumers actually name, 31
   map by prefix swap and all 31 live in `nora_uart.h`; the 32nd is the
   `..._rx_isr_ring.h` **filename**. The 24 names that picked up the
-  `dspic33a` tag are the ring/reg/device/async internals, which no consumer
+  `dspic33ak` tag are the ring/reg/device/async internals, which no consumer
   called. One real edit: `nora_uart_rx_irq_handler()` moved *out* of the ring
   header *into* `nora_uart.h`, which left `src/console/uart_irq.c`'s include of
   the backend ring header dead, so it was dropped.
@@ -349,12 +375,12 @@ board whose I2C2/I2C3 pins are free.
 
 §11 originally said of `sumprof_*` / `tdmsum_*`: *"Nothing in the starter calls
 them."* **That was wrong**, and wrong in the direction that matters. The four
-call sites are inside `tdm_rx_block()` in `nora_spi_i2s_tdm_dspic33a.c` — the
+call sites are inside `tdm_rx_block()` in `nora_spi_i2s_tdm_dspic33ak.c` — the
 TDM RX-block ISR — bracketing every block:
 
 ```c
 const bool sum_meas = nora_high_res_timer_is_initialized();
-if( sum_meas ) { nora_spi_i2s_tdm_dspic33a_sumprof_enter( nora_high_res_timer_get_count() ); }
+if( sum_meas ) { nora_spi_i2s_tdm_dspic33ak_sumprof_enter( nora_high_res_timer_get_count() ); }
 ```
 
 The only gate was high-res-timer availability, which the starter satisfies. So
@@ -368,7 +394,7 @@ Fixed **upstream in Sonora**, per the owner's ruling, as a new compile-time
 config macro `NORA_TDM_SUMPROF` (`nora_spi_i2s_tdm_conf.h`, 0/1, `#ifndef`-
 guarded, **default 1** so the mothership is unaffected). At 0 the following are
 not compiled at all: the profiler state + inline hooks in
-`nora_spi_i2s_tdm_dspic33a_diag_fast.h`, its three out-of-line bodies in
+`nora_spi_i2s_tdm_dspic33ak_diag_fast.h`, its three out-of-line bodies in
 `..._diag.c`, the four ISR call sites, the three public `nora_spi_i2s_tdm_tdmsum_*`
 entry points (declaration and definition), and their all-leg RX-DMA-IE masking
 helpers. Sonora's own `audio_transport.c` TDMsum telemetry line is gated to
@@ -463,12 +489,12 @@ byte-identical to Sonora):
 - `nora_nvm.h` keeps `NORA_NVM_PageErase` / `NORA_NVM_ReadWord` / … —
   callable functions spelled `NORA_*`, which `nora_hal_public_api.md` reserves
   for compile-time identifiers only.
-- `nora_clock_dspic33a.h:30` writes a path as `board/clock/*` inside a block
+- `nora_clock_dspic33ak.h:30` writes a path as `board/clock/*` inside a block
   comment, so the compiler emits `warning: "/*" within comment [-Wcomment]`
   three times per build. Cosmetic, but it is the only warning this project
   produces; fixing it belongs upstream.
-- `nora_dma_dspic33a_reg.h:11` refers to a file called `dspic33ak_i2c_reg.h`,
-  which no longer exists on either side (it is `nora_i2c_dspic33a_reg.h` now).
-- `nora_spi_dspic33a.c` still uses file-local `DSPIC33AK_SPI_REG_ROW` /
-  `DSPIC33AK_SPI_ARRAY_LEN` macros; `nora_dma_dspic33a_reg.h` likewise keeps
+- `nora_dma_dspic33ak_reg.h:11` refers to a file called `dspic33ak_i2c_reg.h`,
+  which no longer exists on either side (it is `nora_i2c_dspic33ak_reg.h` now).
+- `nora_spi_dspic33ak.c` still uses file-local `DSPIC33AK_SPI_REG_ROW` /
+  `DSPIC33AK_SPI_ARRAY_LEN` macros; `nora_dma_dspic33ak_reg.h` likewise keeps
   `DSPIC33AK_DMA_*` bit macros. Private, but leftovers of the rename.

@@ -8,7 +8,7 @@
 #define NORA_CANFD_COMMON_H
 
 #include "nora_canfd.h"
-#include "nora_canfd_dspic33a_reg.h"
+#include "nora_canfd_dspic33ak_reg.h"
 
 #ifdef __cplusplus
 extern "C" {
