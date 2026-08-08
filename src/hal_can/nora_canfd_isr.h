@@ -108,7 +108,12 @@ nora_canfd_status_t nora_canfd_isr_set_callback(
 nora_canfd_status_t nora_canfd_isr_enable(nora_canfd_instance_t inst,
                                                     uint8_t priority);
 
-/** Disable the top-level CPU interrupt and the module interrupt sources. */
+/**
+ * Disable the top-level CPU interrupt (all three lines) and the module interrupt sources.
+ * Also revokes async TX: nora_canfd_tx_start() returns NORA_CANFD_ERR_SEQUENCE until the
+ * next nora_canfd_isr_enable(), so nothing can re-arm the TX CPU line behind this call.
+ * The blocking nora_canfd_transmit() is unaffected.
+ */
 nora_canfd_status_t nora_canfd_isr_disable(nora_canfd_instance_t inst);
 
 /* ---------------------------------------------------------------------- */
@@ -119,6 +124,12 @@ nora_canfd_status_t nora_canfd_isr_disable(nora_canfd_instance_t inst);
  * Queue @p frame into the TX queue (same path as nora_canfd_transmit) and
  * arm the TXQ-empty interrupt so NORA_CANFD_EVENT_TX_COMPLETE fires once
  * all queued frames have actually been transmitted on the bus.
+ *
+ * Requires the event layer to be enabled: returns NORA_CANFD_ERR_SEQUENCE if called
+ * before nora_canfd_isr_enable() or after nora_canfd_isr_disable(). Completion is
+ * reported only through the event callback, and arming it re-enables the TX CPU line -
+ * so an isr_disable() must not be undone from here. Use the blocking
+ * nora_canfd_transmit() to send with interrupts off.
  *
  * This is NOT fully asynchronous: it goes through nora_canfd_transmit(), so
  * if the TX queue is full it first blocks for queue space (honoring the

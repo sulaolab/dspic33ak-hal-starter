@@ -146,6 +146,7 @@ bool can_rx_isr_selftest_run(void)
     bool overflow_cb;
     bool overflow_ok;
     bool tx_line_off;
+    bool tx_start_refused;
     uint32_t phase2_drained;
     uint8_t i;
 
@@ -191,6 +192,20 @@ bool can_rx_isr_selftest_run(void)
      *   - CALLBACK: re-arm, and the pending overflow + not-empty flags fire one
      *     callback that reports RX_OVERFLOW (and drains the held frames). */
     (void)nora_canfd_isr_disable(NORA_CANFD_INST_1);
+
+    /* While disabled, async TX must stay refused. tx_start() arms the TX CPU line, so if it
+     * ran here it would silently undo the isr_disable() above (at the priority isr_enable()
+     * last recorded). Check both the return code and the line itself. No frame is queued on
+     * the refusal, so this does not disturb the overflow phase that follows. */
+    tx_start_refused = false;
+    {
+        nora_canfd_frame_t probe;
+        rxisr_build(0x10u, 8u, &probe);
+        tx_start_refused =
+            (nora_canfd_tx_start(NORA_CANFD_INST_1, &probe) == NORA_CANFD_ERR_SEQUENCE)
+            && rxisr_tx_line_disabled();
+    }
+
     (void)nora_canfd_clear_rx_overflow(NORA_CANFD_INST_1);
     g_ctx.rx_frames = 0u;          /* count only phase-2 frames from here */
     for (i = 0u; i < RXISR_OVERFLOW_TX; i++) {
@@ -222,6 +237,7 @@ bool can_rx_isr_selftest_run(void)
            overflow_status ? "yes" : "no", overflow_cb ? "yes" : "no",
            (unsigned long)phase2_drained, (unsigned)RXISR_OVERFLOW_TX);
     printf("   TX interrupt line  : %s\n", tx_line_off ? "disabled (as required)" : "ENABLED (unexpected)");
+    printf("   tx_start when off  : %s\n", tx_start_refused ? "refused, line still off" : "ACCEPTED (unexpected)");
 
-    return callback_ok && content_ok && overflow_ok && tx_line_off;
+    return callback_ok && content_ok && overflow_ok && tx_line_off && tx_start_refused;
 }

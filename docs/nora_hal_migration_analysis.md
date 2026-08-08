@@ -385,6 +385,49 @@ function, physical exclusion is the only way to measure this honestly — the ga
 starter's single-leg occupancy, so no visible capability was lost. The ISR-cycle
 saving was not measured on hardware.
 
+## 11g. Review round 1 (AK side): the TX line had a second way back on
+
+The reviewer approved `c26ecb0` and the `NORA_TDM_SUMPROF` gate, and found one
+real defect in `427e406` — the fix for "`isr_enable()` enables the TX CPU line"
+closed only the *enable* route:
+
+```c
+nora_canfd_isr_disable(inst);      /* all three CPU lines + module sources off */
+nora_canfd_tx_start(inst, &f);     /* ... re-arms the TX CPU line anyway */
+```
+
+`tx_start()` calls `irq_tx_line_enable()` unconditionally, and the priority it
+uses is `g_irq_priority[inst]`, which `isr_disable()` never forgot. So a caller
+that deliberately disabled interrupts got one back, together with the
+`_CxTXInterrupt`-vector requirement it had avoided.
+
+Fixed upstream (sonora `bf232f4`): the ISR layer now tracks `g_isr_enabled[]`
+(set by `isr_enable()`, cleared by `isr_disable()`), and `tx_start()` returns
+`NORA_CANFD_ERR_SEQUENCE` while it is false. That is the honest contract —
+async TX reports completion *only* through the event callback, so it is
+meaningless with the event layer off, and the blocking
+`nora_canfd_transmit()` remains the interrupt-free path, unchanged.
+
+`can_rx_isr_selftest.c` gained the matching regression, printed as a fifth
+criterion and included in the PASS condition:
+
+```
+   tx_start when off  : refused, line still off
+```
+
+It runs where the test already has interrupts off (the phase-2 overflow setup)
+and checks both the return code and `_C1TXIE` itself — a return code alone would
+not prove the register was left alone. A refused `tx_start()` queues no frame, so
+the overflow phase is unaffected. Cost: 87,692 → 88,324 B (+632, guard + test).
+**Not yet run on hardware** — the previous acceptance run (§11e) predates it.
+
+The reviewer's other two points: the `NORA_TDM_SUMPROF=0` path is now built and
+linked clean on the sonora side as well (the mothership's own conf stays at 1, and
+`audio_transport.c`'s TDMsum line compiles out with it) — only the pre-existing
+`touch.c` pre-release `#warning` appears. Splitting the TDM gate onto its own
+branch was *not* done: it would mean force-pushing a branch already under review,
+which is the owner's call, not a cleanup to take unilaterally.
+
 ## 12. Sonora-side residues noticed while vendoring
 
 Reported here, deliberately **not** fixed in this starter (donor files are kept

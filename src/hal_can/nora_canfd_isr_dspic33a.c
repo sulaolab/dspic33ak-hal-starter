@@ -25,6 +25,11 @@ static void                            *g_ud[NORA_CANFD_INST_COUNT];
 static volatile bool                    g_tx_busy[NORA_CANFD_INST_COUNT];
 
 static uint8_t                          g_irq_priority[NORA_CANFD_INST_COUNT];
+/* True between isr_enable() and isr_disable(). Async TX is an interrupt-driven service, so
+ * tx_start() requires it: without this flag an isr_disable() could be undone by a later
+ * tx_start(), which re-arms the TX CPU line (at the priority isr_enable() last recorded)
+ * behind the back of the caller that deliberately disabled interrupts. */
+static bool                             g_isr_enabled[NORA_CANFD_INST_COUNT];
 
 /* ---------------------------------------------------------------------- */
 /* Top-level CPU interrupt line helpers (per instance, guarded by symbol).  */
@@ -213,6 +218,7 @@ nora_canfd_status_t nora_canfd_isr_enable(nora_canfd_instance_t inst,
 
     g_tx_busy[inst] = false;
     irq_line_enable(inst, priority);
+    g_isr_enabled[inst] = true;
     return NORA_CANFD_OK;
 }
 
@@ -226,6 +232,7 @@ nora_canfd_status_t nora_canfd_isr_disable(nora_canfd_instance_t inst)
         return st;
     }
 
+    g_isr_enabled[inst] = false;
     irq_line_disable(inst);
     /* Drop all module interrupt enables (TX, RX, RXOV, CERR, IVM). */
     nora_canfd_reg_clear(regs->INT,
@@ -251,6 +258,13 @@ nora_canfd_status_t nora_canfd_tx_start(nora_canfd_instance_t inst,
     st = nora_canfd_get_regs(inst, &regs);
     if (st != NORA_CANFD_OK) {
         return st;
+    }
+    /* Async TX is an interrupt service: completion is reported only through the event
+     * callback, and arming it re-enables the TX CPU line. Refuse while the event layer is
+     * disabled, so an isr_disable() cannot be silently undone here (and so a caller that
+     * wants no interrupts uses the blocking nora_canfd_transmit() instead). */
+    if (!g_isr_enabled[inst]) {
+        return NORA_CANFD_ERR_SEQUENCE;
     }
 
     /* Queue the frame using the existing (non-waiting after TXREQ) node path. */
