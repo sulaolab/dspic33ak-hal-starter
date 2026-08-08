@@ -1,11 +1,11 @@
 /*
- * dspic33ak_high_res_timer.c
+ * nora_high_res_timer_dspic33a.c
  * --------------------------
  * Timer2 free-running high-resolution counter. See
- * dspic33ak_high_res_timer.h.
+ * nora_high_res_timer.h.
  */
 
-#include "dspic33ak_high_res_timer.h"
+#include "nora_high_res_timer.h"
 
 #include <xc.h>
 
@@ -20,15 +20,15 @@ static volatile bool high_res_timer_initialized = false;
 
 static uint32_t count_to_units(uint32_t count, uint64_t units_per_second);
 
-dspic33ak_high_res_timer_status_t dspic33ak_high_res_timer_init(
-    const dspic33ak_high_res_timer_config_t *config)
+nora_high_res_timer_status_t nora_high_res_timer_init(
+    const nora_high_res_timer_config_t *config)
 {
     if ((config == 0) || (config->timer_clk_hz == 0u)) {
-        return DSPIC33AK_HIGH_RES_TIMER_ERR_INVALID_ARG;
+        return NORA_HIGH_RES_TIMER_ERR_INVALID_ARG;
     }
 
-    if (!dspic33ak_high_res_timer_is_present()) {
-        return DSPIC33AK_HIGH_RES_TIMER_ERR_NOT_PRESENT;
+    if (!nora_high_res_timer_is_present()) {
+        return NORA_HIGH_RES_TIMER_ERR_NOT_PRESENT;
     }
 
 #if DSPIC33AK_HIGH_RES_TIMER_PRESENT
@@ -53,21 +53,21 @@ dspic33ak_high_res_timer_status_t dspic33ak_high_res_timer_init(
     _T2IE = 0;
     T2CONbits.ON = 1;
 
-    return DSPIC33AK_HIGH_RES_TIMER_OK;
+    return NORA_HIGH_RES_TIMER_OK;
 #else
-    return DSPIC33AK_HIGH_RES_TIMER_ERR_NOT_PRESENT;
+    return NORA_HIGH_RES_TIMER_ERR_NOT_PRESENT;
 #endif
 }
 
-dspic33ak_high_res_timer_status_t dspic33ak_high_res_timer_deinit(void)
+nora_high_res_timer_status_t nora_high_res_timer_deinit(void)
 {
-    if (!dspic33ak_high_res_timer_is_present()) {
-        return DSPIC33AK_HIGH_RES_TIMER_ERR_NOT_PRESENT;
+    if (!nora_high_res_timer_is_present()) {
+        return NORA_HIGH_RES_TIMER_ERR_NOT_PRESENT;
     }
 
 #if DSPIC33AK_HIGH_RES_TIMER_PRESENT
     if (!high_res_timer_initialized) {
-        return DSPIC33AK_HIGH_RES_TIMER_ERR_NOT_INITIALIZED;
+        return NORA_HIGH_RES_TIMER_ERR_NOT_INITIALIZED;
     }
 
     _T2IE = 0;
@@ -79,13 +79,13 @@ dspic33ak_high_res_timer_status_t dspic33ak_high_res_timer_deinit(void)
     high_res_timer_clk_hz = 0u;
     high_res_timer_initialized = false;
 
-    return DSPIC33AK_HIGH_RES_TIMER_OK;
+    return NORA_HIGH_RES_TIMER_OK;
 #else
-    return DSPIC33AK_HIGH_RES_TIMER_ERR_NOT_PRESENT;
+    return NORA_HIGH_RES_TIMER_ERR_NOT_PRESENT;
 #endif
 }
 
-bool dspic33ak_high_res_timer_is_present(void)
+bool nora_high_res_timer_is_present(void)
 {
 #if DSPIC33AK_HIGH_RES_TIMER_PRESENT
     return true;
@@ -94,12 +94,12 @@ bool dspic33ak_high_res_timer_is_present(void)
 #endif
 }
 
-bool dspic33ak_high_res_timer_is_initialized(void)
+bool nora_high_res_timer_is_initialized(void)
 {
     return high_res_timer_initialized;
 }
 
-uint32_t dspic33ak_high_res_timer_get_count(void)
+uint32_t nora_high_res_timer_get_count(void)
 {
 #if DSPIC33AK_HIGH_RES_TIMER_PRESENT
     if (!high_res_timer_initialized) {
@@ -112,7 +112,7 @@ uint32_t dspic33ak_high_res_timer_get_count(void)
 #endif
 }
 
-uint32_t dspic33ak_high_res_timer_elapsed_count(uint32_t start_count)
+uint32_t nora_high_res_timer_elapsed_count(uint32_t start_count)
 {
 #if DSPIC33AK_HIGH_RES_TIMER_PRESENT
     if (!high_res_timer_initialized) {
@@ -126,26 +126,26 @@ uint32_t dspic33ak_high_res_timer_elapsed_count(uint32_t start_count)
 #endif
 }
 
-uint32_t dspic33ak_high_res_timer_count_to_us(uint32_t count)
+uint32_t nora_high_res_timer_count_to_us(uint32_t count)
 {
     return count_to_units(count, 1000000ULL);
 }
 
-uint32_t dspic33ak_high_res_timer_count_to_us_x10(uint32_t count)
+uint32_t nora_high_res_timer_count_to_us_x10(uint32_t count)
 {
     return count_to_units(count, 10000000ULL);
 }
 
-uint32_t dspic33ak_high_res_timer_elapsed_us(uint32_t start_count)
+uint32_t nora_high_res_timer_elapsed_us(uint32_t start_count)
 {
-    return dspic33ak_high_res_timer_count_to_us(
-        dspic33ak_high_res_timer_elapsed_count(start_count));
+    return nora_high_res_timer_count_to_us(
+        nora_high_res_timer_elapsed_count(start_count));
 }
 
-uint32_t dspic33ak_high_res_timer_elapsed_us_x10(uint32_t start_count)
+uint32_t nora_high_res_timer_elapsed_us_x10(uint32_t start_count)
 {
-    return dspic33ak_high_res_timer_count_to_us_x10(
-        dspic33ak_high_res_timer_elapsed_count(start_count));
+    return nora_high_res_timer_count_to_us_x10(
+        nora_high_res_timer_elapsed_count(start_count));
 }
 
 static uint32_t count_to_units(uint32_t count, uint64_t units_per_second)

@@ -1,0 +1,130 @@
+# NORA-HAL migration — analysis (hal-starter ← sonora)
+
+Clone: `dspic33ak-hal-starter-nora`, branch `refactor/nora-hal`, base `7d12e42`
+(= `origin/main`, 0/0 vs remote at clone time).
+Donor: `dsp-sonora-mothership` @ `2d02359` (`main`).
+
+## 1. What NORA-HAL is
+
+`docs/nora_hal_public_api.md` in sonora: NORA = Native On-chip Resource
+Assistant, the public HAL brand for the dsPIC33A family (AK + CK).
+
+- public headers `nora_<periph>.h`; functions/types `nora_*`; macros `NORA_*`
+- target backends keep a silicon suffix in the **file/implementation** name
+  (`nora_gpio_dspic33a.c`) — never in a public header/type/function/macro
+- ISR fast paths: `static inline` in `<module>_<backend>_fast.h`, named
+  `<portable name>_hot`; the out-of-line portable version calls the inline
+- backend-private helpers with no portable twin keep the chip in their name
+  (`nora_uart_dspic33a_reg_set`, `nora_ccp_dspic33a_hot_regs`)
+- migration rule: **no compatibility aliases** — the old `dspic33ak_*` /
+  `DSPIC33AK_*` public namespace is replaced, not shadowed
+
+## 2. Module inventory
+
+hal-starter `src/hal_*` (11): can, clock, dma, gpio, i2c, nvm, spi,
+spi_i2s_tdm, timer, uart, udid. **Every one has a sonora NORA counterpart** —
+no module has to be written from scratch.
+
+Sonora additionally offers (not currently in the starter): `hal_adc`,
+`hal_reset`, `hal_noinit_ram`, `hal_ccp_input_capture`. Out of scope for a
+replacement; candidates for a later additive step.
+
+## 3. API delta per module (headers, prefix-normalised)
+
+Compared exported `dspic33ak_*` vs `nora_*` names with the prefix normalised.
+
+| module | identical | sonora-only | starter-only (needs a decision) |
+|---|---|---|---|
+| hal_spi | ✅ 18/18 | – | – |
+| hal_timer | ✅ 16/16 | – | – |
+| hal_nvm | ✅ | – | – |
+| hal_dma | ✅ | +10 (`*_hot`, `status_has_overrun/completed_half`) | – |
+| hal_gpio / pps | ✅ | +2 (`nora_pinmux_route_input/output`) | – |
+| hal_spi_i2s_tdm | ✅ 56 | +12 (diag deadline, `sumprof_*`, `tdmsum_*`) | – |
+| hal_udid | ✅ | (header-declared in sonora) | – |
+| hal_can | ✅ 31 | – | `canfd_clear_rx_overflow` |
+| hal_clock | mostly | +`get_fcy_hz`, `get_fosc_hz`, `switch_source` | `clkgen_configure` → renamed `nora_clock_dspic33a_clkgen_configure` |
+| hal_uart | 32 shared | – | 24 names moved to backend-private `nora_uart_dspic33a_*` (`reg_*`, `rx_isr_*`, `device_*`, `get_device`, `instance_is_present`, `async_*`) |
+| hal_i2c | 53 shared | +7 `nora_i2c_device_*_irq_*` | 4 `nora_i2c_reg_irq_*` → replaced by the `device_*_irq_*` set |
+
+So the substance of the work is **three real deltas**, not eleven:
+
+1. **uart** — the starter's `*_reg_*` / `*_rx_isr_*` / `*_device_*` helpers are
+   *portable-looking* names in the starter but *backend-private* in NORA.
+   Consumers (`src/console`, `src/app`) that call them must move to
+   `nora_uart_dspic33a_*` or stop calling them.
+2. **i2c** — starter's `reg_irq_*` quartet is superseded by sonora's
+   per-direction `device_*_irq_*` set. A call-site translation, not a
+   feature loss.
+3. **can** — `clear_rx_overflow` has no sonora counterpart. Either port it
+   into the sonora CAN HAL (preferred, it is reusable) or drop the caller.
+   Plus `clock`: one renamed entry point, three new getters.
+
+`hal_spi_i2s_tdm` is the module I expected to be the hard one and it is not:
+the starter already carries the SYSTEM/sync-domain contract, and the
+`*_conf.h_example` macro schema is **byte-identical modulo the prefix**
+(`DSPIC33AK_` → `NORA_`, diff empty). Both sides descend from the same
+vendored upstream (`src/hal_*/UPSTREAM.md`).
+
+## 4. Blast radius outside `src/hal_*`
+
+`dspic33ak_*` references in consumer code: `src/app` 271, root
+(`main.c`, `board.*`, `board_pins.h`, `dspic33ak_spi_i2s_tdm_conf.h`) 95,
+`src/board_components` 35, `src/console` 18, `src/fw_update` 16,
+`src/clock` 9 — ≈444 lowercase refs, plus the `DSPIC33AK_*` macro set
+(`..._I2C_OK` 99, `..._UART_OK` 63, `..._CANFD_OK` 56, TDM geometry, …).
+
+Almost all of it is mechanical (`dspic33ak_`→`nora_`, `DSPIC33AK_`→`NORA_`)
+because the two APIs agree. The non-mechanical part is only the three deltas
+in §3.
+
+Also to touch: `firmware.X/nbproject/configurations.xml` — 32 path/name hits;
+the file list is the build truth, so renamed files must be renamed there in the
+same commit.
+
+## 5. Sonora HAL self-containedness
+
+Grep of `#include "..."` across sonora `src/hal_*`: exactly **one** non-`nora_`
+include, `board/board_dbg_pins.h`. So the donor HALs drop in without dragging
+app/config headers — the only inbound dependency to resolve is that debug-pin
+header (or compiling it out).
+
+## 6. Proposed migration order (one buildable commit per step)
+
+0. (done) clone + branch.
+1. **Leaf, zero-delta modules first**: spi, timer, nvm, udid, dma, gpio/pps —
+   copy sonora files, delete the old ones, update `configurations.xml`,
+   rename call sites. Each step builds.
+2. **spi_i2s_tdm** — big but prefix-only; includes renaming
+   `src/dspic33ak_spi_i2s_tdm_conf.h` → `nora_spi_i2s_tdm_conf.h`.
+3. **clock** — rename `clkgen_configure`, adopt the new getters,
+   re-check `src/clock` (9 refs) against sonora's PLL model.
+4. **i2c** — translate `reg_irq_*` → `device_*_irq_*` at the call sites.
+5. **uart** — the largest semantic step (console + async + rx ISR ring).
+6. **can** — decide `clear_rx_overflow`: port upstream into the sonora CAN HAL,
+   or drop.
+7. Full clean build of every configuration, then HW bring-up: the starter's
+   own boot sequence is the acceptance test (clock, HRT self-check, SST26
+   verify, I2C scan, I2C loopback, CAN FD, TDM8 smoke on MikroBUS-A).
+
+## 7. Decisions (owner, 2026-08-08)
+
+- **Direction of truth**: the standalone HAL repos will be NORA-ised in turn,
+  so a temporary divergence between this starter and the `UPSTREAM.md`
+  pointers is **accepted**. Do not re-base the upstreams first.
+- **`hal_can` `clear_rx_overflow`**: **port it into NORA-HAL (sonora)**, then
+  vendor the result here. Sonora-side work goes on its own branch in the
+  mothership; this starter takes the NORA CAN HAL only after that lands.
+- **Extra HALs** (`adc`, `reset`, `noinit_ram`, `ccp_input_capture`): **not
+  adopted** — this migration adds no new starter functionality.
+- **Base**: `origin/main` (`7d12e42`). The unmerged branches
+  (`feat/hal-i3c-foundation`, `exp/pll2-*`) are out of scope; conflicts there
+  are accepted rather than pre-empted.
+
+## 8. Module ordering constraint (measured)
+
+Cross-module `#include` among sonora `src/hal_*` is a single edge:
+`hal_spi_i2s_tdm` → `nora_dma.h`, `nora_dma_dspic33a_fast.h`,
+`nora_high_res_timer.h`, `nora_tick_timer.h`. Every other module includes only
+its own headers. So the §6 order is sound as long as **dma and timer precede
+spi_i2s_tdm**; all other modules are independent and may be reordered freely.

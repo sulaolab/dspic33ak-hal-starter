@@ -13,7 +13,7 @@
 
 #include "dspic33ak_canfd_node.h"
 #include "dspic33ak_canfd_isr.h"
-#include "dspic33ak_tick_timer.h"
+#include "nora_tick_timer.h"
 #include "starter_clock.h"
 
 #define CAN_BUS_TEST_ORIG_ID  0x0A0u
@@ -83,7 +83,7 @@ void can_bus_test_run(bool is_echo)
     cfg.brs          = true;
     cfg.mode         = DSPIC33AK_CANFD_MODE_NORMAL_FD;
     cfg.timeout_ms   = 10u;
-    cfg.get_ms       = dspic33ak_tick_timer_get_ms;
+    cfg.get_ms       = nora_tick_timer_get_ms;
     cfg.msg_ram      = can1_msg_ram;
     cfg.msg_ram_size = (uint16_t)sizeof(can1_msg_ram);
 
@@ -96,9 +96,9 @@ void can_bus_test_run(bool is_echo)
     }
     (void)dspic33ak_canfd_isr_enable(DSPIC33AK_CANFD_INST_1, can_bus_test_event, NULL, 4u);
 
-    last_ms = dspic33ak_tick_timer_get_ms();
+    last_ms = nora_tick_timer_get_ms();
     for (;;) {
-        uint32_t now = dspic33ak_tick_timer_get_ms();
+        uint32_t now = nora_tick_timer_get_ms();
 
         /* ORIGINATOR: send a frame with changing data once per second. If a lone
          * node has gone bus-off (no ACK partner yet), re-init so it recovers. */

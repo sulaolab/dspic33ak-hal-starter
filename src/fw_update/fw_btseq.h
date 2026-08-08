@@ -34,7 +34,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "dspic33ak_nvm.h"
+#include "nora_nvm.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -42,8 +42,8 @@ extern "C" {
 
 // Partition geometry / BTSEQ word addresses (Flash Dual Partition: 256 KB each).
 #define FW_BTSEQ_PARTITION_BYTES  UINT32_C(0x40000)
-#define FW_BTSEQ_ACTIVE_ADR       (DSPIC33AK_NVM_ACTIVE_BASE + FW_BTSEQ_PARTITION_BYTES - DSPIC33AK_NVM_WORD_BYTES)   // 0x83FFF0
-#define FW_BTSEQ_INACTIVE_ADR     (DSPIC33AK_NVM_TO_INACTIVE(FW_BTSEQ_ACTIVE_ADR))                                    // 0xC3FFF0
+#define FW_BTSEQ_ACTIVE_ADR       (NORA_NVM_ACTIVE_BASE + FW_BTSEQ_PARTITION_BYTES - NORA_NVM_WORD_BYTES)   // 0x83FFF0
+#define FW_BTSEQ_INACTIVE_ADR     (NORA_NVM_TO_INACTIVE(FW_BTSEQ_ACTIVE_ADR))                                    // 0xC3FFF0
 #define FW_BTSEQ_MASK             (0x0FFFu)
 #define FW_BTSEQ_BLANK            (0x0FFFu)   // value a blank/invalid word evaluates to
 

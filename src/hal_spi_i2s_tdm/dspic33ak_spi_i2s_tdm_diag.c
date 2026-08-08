@@ -7,7 +7,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>                   // NULL
-#include "dspic33ak_high_res_timer.h" // dspic33ak_high_res_timer_* (ISR load/time monitor; runtime-gated via is_initialized())
+#include "nora_high_res_timer.h" // dspic33ak_high_res_timer_* (ISR load/time monitor; runtime-gated via is_initialized())
 #include "dspic33ak_dma.h"            // dspic33ak_dma_status_has_half_done_conflict()
 #include "dspic33ak_spi_i2s_tdm_reg.h" // DSPIC33AK_SPI_I2S_TDM_STAT_* masks (note_errflags)
 
@@ -26,7 +26,7 @@
 
 #if defined(ENA_TDM_DBG)
   #include <stdio.h>                 // printf (debug build only)
-  #include "dspic33ak_tick_timer.h"  // timestamp for the debug trap print
+  #include "nora_tick_timer.h"  // timestamp for the debug trap print
   #include "board_dbg_pins.h"        // BOARD_DBG_PIN_* scope pins
   #define TDM_DBG_PRINTF(...)   printf(__VA_ARGS__)
 #else
@@ -112,10 +112,10 @@ void dspic33ak_spi_i2s_tdm_diag_isr_begin( dspic33ak_spi_i2s_tdm_diag_t* d )
     }
 
     // Load/time monitor: capture only when the high-resolution timer is live.
-    d->isr_measure_active = dspic33ak_high_res_timer_is_initialized();
+    d->isr_measure_active = nora_high_res_timer_is_initialized();
     if( d->isr_measure_active )
     {
-        d->isr_start_count = dspic33ak_high_res_timer_get_count();
+        d->isr_start_count = nora_high_res_timer_get_count();
     }
 
 #if defined(ENA_TDM_DBG)
@@ -143,7 +143,7 @@ void dspic33ak_spi_i2s_tdm_diag_isr_end( dspic33ak_spi_i2s_tdm_diag_t* d )
         return;
     }
 
-    if( !d->isr_measure_active || !dspic33ak_high_res_timer_is_initialized() )
+    if( !d->isr_measure_active || !nora_high_res_timer_is_initialized() )
     {
         d->isr_measure_active = false;
 #if defined(ENA_TDM_DBG)
@@ -155,7 +155,7 @@ void dspic33ak_spi_i2s_tdm_diag_isr_end( dspic33ak_spi_i2s_tdm_diag_t* d )
 
     d->isr_measure_active = false;
 
-    end_count  = dspic33ak_high_res_timer_get_count();
+    end_count  = nora_high_res_timer_get_count();
     diff_count = end_count - d->isr_start_count;
 
     d->isr_last_count = diff_count;
@@ -246,7 +246,7 @@ void dspic33ak_spi_i2s_tdm_diag_check_deadline( dspic33ak_spi_i2s_tdm_diag_t* d,
 
     TDM_DBG_PRINTF(" dma_debug_check: dma=%d half/done conflict @%ld\n",
                    dma_x,
-                   dspic33ak_tick_timer_get_ms());
+                   nora_tick_timer_get_ms());
     (void)dma_x;
 }
 
@@ -285,7 +285,7 @@ bool dspic33ak_spi_i2s_tdm_diag_get_load( dspic33ak_spi_i2s_tdm_diag_t* d,
         d->isr_event_count = 0u;
     }
 
-    valid = (event_count != 0) && dspic33ak_high_res_timer_is_initialized();
+    valid = (event_count != 0) && nora_high_res_timer_is_initialized();
 
     if( !valid )
     {
@@ -300,9 +300,9 @@ bool dspic33ak_spi_i2s_tdm_diag_get_load( dspic33ak_spi_i2s_tdm_diag_t* d,
     monitor->max_count   = max_count;
     monitor->event_count = event_count;
 
-    monitor->last_us10 = dspic33ak_high_res_timer_count_to_us_x10( last_count );
-    monitor->min_us10  = dspic33ak_high_res_timer_count_to_us_x10( min_count  );
-    monitor->max_us10  = dspic33ak_high_res_timer_count_to_us_x10( max_count  );
+    monitor->last_us10 = nora_high_res_timer_count_to_us_x10( last_count );
+    monitor->min_us10  = nora_high_res_timer_count_to_us_x10( min_count  );
+    monitor->max_us10  = nora_high_res_timer_count_to_us_x10( max_count  );
 
     return valid;
 }

@@ -4,10 +4,10 @@
 
 This directory contains reusable dsPIC33AK timer services:
 
-- `dspic33ak_tick_timer.c/.h`
+- `nora_tick_timer_dspic33a.c / nora_tick_timer.h`
   - Timer1-based 1 ms monotonic tick source.
   - Provides `dspic33ak_tick_timer_*()` APIs.
-- `dspic33ak_high_res_timer.c/.h`
+- `nora_high_res_timer_dspic33a.c / nora_high_res_timer.h`
   - Timer2-based free-running high-resolution counter.
   - Provides `dspic33ak_high_res_timer_*()` APIs.
 
@@ -24,15 +24,15 @@ within the 32-bit `PR1` range.
 Basic setup:
 
 ```c
-#include "dspic33ak_tick_timer.h"
+#include "nora_tick_timer.h"
 
-const dspic33ak_tick_timer_config_t tick_timer_config = {
+const nora_tick_timer_config_t tick_timer_config = {
     .timer_clk_hz = timer1_input_hz,
-    .irq_priority = DSPIC33AK_TICK_TIMER_DEFAULT_IRQ_PRIORITY,
+    .irq_priority = NORA_TICK_TIMER_DEFAULT_IRQ_PRIORITY,
     .run_in_idle = false,
 };
 
-if (dspic33ak_tick_timer_init(&tick_timer_config) != DSPIC33AK_TICK_TIMER_OK) {
+if (nora_tick_timer_init(&tick_timer_config) != NORA_TICK_TIMER_OK) {
     while (1) {
         ;
     }
@@ -44,14 +44,14 @@ The application-owned Timer1 vector should forward to the HAL handler:
 ```c
 void __attribute__((interrupt, context)) _T1Interrupt(void)
 {
-    dspic33ak_tick_timer_irq_handler();
+    nora_tick_timer_irq_handler();
 }
 ```
 
-`dspic33ak_tick_timer_get_ms()` returns 0 before successful initialization and
-after `dspic33ak_tick_timer_deinit()`.
+`nora_tick_timer_get_ms()` returns 0 before successful initialization and
+after `nora_tick_timer_deinit()`.
 
-`DSPIC33AK_TICK_TIMER_DEFAULT_IRQ_PRIORITY` is a recommended default, not a
+`NORA_TICK_TIMER_DEFAULT_IRQ_PRIORITY` is a recommended default, not a
 hardware requirement. Applications can pass another valid non-zero priority when
 their interrupt ordering requires it.
 
@@ -63,15 +63,15 @@ Timer2 is configured as an interrupt-free 32-bit free-running counter with a
 Basic setup:
 
 ```c
-#include "dspic33ak_high_res_timer.h"
+#include "nora_high_res_timer.h"
 
-const dspic33ak_high_res_timer_config_t high_res_timer_config = {
+const nora_high_res_timer_config_t high_res_timer_config = {
     .timer_clk_hz = timer2_input_hz,
     .run_in_idle = false,
 };
 
-if (dspic33ak_high_res_timer_init(&high_res_timer_config) !=
-    DSPIC33AK_HIGH_RES_TIMER_OK) {
+if (nora_high_res_timer_init(&high_res_timer_config) !=
+    NORA_HIGH_RES_TIMER_OK) {
     while (1) {
         ;
     }
@@ -93,8 +93,8 @@ later in foreground or status code.
 
 ## Ownership
 
-- The HAL owns Timer1 after successful `dspic33ak_tick_timer_init()`.
-- The HAL owns Timer2 after successful `dspic33ak_high_res_timer_init()`.
+- The HAL owns Timer1 after successful `nora_tick_timer_init()`.
+- The HAL owns Timer2 after successful `nora_high_res_timer_init()`.
 - Clock-tree setup remains application responsibility.
 - Timer1 interrupt vector ownership remains application responsibility.
 - Timer2 interrupts are disabled by the high-resolution timer path; no

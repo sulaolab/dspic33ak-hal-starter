@@ -16,11 +16,11 @@
 #include <stdint.h>
 
 #include "starter_clock.h"
-#include "dspic33ak_tick_timer.h"
-#include "dspic33ak_high_res_timer.h"
+#include "nora_tick_timer.h"
+#include "nora_high_res_timer.h"
 #include "dspic33ak_uart.h"
-#include "dspic33ak_nvm.h"
-#include "dspic33ak_udid.h"
+#include "nora_nvm.h"
+#include "nora_udid.h"
 #include "dspic33ak_i2c_master.h"
 #include "sst26_min.h"
 #include "i2c_scan.h"
@@ -137,23 +137,23 @@ static void term_init_safe(void)
 
 void __attribute__((interrupt, context)) _T1Interrupt(void)
 {
-    dspic33ak_tick_timer_irq_handler();
+    nora_tick_timer_irq_handler();
 }
 
 static void wait_ms_from_tick(uint32_t wait_ms)
 {
-    uint32_t start = dspic33ak_tick_timer_get_ms();
+    uint32_t start = nora_tick_timer_get_ms();
 
-    while ((uint32_t)(dspic33ak_tick_timer_get_ms() - start) < wait_ms) {
+    while ((uint32_t)(nora_tick_timer_get_ms() - start) < wait_ms) {
         ;
     }
 }
 
-static void high_res_timer_boot_test(dspic33ak_high_res_timer_status_t init_status)
+static void high_res_timer_boot_test(nora_high_res_timer_status_t init_status)
 {
-    const uint32_t count_to_us_100 = dspic33ak_high_res_timer_count_to_us(100u);
-    const uint32_t count_to_us_x10_10 = dspic33ak_high_res_timer_count_to_us_x10(10u);
-    const uint32_t count_to_us_x10_100 = dspic33ak_high_res_timer_count_to_us_x10(100u);
+    const uint32_t count_to_us_100 = nora_high_res_timer_count_to_us(100u);
+    const uint32_t count_to_us_x10_10 = nora_high_res_timer_count_to_us_x10(10u);
+    const uint32_t count_to_us_x10_100 = nora_high_res_timer_count_to_us_x10(100u);
     uint32_t count0;
     uint32_t count1;
     uint32_t count2;
@@ -163,11 +163,11 @@ static void high_res_timer_boot_test(dspic33ak_high_res_timer_status_t init_stat
     bool counter_ok;
     bool status_ok;
 
-    count0 = dspic33ak_high_res_timer_get_count();
+    count0 = nora_high_res_timer_get_count();
     wait_ms_from_tick(1u);
-    count1 = dspic33ak_high_res_timer_get_count();
+    count1 = nora_high_res_timer_get_count();
     wait_ms_from_tick(10u);
-    count2 = dspic33ak_high_res_timer_get_count();
+    count2 = nora_high_res_timer_get_count();
 
     delta1 = count1 - count0;
     delta10 = count2 - count1;
@@ -175,14 +175,14 @@ static void high_res_timer_boot_test(dspic33ak_high_res_timer_status_t init_stat
                     (count_to_us_x10_10 == 1u) &&
                     (count_to_us_x10_100 == 10u);
     counter_ok = (count1 != count0) && (count2 != count1);
-    status_ok = (init_status == DSPIC33AK_HIGH_RES_TIMER_OK) &&
-                dspic33ak_high_res_timer_is_present() &&
-                dspic33ak_high_res_timer_is_initialized();
+    status_ok = (init_status == NORA_HIGH_RES_TIMER_OK) &&
+                nora_high_res_timer_is_present() &&
+                nora_high_res_timer_is_initialized();
 
     printf(" HRT: init=%d present=%d initialized=%d clk=%lu Hz\n",
            (int)init_status,
-           (int)dspic33ak_high_res_timer_is_present(),
-           (int)dspic33ak_high_res_timer_is_initialized(),
+           (int)nora_high_res_timer_is_present(),
+           (int)nora_high_res_timer_is_initialized(),
            (unsigned long)STARTER_CLOCK_FCY_HZ);
     printf(" HRT: count0=%lu count1=%lu count2=%lu d1=%lu d10=%lu\n",
            (unsigned long)count0,
@@ -201,16 +201,16 @@ static void high_res_timer_boot_test(dspic33ak_high_res_timer_status_t init_stat
 
 int main(void)
 {
-    const dspic33ak_tick_timer_config_t tick_cfg = {
+    const nora_tick_timer_config_t tick_cfg = {
         .timer_clk_hz = STARTER_CLOCK_FCY_HZ,
-        .irq_priority = DSPIC33AK_TICK_TIMER_DEFAULT_IRQ_PRIORITY,
+        .irq_priority = NORA_TICK_TIMER_DEFAULT_IRQ_PRIORITY,
         .run_in_idle = false,
     };
-    const dspic33ak_high_res_timer_config_t high_res_cfg = {
+    const nora_high_res_timer_config_t high_res_cfg = {
         .timer_clk_hz = STARTER_CLOCK_FCY_HZ,
         .run_in_idle = false,
     };
-    dspic33ak_high_res_timer_status_t high_res_status;
+    nora_high_res_timer_status_t high_res_status;
 
     if (!starter_clock_init()) {       /* FRC -> PLL1 200 MHz; route CLKGEN1/5/6/8/9 */
         while (1) {
@@ -218,12 +218,12 @@ int main(void)
         }
     }
     board_ports_digital_default();     /* all pins digital (needed for I2C SDA/SCL) */
-    if (dspic33ak_tick_timer_init(&tick_cfg) != DSPIC33AK_TICK_TIMER_OK) {
+    if (nora_tick_timer_init(&tick_cfg) != NORA_TICK_TIMER_OK) {
         while (1) {
             Nop();
         }
     }
-    high_res_status = dspic33ak_high_res_timer_init(&high_res_cfg);
+    high_res_status = nora_high_res_timer_init(&high_res_cfg);
     console_uart_init();               /* UART1 pins + 230400 8N1, printf retargeted */
     fw_command_init();
 #if HAL_STARTER_ENABLE_UART_ASYNC_SELFTEST
@@ -239,8 +239,8 @@ int main(void)
     /* Per-die Unique Device ID (board-individual identity). UDID128 is the four
      * read-only words concatenated UDID4..UDID1 (high word first). */
     {
-        dspic33ak_udid_t udid;
-        if (DSPIC33AK_UDID_Read(&udid))
+        nora_udid_t udid;
+        if (nora_udid_read(&udid))
         {
             printf(" udid   : %08lX%08lX%08lX%08lX\n",
                    (unsigned long)udid.word[3], (unsigned long)udid.word[2],
@@ -255,7 +255,7 @@ int main(void)
     printf(" uart   : UART1 @ 230400 8N1, RX ISR-ring echo active\n");
     {
         fw_uca_report_t uca;
-        bool p2 = DSPIC33AK_NVM_IsPartition2Active();
+        bool p2 = NORA_NVM_IsPartition2Active();
         uint16_t seq = fw_btseq_read_active_seq();
         fw_uca_status_t uca_status = fw_uca_validate_active(&uca);
         printf(" bank   : P%u active, BTSEQ=0x%03X\n", p2 ? 2u : 1u,
@@ -307,7 +307,7 @@ int main(void)
             .fcy_hz             = STARTER_CLOCK_FCY_HZ,           /* fcy = sysclk/2  */
             .bus_hz             = 400000u,                       /* 400 kHz         */
             .timeout_ms         = 5u,                            /* never hang      */
-            .get_ms             = dspic33ak_tick_timer_get_ms,
+            .get_ms             = nora_tick_timer_get_ms,
             .pending_timeout_ms = 50u,
         };
         if (dspic33ak_i2c_init(DSPIC33AK_I2C_INST_2, &i2c_cfg) == DSPIC33AK_I2C_OK) {
@@ -415,10 +415,10 @@ int main(void)
      * master<->slave round trip, odd beats transmit one CAN FD frame on the real
      * CAN bus. Each demo therefore fires every 2 s, offset 1 s from the other. */
     uint32_t beat      = 0u;
-    uint32_t last_beat = dspic33ak_tick_timer_get_ms();
-    uint32_t last_term_reset = dspic33ak_tick_timer_get_ms();
+    uint32_t last_beat = nora_tick_timer_get_ms();
+    uint32_t last_term_reset = nora_tick_timer_get_ms();
 #if HAL_STARTER_ENABLE_TDM_SMOKE_DEMO
-    uint32_t last_tdm  = dspic33ak_tick_timer_get_ms() - 5000u;
+    uint32_t last_tdm  = nora_tick_timer_get_ms() - 5000u;
 #endif
     while (1)
     {
@@ -432,7 +432,7 @@ int main(void)
             led_sw_update();  /* SW1/2 polled; SW3 event state mirrored on LED5 */
         }
 
-        uint32_t now = dspic33ak_tick_timer_get_ms();
+        uint32_t now = nora_tick_timer_get_ms();
         if (!fw_command_quiet() &&
             ((uint32_t)(now - last_term_reset) >= 3000u)) {
             last_term_reset = now;

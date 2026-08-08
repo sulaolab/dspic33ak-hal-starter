@@ -6,7 +6,7 @@
 #include <string.h>
 
 #include "dspic33ak_uart.h"
-#include "dspic33ak_tick_timer.h"
+#include "nora_tick_timer.h"
 #include "fw_update.h"
 #include "fw_btseq.h"
 #include "fw_uca.h"
@@ -119,7 +119,7 @@ static void print_partition_status(void)
 {
     fw_uca_report_t act_uca;
     fw_uca_report_t ina_uca;
-    bool            p2        = DSPIC33AK_NVM_IsPartition2Active();
+    bool            p2        = NORA_NVM_IsPartition2Active();
     uint16_t        act_seq   = fw_btseq_read_active_seq();
     uint16_t        ina_seq   = fw_btseq_read_inactive_seq();
     fw_uca_status_t act_status = fw_uca_validate_active(&act_uca);
@@ -298,7 +298,7 @@ static void begin_raw_file_discard(void)
 {
     line_reset();
     s_raw_discard = true;
-    s_raw_last_ms = dspic33ak_tick_timer_get_ms();
+    s_raw_last_ms = nora_tick_timer_get_ms();
     printf("\r\nWARNING: plain file data was detected and discarded.\r\n");
     printf("Do not use Tera Term File > Send file.\r\n");
     printf("Type *fua5, then use File > Transfer > XMODEM > Send.\r\n");
@@ -375,14 +375,14 @@ void fw_command_poll(void)
         received = true;
 
         if (s_raw_discard) {
-            s_raw_last_ms = dspic33ak_tick_timer_get_ms();
+            s_raw_last_ms = nora_tick_timer_get_ms();
             continue;
         }
         feed_normal_byte(data);
     }
 
     if (s_raw_discard && !received &&
-        ((uint32_t)(dspic33ak_tick_timer_get_ms() - s_raw_last_ms) >= RAW_FILE_IDLE_MS)) {
+        ((uint32_t)(nora_tick_timer_get_ms() - s_raw_last_ms) >= RAW_FILE_IDLE_MS)) {
         dspic33ak_uart_rx_flush(COMMAND_UART);
         s_raw_discard = false;
         s_last_was_cr = false;

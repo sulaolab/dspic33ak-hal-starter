@@ -9,7 +9,7 @@
 #include "fw_btseq.h"
 #include "fw_update.h"
 #include "fw_uca.h"
-#include "dspic33ak_nvm.h"
+#include "nora_nvm.h"
 #include "dspic33ak_uart.h"
 
 //-----------------------------------------------------------
@@ -39,10 +39,10 @@ bool fw_btseq_decode_valid(uint32_t low, uint16_t *seq_out)
 
 uint16_t fw_btseq_read_seq(uint32_t word_adr)
 {
-    uint32_t w[DSPIC33AK_NVM_U32_PER_WORD] = { 0u, 0u, 0u, 0u };
+    uint32_t w[NORA_NVM_U32_PER_WORD] = { 0u, 0u, 0u, 0u };
     uint16_t seq = FW_BTSEQ_BLANK;
 
-    if ( DSPIC33AK_NVM_ReadWord(word_adr, w) != DSPIC33AK_NVM_OK )
+    if ( NORA_NVM_ReadWord(word_adr, w) != NORA_NVM_OK )
     {
         return FW_BTSEQ_BLANK;
     }
@@ -88,14 +88,14 @@ static void fw_sys_reset(void)
 static bool fw_invalidate_inactive_btseq(void)
 {
     uint32_t final_page = FW_BTSEQ_INACTIVE_ADR &
-                          ~(uint32_t)(DSPIC33AK_NVM_PAGE_BYTES - 1u);
-    uint32_t rb[DSPIC33AK_NVM_U32_PER_WORD] = { 0u, 0u, 0u, 0u };
+                          ~(uint32_t)(NORA_NVM_PAGE_BYTES - 1u);
+    uint32_t rb[NORA_NVM_U32_PER_WORD] = { 0u, 0u, 0u, 0u };
 
-    if (DSPIC33AK_NVM_PageErase(final_page) != DSPIC33AK_NVM_OK)
+    if (NORA_NVM_PageErase(final_page) != NORA_NVM_OK)
     {
         return false;
     }
-    if (DSPIC33AK_NVM_ReadWord(FW_BTSEQ_INACTIVE_ADR, rb) != DSPIC33AK_NVM_OK)
+    if (NORA_NVM_ReadWord(FW_BTSEQ_INACTIVE_ADR, rb) != NORA_NVM_OK)
     {
         return false;
     }
@@ -112,11 +112,11 @@ fw_commit_status_t fw_commit(void)
     uint16_t active;
     uint16_t next;
     uint32_t enc;
-    uint32_t data[DSPIC33AK_NVM_U32_PER_WORD];
-    uint32_t rb[DSPIC33AK_NVM_U32_PER_WORD] = { 0u, 0u, 0u, 0u };
+    uint32_t data[NORA_NVM_U32_PER_WORD];
+    uint32_t rb[NORA_NVM_U32_PER_WORD] = { 0u, 0u, 0u, 0u };
     uint16_t rb_seq = 0u;
     bool     inactive_blank;
-    dspic33ak_nvm_status_t s;
+    nora_nvm_status_t s;
 
     // 1) Gate: only commit a partition a *verified receive* just filled. A selftest
     //    pattern (non-bootable) or a failed/absent receive must never be committed.
@@ -155,14 +155,14 @@ fw_commit_status_t fw_commit(void)
     //        does erases the page and blanks this word). So no current image byte
     //        lives in the final page and re-erasing it to re-virginize the word is
     //        safe -- it cannot destroy any verified image data.
-    (void)DSPIC33AK_NVM_ReadWord(FW_BTSEQ_INACTIVE_ADR, rb);
+    (void)NORA_NVM_ReadWord(FW_BTSEQ_INACTIVE_ADR, rb);
     inactive_blank = (rb[0] == 0xFFFFFFFFu) && (rb[1] == 0xFFFFFFFFu) &&
                      (rb[2] == 0xFFFFFFFFu) && (rb[3] == 0xFFFFFFFFu);
     if ( !inactive_blank )
     {
-        uint32_t final_page = FW_BTSEQ_INACTIVE_ADR & ~(uint32_t)(DSPIC33AK_NVM_PAGE_BYTES - 1u);
-        s = DSPIC33AK_NVM_PageErase(final_page);
-        if ( s != DSPIC33AK_NVM_OK )
+        uint32_t final_page = FW_BTSEQ_INACTIVE_ADR & ~(uint32_t)(NORA_NVM_PAGE_BYTES - 1u);
+        s = NORA_NVM_PageErase(final_page);
+        if ( s != NORA_NVM_OK )
         {
             return FW_COMMIT_ERR_NVM;
         }
@@ -173,22 +173,22 @@ fw_commit_status_t fw_commit(void)
     data[1] = 0u;
     data[2] = 0u;
     data[3] = 0u;
-    s = DSPIC33AK_NVM_WordProgram(FW_BTSEQ_INACTIVE_ADR, data);
-    if ( s != DSPIC33AK_NVM_OK )
+    s = NORA_NVM_WordProgram(FW_BTSEQ_INACTIVE_ADR, data);
+    if ( s != NORA_NVM_OK )
     {
         printf(" BTSEQ program failed: status=%u wrec=%02X\r\n",
-               (unsigned)s, (unsigned)DSPIC33AK_NVM_LastWrec());
+               (unsigned)s, (unsigned)NORA_NVM_LastWrec());
         return fw_invalidate_inactive_btseq() ? FW_COMMIT_ERR_NVM :
                                                 FW_COMMIT_ERR_ROLLBACK;
     }
 
     // 5) Read-back verify the stamped word before handing the board to it. On any
     //    mismatch, DO NOT reset -- the currently-active partition still boots.
-    s = DSPIC33AK_NVM_ReadWord(FW_BTSEQ_INACTIVE_ADR, rb);
-    if ( s != DSPIC33AK_NVM_OK )
+    s = NORA_NVM_ReadWord(FW_BTSEQ_INACTIVE_ADR, rb);
+    if ( s != NORA_NVM_OK )
     {
         printf(" BTSEQ read-back failed: status=%u wrec=%02X\r\n",
-               (unsigned)s, (unsigned)DSPIC33AK_NVM_LastWrec());
+               (unsigned)s, (unsigned)NORA_NVM_LastWrec());
         return fw_invalidate_inactive_btseq() ? FW_COMMIT_ERR_VERIFY :
                                                 FW_COMMIT_ERR_ROLLBACK;
     }
@@ -199,7 +199,7 @@ fw_commit_status_t fw_commit(void)
                (unsigned long)enc,
                (unsigned long)rb[0], (unsigned long)rb[1],
                (unsigned long)rb[2], (unsigned long)rb[3],
-               (unsigned)DSPIC33AK_NVM_LastWrec());
+               (unsigned)NORA_NVM_LastWrec());
         return fw_invalidate_inactive_btseq() ? FW_COMMIT_ERR_VERIFY :
                                                 FW_COMMIT_ERR_ROLLBACK;
     }

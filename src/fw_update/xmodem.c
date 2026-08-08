@@ -4,7 +4,7 @@
 
 #include "xmodem.h"
 #include "dspic33ak_uart.h"
-#include "dspic33ak_tick_timer.h"
+#include "nora_tick_timer.h"
 
 //-----------------------------------------------------------
 // Wire constants
@@ -77,14 +77,14 @@ static void xm_send( uint8_t b )
 // Read one byte, waiting up to timeout_ms. true = got a byte, false = timeout.
 static bool xm_read( uint8_t* b, uint32_t timeout_ms )
 {
-    uint32_t start = dspic33ak_tick_timer_get_ms();
+    uint32_t start = nora_tick_timer_get_ms();
     for ( ;; )
     {
         if ( dspic33ak_uart_read_byte( XMODEM_UART, b ) == DSPIC33AK_UART_OK )
         {
             return true;
         }
-        if ( (uint32_t)( dspic33ak_tick_timer_get_ms() - start ) >= timeout_ms )
+        if ( (uint32_t)( nora_tick_timer_get_ms() - start ) >= timeout_ms )
         {
             return false;
         }

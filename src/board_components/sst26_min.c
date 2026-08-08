@@ -11,17 +11,17 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-#include "dspic33ak_spi.h"
+#include "nora_spi.h"
 #include "dspic33ak_gpio.h"
 #include "board_pins.h"
 #include "board.h"
 #include "sst26_min.h"
 
 /* SPI4 config (matches the values validated on this board). */
-#define SST26_SPI_INSTANCE   DSPIC33AK_SPI_INST_4
+#define SST26_SPI_INSTANCE   NORA_SPI_INST_4
 #define SST26_SPI_PBCLK_HZ   (100000000UL)
 #define SST26_SPI_SCK_HZ     (12500000UL)
-#define SST26_SPI_MODE       DSPIC33AK_SPI_MODE_0
+#define SST26_SPI_MODE       NORA_SPI_MODE_0
 
 /* SST26 command opcodes (subset). */
 #define CMD_WREN     (0x06u)
@@ -35,11 +35,11 @@
 
 #define SR_WIP       (0x01u)   /* RDSR write-in-progress bit */
 
-static dspic33ak_spi_handle_t s_spi;
+static nora_spi_handle_t s_spi;
 
 #define CS_ASSERT()    (void)dspic33ak_gpio_clear(BOARD_SST26_PIN_CS)   /* active low */
 #define CS_DEASSERT()  (void)dspic33ak_gpio_set(BOARD_SST26_PIN_CS)
-#define XFER(b)        dspic33ak_spi_transfer8(&s_spi, (uint8_t)(b))
+#define XFER(b)        nora_spi_transfer8(&s_spi, (uint8_t)(b))
 
 static void short_delay(void)
 {
@@ -112,7 +112,7 @@ static void sst26_page_program(uint32_t addr, const uint8_t *data, size_t len)
     for (size_t i = 0u; i < len; i++) {
         (void)XFER(data[i]);
     }
-    dspic33ak_spi_wait_done(&s_spi);   /* shifter idle before CS high */
+    nora_spi_wait_done(&s_spi);   /* shifter idle before CS high */
     CS_DEASSERT();
     sst26_wait_wip_clear();
 }
@@ -142,13 +142,13 @@ bool sst26_min_init(void)
     (void)dspic33ak_gpio_set(BOARD_SST26_PIN_RST);   /* release reset */
     short_delay();
 
-    const dspic33ak_spi_config_t cfg = {
+    const nora_spi_config_t cfg = {
         .instance          = SST26_SPI_INSTANCE,
         .peripheralClockHz = SST26_SPI_PBCLK_HZ,
         .targetSckHz       = SST26_SPI_SCK_HZ,
         .mode              = SST26_SPI_MODE,
     };
-    return dspic33ak_spi_init(&s_spi, &cfg);
+    return nora_spi_init(&s_spi, &cfg);
 }
 
 bool sst26_min_read_jedec(uint8_t *mfr, uint8_t *type, uint8_t *dev)

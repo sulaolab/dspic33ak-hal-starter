@@ -1,8 +1,8 @@
-#ifndef DSPIC33AK_UDID_H
-#define DSPIC33AK_UDID_H
+#ifndef NORA_UDID_H
+#define NORA_UDID_H
 
 //===========================================================
-// dspic33ak_udid.{c,h} -- read the dsPIC33AK Unique Device Identifier (UDID).
+// nora_udid.h -- read the dsPIC33A-family Unique Device Identifier (UDID).
 //
 // The UDID is a 128-bit, factory-programmed, read-only value that is UNIQUE per
 // physical die. It is NOT the device type (DEVID, same for every part of a given
@@ -32,26 +32,26 @@
 extern "C" {
 #endif
 
-#define DSPIC33AK_UDID_WORD_COUNT (4U)
+#define NORA_UDID_WORD_COUNT (4U)
 
 typedef struct
 {
     // word[0] = UDID1 (bits 31:0) ... word[3] = UDID4 (bits 127:96).
-    uint32_t word[DSPIC33AK_UDID_WORD_COUNT];
-} dspic33ak_udid_t;
+    uint32_t word[NORA_UDID_WORD_COUNT];
+} nora_udid_t;
 
 // Read all four UDID words into *udid. Returns true only when the read succeeds
 // AND the value is plausible (see IsPlausible). Returns false (and leaves *udid
 // untouched) when udid is NULL; returns false (with *udid populated) when the
 // read produced an implausible all-zero / all-one value.
-bool DSPIC33AK_UDID_Read(dspic33ak_udid_t *udid);
+bool nora_udid_read(nora_udid_t *udid);
 
 // True when the UDID is neither all-0x00000000 nor all-0xFFFFFFFF (the two values
 // that indicate a failed / unprogrammed read). Pure check; no hardware access.
-bool DSPIC33AK_UDID_IsPlausible(const dspic33ak_udid_t *udid);
+bool nora_udid_is_plausible(const nora_udid_t *udid);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // DSPIC33AK_UDID_H
+#endif // NORA_UDID_H

@@ -16,7 +16,7 @@
 #include "board_pins.h"
 #include "dspic33ak_gpio.h"
 #include "dspic33ak_gpio_event.h"
-#include "dspic33ak_tick_timer.h"
+#include "nora_tick_timer.h"
 
 /* LED0..LED7 -> RC8..RC15, lit when driven high. LEDs are 0-indexed to match
  * the board silkscreen (LED0..LED7); the switches below are 1-indexed (SW1..3). */
@@ -146,8 +146,8 @@ void led_sw_boot_test(uint32_t hold_ms)
 
     led_sw_all(true);
 
-    start = dspic33ak_tick_timer_get_ms();
-    while ((uint32_t)(dspic33ak_tick_timer_get_ms() - start) < hold_ms) {
+    start = nora_tick_timer_get_ms();
+    while ((uint32_t)(nora_tick_timer_get_ms() - start) < hold_ms) {
         /* busy-wait on the Timer1 tick time base */
     }
 
@@ -165,7 +165,7 @@ static bool led_sw_debounce(uint8_t idx, bool raw)
     static bool     candidate[LED_SW_SW_COUNT];      /* last raw level seen     */
     static uint32_t candidate_ms[LED_SW_SW_COUNT];   /* when candidate appeared */
 
-    uint32_t now = dspic33ak_tick_timer_get_ms();
+    uint32_t now = nora_tick_timer_get_ms();
 
     if (raw != candidate[idx]) {
         candidate[idx]    = raw;

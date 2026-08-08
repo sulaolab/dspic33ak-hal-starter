@@ -1,5 +1,5 @@
-#ifndef DSPIC33AK_SPI_REG_H
-#define DSPIC33AK_SPI_REG_H
+#ifndef NORA_SPI_DSPIC33A_REG_H
+#define NORA_SPI_DSPIC33A_REG_H
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -7,7 +7,7 @@
 /*
  * Internal register helper layer for the blocking 8-bit SPI HAL.
  *
- * Like dspic33ak_dma_reg.h / dspic33ak_i2c_reg.h / dspic33ak_spi_i2s_tdm_reg.h, this
+ * Like nora_dma_dspic33a_reg.h / nora_i2c_dspic33a_reg.h / nora_spi_i2s_tdm_dspic33a_reg.h, this
  * intentionally uses plain 32-bit register pointers and bit masks instead of the
  * XC-DSC bitfield structures (SPIxCON1bits / SPIxSTATbits).  The goal is to let
  * one driver body drive any of SPI1..SPI4 through a table of register pointers,
@@ -63,4 +63,4 @@ static inline bool dspic33ak_spi_reg_is_set(volatile uint32_t *reg, uint32_t mas
     return ((*reg & mask) != 0u);
 }
 
-#endif /* DSPIC33AK_SPI_REG_H */
+#endif /* NORA_SPI_DSPIC33A_REG_H */

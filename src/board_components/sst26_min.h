@@ -7,7 +7,7 @@
  * Minimal SST26 (SPI NOR flash) driver for the starter: enough to read the
  * JEDEC ID and run a self-contained sector erase/write/read-back verify.
  *
- * The SPI bus transfer is provided by the SPI HAL (dspic33ak_spi); this driver
+ * The SPI bus transfer is provided by the SPI HAL (nora_spi); this driver
  * only issues flash commands and drives CS/RST. Pin routing (PPS + GPIO) is done
  * by the board layer (board_spi4_sst26_pins_init).
  */

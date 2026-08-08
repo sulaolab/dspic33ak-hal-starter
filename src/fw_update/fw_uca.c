@@ -6,7 +6,7 @@
 #include <stdbool.h>
 
 #include "fw_uca.h"
-#include "dspic33ak_nvm.h"
+#include "nora_nvm.h"
 
 //-----------------------------------------------------------
 // Read one 32-bit config word through a volatile absolute pointer.
@@ -98,12 +98,12 @@ fw_uca_status_t fw_uca_validate_active(fw_uca_report_t *report)
 {
     // Active partition = P2 iff P2ACTIV. NOT the program-flash |0x400000 alias:
     // the UCA is at a fixed physical address, chosen by which partition booted.
-    return fw_uca_validate(DSPIC33AK_NVM_IsPartition2Active(), report);
+    return fw_uca_validate(NORA_NVM_IsPartition2Active(), report);
 }
 
 fw_uca_status_t fw_uca_validate_inactive(fw_uca_report_t *report)
 {
-    return fw_uca_validate(!DSPIC33AK_NVM_IsPartition2Active(), report);
+    return fw_uca_validate(!NORA_NVM_IsPartition2Active(), report);
 }
 
 const char *fw_uca_status_name(fw_uca_status_t s)

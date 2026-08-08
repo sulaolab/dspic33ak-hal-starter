@@ -15,7 +15,7 @@
 #include "i2c_loopback.h"
 #include "dspic33ak_i2c_master.h"
 #include "dspic33ak_i2c_slave.h"
-#include "dspic33ak_tick_timer.h"
+#include "nora_tick_timer.h"
 
 #define LB_SLAVE_INST   DSPIC33AK_I2C_INST_3   /* MikroBUS B */
 #define LB_SLAVE_ADDR   0x55u
@@ -103,8 +103,8 @@ bool i2c_loopback_init(void)
 
 static void settle_ms(uint32_t ms)
 {
-    uint32_t t0 = dspic33ak_tick_timer_get_ms();
-    while ((uint32_t)(dspic33ak_tick_timer_get_ms() - t0) < ms) { }
+    uint32_t t0 = nora_tick_timer_get_ms();
+    while ((uint32_t)(nora_tick_timer_get_ms() - t0) < ms) { }
 }
 
 static void log_bytes(char dir, unsigned inst_num, const char *op,

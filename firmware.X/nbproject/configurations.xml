@@ -81,11 +81,11 @@
         <itemPath>../src/hal_i2c/dspic33ak_i2c_device.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f24" displayName="hal_nvm" projectFiles="true">
-        <itemPath>../src/hal_nvm/dspic33ak_nvm.c</itemPath>
-        <itemPath>../src/hal_nvm/dspic33ak_nvm.h</itemPath>
+        <itemPath>../src/hal_nvm/nora_nvm_dspic33a.c</itemPath>
+        <itemPath>../src/hal_nvm/nora_nvm.h</itemPath>
       </logicalFolder>
       <logicalFolder name="f9" displayName="hal_spi" projectFiles="true">
-        <itemPath>../src/hal_spi/dspic33ak_spi.c</itemPath>
+        <itemPath>../src/hal_spi/nora_spi_dspic33a.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f21" displayName="hal_spi_i2s_tdm" projectFiles="true">
         <itemPath>../src/hal_spi_i2s_tdm/dspic33ak_spi_i2s_tdm.c</itemPath>
@@ -94,8 +94,8 @@
         <itemPath>../src/hal_spi_i2s_tdm/dspic33ak_spi_i2s_tdm_diag.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f7" displayName="hal_timer" projectFiles="true">
-        <itemPath>../src/hal_timer/dspic33ak_tick_timer.c</itemPath>
-        <itemPath>../src/hal_timer/dspic33ak_high_res_timer.c</itemPath>
+        <itemPath>../src/hal_timer/nora_tick_timer_dspic33a.c</itemPath>
+        <itemPath>../src/hal_timer/nora_high_res_timer_dspic33a.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f5" displayName="hal_uart" projectFiles="true">
         <itemPath>../src/hal_uart/dspic33ak_uart.c</itemPath>
@@ -103,7 +103,7 @@
         <itemPath>../src/hal_uart/dspic33ak_uart_rx_isr_ring.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f8" displayName="hal_udid" projectFiles="true">
-        <itemPath>../src/hal_udid/dspic33ak_udid.c</itemPath>
+        <itemPath>../src/hal_udid/nora_udid_dspic33a.c</itemPath>
       </logicalFolder>
       <itemPath>../src/dspic33ak_spi_i2s_tdm_conf.h</itemPath>
       <itemPath>../src/board.c</itemPath>

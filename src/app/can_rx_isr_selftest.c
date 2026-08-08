@@ -23,7 +23,7 @@
 
 #include "dspic33ak_canfd_node.h"
 #include "dspic33ak_canfd_isr.h"
-#include "dspic33ak_tick_timer.h"
+#include "nora_tick_timer.h"
 #include "starter_clock.h"
 
 #define RXISR_TEST_ID        0x222u
@@ -93,7 +93,7 @@ static bool rxisr_bringup(void)
     cfg.brs          = true;
     cfg.mode         = DSPIC33AK_CANFD_MODE_INTERNAL_LOOPBACK;
     cfg.timeout_ms   = 10u;
-    cfg.get_ms       = dspic33ak_tick_timer_get_ms;
+    cfg.get_ms       = nora_tick_timer_get_ms;
     cfg.msg_ram      = rxisr_msg_ram;
     cfg.msg_ram_size = (uint16_t)sizeof(rxisr_msg_ram);
 
@@ -116,9 +116,9 @@ static void rxisr_build(uint8_t seed, uint8_t len, dspic33ak_canfd_frame_t *tx)
 /* Spin (bounded) until `*counter` reaches `target` or the timeout elapses. */
 static bool rxisr_wait_count(volatile uint32_t *counter, uint32_t target)
 {
-    uint32_t start = dspic33ak_tick_timer_get_ms();
+    uint32_t start = nora_tick_timer_get_ms();
     while (*counter < target) {
-        if ((uint32_t)(dspic33ak_tick_timer_get_ms() - start) >= RXISR_WAIT_MS) {
+        if ((uint32_t)(nora_tick_timer_get_ms() - start) >= RXISR_WAIT_MS) {
             return false;
         }
     }

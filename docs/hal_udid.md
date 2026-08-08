@@ -1,6 +1,6 @@
 # hal_udid -- dsPIC33AK Unique Device ID (board-individual identity)
 
-`src/hal_udid/dspic33ak_udid.{c,h}` reads the dsPIC33AK **UDID**: a 128-bit,
+`src/hal_udid/nora_udid_dspic33a.c / nora_udid.h` reads the dsPIC33AK **UDID**: a 128-bit,
 factory-programmed, read-only value that is **unique per physical die**. Use it to
 tell one board apart from another (provisioning, per-unit logs, "which board am I?"
 diagnostics).
@@ -35,16 +35,16 @@ table-read** setup (unlike classic dsPIC33C/E/F).
 ## API
 
 ```c
-dspic33ak_udid_t udid;
-if (DSPIC33AK_UDID_Read(&udid)) {
+nora_udid_t udid;
+if (nora_udid_read(&udid)) {
     // udid.word[0]=UDID1 ... udid.word[3]=UDID4
 }
 ```
 
-- `DSPIC33AK_UDID_Read()` reads the four words and returns `true` only when the
+- `nora_udid_read()` reads the four words and returns `true` only when the
   value is plausible. It returns `false` for a NULL pointer, or for an all-zero /
   all-one read (the signatures of a failed / unprogrammed read).
-- `DSPIC33AK_UDID_IsPlausible()` is the pure all-zero / all-one check (no hardware
+- `nora_udid_is_plausible()` is the pure all-zero / all-one check (no hardware
   access).
 
 ## Boot banner

@@ -1,14 +1,14 @@
 /*
- * dspic33ak_tick_timer.c
+ * nora_tick_timer_dspic33a.c
  * ----------------------
- * 1 ms time base on Timer1. See dspic33ak_tick_timer.h.
+ * 1 ms time base on Timer1. See nora_tick_timer.h.
  *
  * Timer1 uses a caller-supplied input clock. The HAL selects the smallest
  * available prescaler that can generate an exact or nearest 1 ms period within
  * the 32-bit PR1 range, then the interrupt handler increments a 32-bit counter.
  */
 
-#include "dspic33ak_tick_timer.h"
+#include "nora_tick_timer.h"
 
 #include <xc.h>
 
@@ -37,20 +37,20 @@ static const prescaler_option_t prescaler_options[] = {
 static volatile uint32_t tick_ms = 0u;
 static volatile bool tick_initialized = false;
 
-static dspic33ak_tick_timer_status_t calc_period_reg(
-    const dspic33ak_tick_timer_config_t *config,
+static nora_tick_timer_status_t calc_period_reg(
+    const nora_tick_timer_config_t *config,
     uint32_t *period_reg,
     uint8_t *tckps);
 
-dspic33ak_tick_timer_status_t dspic33ak_tick_timer_init(
-    const dspic33ak_tick_timer_config_t *config)
+nora_tick_timer_status_t nora_tick_timer_init(
+    const nora_tick_timer_config_t *config)
 {
     uint32_t period_reg;
     uint8_t tckps;
-    dspic33ak_tick_timer_status_t status;
+    nora_tick_timer_status_t status;
 
     status = calc_period_reg(config, &period_reg, &tckps);
-    if (status != DSPIC33AK_TICK_TIMER_OK) {
+    if (status != NORA_TICK_TIMER_OK) {
         return status;
     }
 
@@ -73,17 +73,17 @@ dspic33ak_tick_timer_status_t dspic33ak_tick_timer_init(
     _T1IE = 1;
     T1CONbits.ON = 1;
 
-    return DSPIC33AK_TICK_TIMER_OK;
+    return NORA_TICK_TIMER_OK;
 #else
-    return DSPIC33AK_TICK_TIMER_ERR_NOT_PRESENT;
+    return NORA_TICK_TIMER_ERR_NOT_PRESENT;
 #endif
 }
 
-dspic33ak_tick_timer_status_t dspic33ak_tick_timer_deinit(void)
+nora_tick_timer_status_t nora_tick_timer_deinit(void)
 {
 #if DSPIC33AK_TICK_TIMER_PRESENT
     if (!tick_initialized) {
-        return DSPIC33AK_TICK_TIMER_ERR_NOT_INITIALIZED;
+        return NORA_TICK_TIMER_ERR_NOT_INITIALIZED;
     }
 
     _T1IE = 0;
@@ -95,13 +95,13 @@ dspic33ak_tick_timer_status_t dspic33ak_tick_timer_deinit(void)
     tick_ms = 0u;
     tick_initialized = false;
 
-    return DSPIC33AK_TICK_TIMER_OK;
+    return NORA_TICK_TIMER_OK;
 #else
-    return DSPIC33AK_TICK_TIMER_ERR_NOT_PRESENT;
+    return NORA_TICK_TIMER_ERR_NOT_PRESENT;
 #endif
 }
 
-bool dspic33ak_tick_timer_is_present(void)
+bool nora_tick_timer_is_present(void)
 {
 #if DSPIC33AK_TICK_TIMER_PRESENT
     return true;
@@ -110,7 +110,7 @@ bool dspic33ak_tick_timer_is_present(void)
 #endif
 }
 
-uint32_t dspic33ak_tick_timer_get_ms(void)
+uint32_t nora_tick_timer_get_ms(void)
 {
     if (!tick_initialized) {
         return 0u;
@@ -119,12 +119,12 @@ uint32_t dspic33ak_tick_timer_get_ms(void)
     return tick_ms;
 }
 
-bool dspic33ak_tick_timer_is_initialized(void)
+bool nora_tick_timer_is_initialized(void)
 {
     return tick_initialized;
 }
 
-void dspic33ak_tick_timer_irq_handler(void)
+void nora_tick_timer_irq_handler(void)
 {
 #if DSPIC33AK_TICK_TIMER_PRESENT
     _T1IF = 0;
@@ -135,22 +135,22 @@ void dspic33ak_tick_timer_irq_handler(void)
 #endif
 }
 
-static dspic33ak_tick_timer_status_t calc_period_reg(
-    const dspic33ak_tick_timer_config_t *config,
+static nora_tick_timer_status_t calc_period_reg(
+    const nora_tick_timer_config_t *config,
     uint32_t *period_reg,
     uint8_t *tckps)
 {
     uint8_t i;
 
-    if (!dspic33ak_tick_timer_is_present()) {
-        return DSPIC33AK_TICK_TIMER_ERR_NOT_PRESENT;
+    if (!nora_tick_timer_is_present()) {
+        return NORA_TICK_TIMER_ERR_NOT_PRESENT;
     }
 
     if ((config == 0) || (period_reg == 0) || (tckps == 0) ||
         (config->timer_clk_hz == 0u) ||
         (config->irq_priority == 0u) ||
         (config->irq_priority > DSPIC33AK_TICK_TIMER_MAX_PRIORITY)) {
-        return DSPIC33AK_TICK_TIMER_ERR_INVALID_ARG;
+        return NORA_TICK_TIMER_ERR_INVALID_ARG;
     }
 
     for (i = 0u; i < (uint8_t)(sizeof(prescaler_options) / sizeof(prescaler_options[0])); i++) {
@@ -166,9 +166,9 @@ static dspic33ak_tick_timer_status_t calc_period_reg(
         if ((counts - 1u) <= UINT32_MAX) {
             *period_reg = (uint32_t)(counts - 1u);
             *tckps = prescaler_options[i].tckps;
-            return DSPIC33AK_TICK_TIMER_OK;
+            return NORA_TICK_TIMER_OK;
         }
     }
 
-    return DSPIC33AK_TICK_TIMER_ERR_OUT_OF_RANGE;
+    return NORA_TICK_TIMER_ERR_OUT_OF_RANGE;
 }

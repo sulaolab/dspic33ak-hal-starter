@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "dspic33ak_tick_timer.h"
+#include "nora_tick_timer.h"
 #include "dspic33ak_uart.h"
 
 #define UART_ASYNC_INST              DSPIC33AK_UART_INST_1
@@ -85,12 +85,12 @@ static void event_totals_clear(void)
 
 static bool elapsed_ms(uint32_t start_ms, uint32_t timeout_ms)
 {
-    return ((uint32_t)(dspic33ak_tick_timer_get_ms() - start_ms) >= timeout_ms);
+    return ((uint32_t)(nora_tick_timer_get_ms() - start_ms) >= timeout_ms);
 }
 
 static bool wait_for_event(uint32_t event_mask, uint32_t timeout_ms)
 {
-    const uint32_t start_ms = dspic33ak_tick_timer_get_ms();
+    const uint32_t start_ms = nora_tick_timer_get_ms();
 
     while ((s_uart_async_events & event_mask) == 0u) {
         if (elapsed_ms(start_ms, timeout_ms)) {
@@ -102,7 +102,7 @@ static bool wait_for_event(uint32_t event_mask, uint32_t timeout_ms)
 
 static bool wait_for_tx_done(uint32_t timeout_ms)
 {
-    const uint32_t start_ms = dspic33ak_tick_timer_get_ms();
+    const uint32_t start_ms = nora_tick_timer_get_ms();
 
     while (!dspic33ak_uart_tx_done(UART_ASYNC_INST)) {
         if (elapsed_ms(start_ms, timeout_ms)) {
