@@ -13,11 +13,11 @@
 #include <stdbool.h>
 
 #include "i2c_loopback.h"
-#include "dspic33ak_i2c_master.h"
-#include "dspic33ak_i2c_slave.h"
+#include "nora_i2c_master.h"
+#include "nora_i2c_slave.h"
 #include "nora_tick_timer.h"
 
-#define LB_SLAVE_INST   DSPIC33AK_I2C_INST_3   /* MikroBUS B */
+#define LB_SLAVE_INST   NORA_I2C_INST_3   /* MikroBUS B */
 #define LB_SLAVE_ADDR   0x55u
 #define LB_LEN          8u                     /* payload length per transfer */
 
@@ -65,24 +65,24 @@ static uint8_t slave_on_tx(void)
  * vectors and forward each to the matching slave handler. */
 void __attribute__((__interrupt__, __no_auto_psv__)) _I2C3Interrupt(void)
 {
-    dspic33ak_i2c_slave_event_irq(LB_SLAVE_INST);
+    nora_i2c_slave_event_irq(LB_SLAVE_INST);
 }
 
 void __attribute__((__interrupt__, __no_auto_psv__)) _I2C3RXInterrupt(void)
 {
-    dspic33ak_i2c_slave_rx_irq(LB_SLAVE_INST);
+    nora_i2c_slave_rx_irq(LB_SLAVE_INST);
 }
 
 void __attribute__((__interrupt__, __no_auto_psv__)) _I2C3TXInterrupt(void)
 {
-    dspic33ak_i2c_slave_tx_irq(LB_SLAVE_INST);
+    nora_i2c_slave_tx_irq(LB_SLAVE_INST);
 }
 
 /* ------------------------------------------------------------------------- */
 
 bool i2c_loopback_init(void)
 {
-    static const dspic33ak_i2c_slave_config_t scfg = {
+    static const nora_i2c_slave_config_t scfg = {
         .addr7         = (uint8_t)LB_SLAVE_ADDR,
         .addr_mask     = 0u,
         .clock_stretch = false,
@@ -94,11 +94,11 @@ bool i2c_loopback_init(void)
 
     /* The slave HAL enables the interrupt sources; the application owns the
      * vectors and asks the HAL to set the matching line priorities. */
-    if (dspic33ak_i2c_set_interrupt_priority(LB_SLAVE_INST, 4u) != DSPIC33AK_I2C_OK) {
+    if (nora_i2c_set_interrupt_priority(LB_SLAVE_INST, 4u) != NORA_I2C_OK) {
         return false;
     }
 
-    return (dspic33ak_i2c_slave_init(LB_SLAVE_INST, &scfg) == DSPIC33AK_I2C_OK);
+    return (nora_i2c_slave_init(LB_SLAVE_INST, &scfg) == NORA_I2C_OK);
 }
 
 static void settle_ms(uint32_t ms)
@@ -118,7 +118,7 @@ static void log_bytes(char dir, unsigned inst_num, const char *op,
     printf("\n");
 }
 
-void i2c_loopback_tick(dspic33ak_i2c_instance_t master_inst, uint32_t beat)
+void i2c_loopback_tick(nora_i2c_instance_t master_inst, uint32_t beat)
 {
     uint8_t  tx[LB_LEN];
     uint8_t  rx[LB_LEN];
@@ -138,7 +138,7 @@ void i2c_loopback_tick(dspic33ak_i2c_instance_t master_inst, uint32_t beat)
     /* ---- master Write -> slave receives ---- */
     g_rx_idx = 0u;
     log_bytes('<', m, "Wr", tx, LB_LEN);
-    (void)dspic33ak_i2c_write(master_inst, (uint8_t)LB_SLAVE_ADDR, tx, LB_LEN);
+    (void)nora_i2c_write(master_inst, (uint8_t)LB_SLAVE_ADDR, tx, LB_LEN);
     settle_ms(1u);
     log_bytes('>', s, "Rd", g_mem, (g_rx_idx < LB_LEN) ? g_rx_idx : LB_LEN);
 
@@ -146,7 +146,7 @@ void i2c_loopback_tick(dspic33ak_i2c_instance_t master_inst, uint32_t beat)
     for (i = 0u; i < LB_LEN; i++) {
         rx[i] = 0u;
     }
-    (void)dspic33ak_i2c_read(master_inst, (uint8_t)LB_SLAVE_ADDR, rx, LB_LEN);
+    (void)nora_i2c_read(master_inst, (uint8_t)LB_SLAVE_ADDR, rx, LB_LEN);
     settle_ms(1u);
     log_bytes('>', m, "Rd", rx, LB_LEN);
     log_bytes('<', s, "Wr", g_tx_log, (g_tx_cnt < LB_LEN) ? g_tx_cnt : LB_LEN);

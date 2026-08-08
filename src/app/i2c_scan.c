@@ -9,10 +9,10 @@
 #include <stdio.h>
 #include <stdint.h>
 
-#include "dspic33ak_i2c_master.h"
+#include "nora_i2c_master.h"
 #include "i2c_scan.h"
 
-void i2c_scan_run(dspic33ak_i2c_instance_t inst, const char *label)
+void i2c_scan_run(nora_i2c_instance_t inst, const char *label)
 {
     if (label != NULL) {
         printf(" I2C scan (%s, I2C%u): probing 0x08..0x77 ...\n",
@@ -25,8 +25,8 @@ void i2c_scan_run(dspic33ak_i2c_instance_t inst, const char *label)
     int found = 0;
     for (uint8_t addr = 0x08u; addr <= 0x77u; addr++)
     {
-        dspic33ak_i2c_status_t st = dspic33ak_i2c_write(inst, addr, NULL, 0u);
-        if (st == DSPIC33AK_I2C_OK)
+        nora_i2c_status_t st = nora_i2c_write(inst, addr, NULL, 0u);
+        if (st == NORA_I2C_OK)
         {
             printf("   device ACK at 0x%02X\n", addr);
             found++;

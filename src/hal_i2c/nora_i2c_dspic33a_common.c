@@ -1,14 +1,14 @@
-#include "dspic33ak_i2c.h"
-#include "dspic33ak_i2c_device.h"
-#include "dspic33ak_i2c_reg.h"
-#include "dspic33ak_i2c_common.h"
+#include "nora_i2c.h"
+#include "nora_i2c_dspic33a_device.h"
+#include "nora_i2c_dspic33a_reg.h"
+#include "nora_i2c_dspic33a_internal.h"
 
 /* --------------------------------------------------------------------------
  * Shared helpers used by both the master and slave engines.
  *
  * The resolution helpers (inst_is_valid / get_regs / calc_brg / is_present) are
  * pure. The only module state here is the per-instance role (set by the master
- * and slave engines on init/deinit) behind dspic33ak_i2c_is_initialized(); the
+ * and slave engines on init/deinit) behind nora_i2c_is_initialized(); the
  * engines' own per-instance state (timeout config, pending tracking, slave
  * callbacks) still lives in their respective translation units.
  * -------------------------------------------------------------------------- */
@@ -16,41 +16,41 @@
 /* --------------------------------------------------------------------------
  * Validate instance number
  * -------------------------------------------------------------------------- */
-bool dspic33ak_i2c_inst_is_valid(dspic33ak_i2c_instance_t inst)
+bool nora_i2c_inst_is_valid(nora_i2c_instance_t inst)
 {
-    return ((unsigned)inst < (unsigned)DSPIC33AK_I2C_INST_COUNT);
+    return ((unsigned)inst < (unsigned)NORA_I2C_INST_COUNT);
 }
 
 /* --------------------------------------------------------------------------
  * Resolve instance to register table
  * -------------------------------------------------------------------------- */
-dspic33ak_i2c_status_t dspic33ak_i2c_get_regs(
-    dspic33ak_i2c_instance_t inst,
-    const dspic33ak_i2c_regs_t **regs)
+nora_i2c_status_t nora_i2c_get_regs(
+    nora_i2c_instance_t inst,
+    const nora_i2c_regs_t **regs)
 {
-    const dspic33ak_i2c_device_t *dev;
+    const nora_i2c_device_t *dev;
 
     if (regs == 0) {
-        return DSPIC33AK_I2C_ERR_INVALID_ARG;
+        return NORA_I2C_ERR_INVALID_ARG;
     }
 
-    if (!dspic33ak_i2c_inst_is_valid(inst)) {
-        return DSPIC33AK_I2C_ERR_INVALID_ARG;
+    if (!nora_i2c_inst_is_valid(inst)) {
+        return NORA_I2C_ERR_INVALID_ARG;
     }
 
-    dev = dspic33ak_i2c_get_device(inst);
+    dev = nora_i2c_get_device(inst);
     if (dev == 0) {
-        return DSPIC33AK_I2C_ERR_NOT_PRESENT;
+        return NORA_I2C_ERR_NOT_PRESENT;
     }
 
     *regs = &dev->regs;
-    return DSPIC33AK_I2C_OK;
+    return NORA_I2C_OK;
 }
 
 /* --------------------------------------------------------------------------
  * Calculate BRG value
  * -------------------------------------------------------------------------- */
-uint32_t dspic33ak_i2c_calc_brg(uint32_t fcy_hz, uint32_t bus_hz)
+uint32_t nora_i2c_calc_brg(uint32_t fcy_hz, uint32_t bus_hz)
 {
     uint64_t div;
 
@@ -75,32 +75,32 @@ uint32_t dspic33ak_i2c_calc_brg(uint32_t fcy_hz, uint32_t bus_hz)
 /* --------------------------------------------------------------------------
  * Check whether I2C instance exists on the selected device
  * -------------------------------------------------------------------------- */
-bool dspic33ak_i2c_is_present(dspic33ak_i2c_instance_t inst)
+bool nora_i2c_is_present(nora_i2c_instance_t inst)
 {
-    return dspic33ak_i2c_instance_is_present(inst);
+    return nora_i2c_instance_is_present(inst);
 }
 
 /* --------------------------------------------------------------------------
  * Shared role / lifecycle state
  *
  * The master and slave engines record their role here on init/deinit so the
- * public dspic33ak_i2c_is_initialized() reflects either role. This is the only
+ * public nora_i2c_is_initialized() reflects either role. This is the only
  * module state in the common layer.
  * -------------------------------------------------------------------------- */
-static dspic33ak_i2c_role_t g_role[DSPIC33AK_I2C_INST_COUNT];
+static nora_i2c_role_t g_role[NORA_I2C_INST_COUNT];
 
-void dspic33ak_i2c_set_role(dspic33ak_i2c_instance_t inst,
-                            dspic33ak_i2c_role_t role)
+void nora_i2c_set_role(nora_i2c_instance_t inst,
+                            nora_i2c_role_t role)
 {
-    if (dspic33ak_i2c_inst_is_valid(inst)) {
+    if (nora_i2c_inst_is_valid(inst)) {
         g_role[inst] = role;
     }
 }
 
-dspic33ak_i2c_role_t dspic33ak_i2c_get_role(dspic33ak_i2c_instance_t inst)
+nora_i2c_role_t nora_i2c_get_role(nora_i2c_instance_t inst)
 {
-    if (!dspic33ak_i2c_inst_is_valid(inst)) {
-        return DSPIC33AK_I2C_ROLE_NONE;
+    if (!nora_i2c_inst_is_valid(inst)) {
+        return NORA_I2C_ROLE_NONE;
     }
     return g_role[inst];
 }
@@ -108,7 +108,7 @@ dspic33ak_i2c_role_t dspic33ak_i2c_get_role(dspic33ak_i2c_instance_t inst)
 /* --------------------------------------------------------------------------
  * Initialized query (true once init'd as either master or slave)
  * -------------------------------------------------------------------------- */
-bool dspic33ak_i2c_is_initialized(dspic33ak_i2c_instance_t inst)
+bool nora_i2c_is_initialized(nora_i2c_instance_t inst)
 {
-    return (dspic33ak_i2c_get_role(inst) != DSPIC33AK_I2C_ROLE_NONE);
+    return (nora_i2c_get_role(inst) != NORA_I2C_ROLE_NONE);
 }

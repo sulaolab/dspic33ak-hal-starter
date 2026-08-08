@@ -9,7 +9,7 @@
  * (prints "no devices found" on a bare bus). This is example code, not a HAL.
  */
 
-#include "dspic33ak_i2c.h"
+#include "nora_i2c.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -22,7 +22,7 @@ extern "C" {
  * It is printed alongside the I2C instance number; pass NULL to omit it. The
  * mapping of an instance to a connector is board knowledge, so it is provided
  * by the caller rather than hard-coded into this generic sample. */
-void i2c_scan_run(dspic33ak_i2c_instance_t inst, const char *label);
+void i2c_scan_run(nora_i2c_instance_t inst, const char *label);
 
 #ifdef __cplusplus
 }

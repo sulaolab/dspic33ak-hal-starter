@@ -1,23 +1,23 @@
-#include "dspic33ak_i2c_master.h"
-#include "dspic33ak_i2c_device.h"
-#include "dspic33ak_i2c_reg.h"
-#include "dspic33ak_i2c_common.h"
+#include "nora_i2c_master.h"
+#include "nora_i2c_dspic33a_device.h"
+#include "nora_i2c_dspic33a_reg.h"
+#include "nora_i2c_dspic33a_internal.h"
 
 /* --------------------------------------------------------------------------
  * Module state
  * -------------------------------------------------------------------------- */
 
 typedef enum {
-    DSPIC33AK_I2C_PENDING_NONE = 0,
-    DSPIC33AK_I2C_PENDING_MASTER_WRITE
-} dspic33ak_i2c_pending_state_t;
+    NORA_I2C_PENDING_NONE = 0,
+    NORA_I2C_PENDING_MASTER_WRITE
+} nora_i2c_pending_state_t;
 
-static uint32_t g_timeout_ms[DSPIC33AK_I2C_INST_COUNT];
-static dspic33ak_i2c_get_ms_fn g_get_ms[DSPIC33AK_I2C_INST_COUNT];
-static bool g_initialized[DSPIC33AK_I2C_INST_COUNT];
-static dspic33ak_i2c_pending_state_t g_pending_state[DSPIC33AK_I2C_INST_COUNT];
-static uint32_t g_pending_start_ms[DSPIC33AK_I2C_INST_COUNT];
-static uint32_t g_pending_timeout_ms[DSPIC33AK_I2C_INST_COUNT];
+static uint32_t g_timeout_ms[NORA_I2C_INST_COUNT];
+static nora_i2c_get_ms_fn g_get_ms[NORA_I2C_INST_COUNT];
+static bool g_initialized[NORA_I2C_INST_COUNT];
+static nora_i2c_pending_state_t g_pending_state[NORA_I2C_INST_COUNT];
+static uint32_t g_pending_start_ms[NORA_I2C_INST_COUNT];
+static uint32_t g_pending_timeout_ms[NORA_I2C_INST_COUNT];
 
 /* --------------------------------------------------------------------------
  * Local helper prototypes
@@ -29,63 +29,64 @@ static uint32_t g_pending_timeout_ms[DSPIC33AK_I2C_INST_COUNT];
  * -------------------------------------------------------------------------- */
 
 /* inst_is_valid / get_regs / calc_brg are shared primitives, declared in
- * dspic33ak_i2c_common.h and defined in dspic33ak_i2c_common.c. */
-static dspic33ak_i2c_status_t require_initialized(
-    dspic33ak_i2c_instance_t inst,
-    const dspic33ak_i2c_regs_t **regs);
-static dspic33ak_i2c_status_t check_initialized(dspic33ak_i2c_instance_t inst);
-static bool timeout_enabled(dspic33ak_i2c_instance_t inst);
-static uint32_t timeout_start_ms(dspic33ak_i2c_instance_t inst);
-static bool timeout_expired(dspic33ak_i2c_instance_t inst, uint32_t start_ms);
-static bool pending_timeout_enabled(dspic33ak_i2c_instance_t inst);
-static bool pending_timeout_expired(dspic33ak_i2c_instance_t inst);
-static void pending_clear(dspic33ak_i2c_instance_t inst);
+ * nora_i2c_dspic33a_internal.h and defined in
+ * nora_i2c_dspic33a_common.c. */
+static nora_i2c_status_t require_initialized(
+    nora_i2c_instance_t inst,
+    const nora_i2c_regs_t **regs);
+static nora_i2c_status_t check_initialized(nora_i2c_instance_t inst);
+static bool timeout_enabled(nora_i2c_instance_t inst);
+static uint32_t timeout_start_ms(nora_i2c_instance_t inst);
+static bool timeout_expired(nora_i2c_instance_t inst, uint32_t start_ms);
+static bool pending_timeout_enabled(nora_i2c_instance_t inst);
+static bool pending_timeout_expired(nora_i2c_instance_t inst);
+static void pending_clear(nora_i2c_instance_t inst);
 static void pending_set(
-    dspic33ak_i2c_instance_t inst,
-    dspic33ak_i2c_pending_state_t state);
-static dspic33ak_i2c_status_t recover_stale_pending_if_needed(
-    dspic33ak_i2c_instance_t inst);
-static dspic33ak_i2c_status_t begin_independent_transaction(
-    dspic33ak_i2c_instance_t inst);
-static dspic33ak_i2c_status_t write_no_stop_sequence(
-    dspic33ak_i2c_instance_t inst,
+    nora_i2c_instance_t inst,
+    nora_i2c_pending_state_t state);
+static nora_i2c_status_t recover_stale_pending_if_needed(
+    nora_i2c_instance_t inst);
+static nora_i2c_status_t begin_independent_transaction(
+    nora_i2c_instance_t inst);
+static nora_i2c_status_t write_no_stop_sequence(
+    nora_i2c_instance_t inst,
     uint8_t addr7,
     const uint8_t *tx,
     size_t tx_len);
-static dspic33ak_i2c_status_t read_after_restart_sequence(
-    dspic33ak_i2c_instance_t inst,
+static nora_i2c_status_t read_after_restart_sequence(
+    nora_i2c_instance_t inst,
     uint8_t addr7,
     uint8_t *rx,
     size_t rx_len);
-static dspic33ak_i2c_status_t stop_pending_sequence(
-    dspic33ak_i2c_instance_t inst);
-static dspic33ak_i2c_status_t abort_pending_sequence(
-    dspic33ak_i2c_instance_t inst,
-    dspic33ak_i2c_status_t original_status);
-static void clear_transfer_status(const dspic33ak_i2c_regs_t *r);
-static dspic33ak_i2c_status_t check_bus_fault(dspic33ak_i2c_instance_t inst);
-static dspic33ak_i2c_status_t wait_until(
-    dspic33ak_i2c_instance_t inst,
-    bool (*done_fn)(dspic33ak_i2c_instance_t),
+static nora_i2c_status_t stop_pending_sequence(
+    nora_i2c_instance_t inst);
+static nora_i2c_status_t abort_pending_sequence(
+    nora_i2c_instance_t inst,
+    nora_i2c_status_t original_status);
+static void clear_transfer_status(const nora_i2c_regs_t *r);
+static nora_i2c_status_t check_bus_fault(nora_i2c_instance_t inst);
+static nora_i2c_status_t wait_until(
+    nora_i2c_instance_t inst,
+    bool (*done_fn)(nora_i2c_instance_t),
     bool check_nack);
-static bool host_active(dspic33ak_i2c_instance_t inst);
-static bool write_byte_ready(dspic33ak_i2c_instance_t inst);
-static bool write_byte_done(dspic33ak_i2c_instance_t inst);
-static bool write_data_accepted(dspic33ak_i2c_instance_t inst);
-static bool ack_done(dspic33ak_i2c_instance_t inst);
-static bool stop_fully_done(dspic33ak_i2c_instance_t inst);
-static dspic33ak_i2c_status_t stop_quiet(dspic33ak_i2c_instance_t inst);
-static dspic33ak_i2c_status_t start_blocking(dspic33ak_i2c_instance_t inst);
-static dspic33ak_i2c_status_t restart_blocking(dspic33ak_i2c_instance_t inst);
-static dspic33ak_i2c_status_t write_byte_blocking(
-    dspic33ak_i2c_instance_t inst,
+static bool host_active(nora_i2c_instance_t inst);
+static bool write_byte_ready(nora_i2c_instance_t inst);
+static bool write_byte_done(nora_i2c_instance_t inst);
+static bool write_data_accepted(nora_i2c_instance_t inst);
+static bool ack_done(nora_i2c_instance_t inst);
+static bool stop_fully_done(nora_i2c_instance_t inst);
+static nora_i2c_status_t stop_quiet(nora_i2c_instance_t inst);
+static nora_i2c_status_t start_blocking(nora_i2c_instance_t inst);
+static nora_i2c_status_t restart_blocking(nora_i2c_instance_t inst);
+static nora_i2c_status_t write_byte_blocking(
+    nora_i2c_instance_t inst,
     uint8_t data);
-static dspic33ak_i2c_status_t read_byte_blocking(
-    dspic33ak_i2c_instance_t inst,
+static nora_i2c_status_t read_byte_blocking(
+    nora_i2c_instance_t inst,
     uint8_t *data,
     bool ack);
-static dspic33ak_i2c_status_t send_address_blocking(
-    dspic33ak_i2c_instance_t inst,
+static nora_i2c_status_t send_address_blocking(
+    nora_i2c_instance_t inst,
     uint8_t addr7,
     bool read);
 
@@ -96,38 +97,38 @@ static dspic33ak_i2c_status_t send_address_blocking(
 /* --------------------------------------------------------------------------
  * Initialize I2C instance
  * -------------------------------------------------------------------------- */
-dspic33ak_i2c_status_t dspic33ak_i2c_init(
-    dspic33ak_i2c_instance_t inst,
-    const dspic33ak_i2c_config_t *config)
+nora_i2c_status_t nora_i2c_init(
+    nora_i2c_instance_t inst,
+    const nora_i2c_config_t *config)
 {
-    const dspic33ak_i2c_regs_t *r;
-    dspic33ak_i2c_status_t st;
+    const nora_i2c_regs_t *r;
+    nora_i2c_status_t st;
     uint32_t brg;
 
-    if (!dspic33ak_i2c_inst_is_valid(inst)) {
-        return DSPIC33AK_I2C_ERR_INVALID_ARG;
+    if (!nora_i2c_inst_is_valid(inst)) {
+        return NORA_I2C_ERR_INVALID_ARG;
     }
 
     if (config == 0 || config->fcy_hz == 0u || config->bus_hz == 0u) {
-        return DSPIC33AK_I2C_ERR_INVALID_ARG;
+        return NORA_I2C_ERR_INVALID_ARG;
     }
 
-    st = dspic33ak_i2c_get_regs(inst, &r);
-    if (st != DSPIC33AK_I2C_OK) {
+    st = nora_i2c_get_regs(inst, &r);
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
     /* Start from a known disabled state; enable after configuration is complete. */
-    dspic33ak_i2c_reg_write(r->CON1, 0u);
-    dspic33ak_i2c_reg_write(r->CON2, DSPIC33AK_I2C_CON2_PSZ_1_BYTE);
+    nora_i2c_reg_write(r->CON1, 0u);
+    nora_i2c_reg_write(r->CON2, NORA_I2C_CON2_PSZ_1_BYTE);
     clear_transfer_status(r);
 
-    dspic33ak_i2c_reg_set(r->CON2, DSPIC33AK_I2C_CON2_BITE);
-    dspic33ak_i2c_reg_write_field(r->BITO,
-                                   DSPIC33AK_I2C_BITO_BITOTMR_MASK,
+    nora_i2c_reg_set(r->CON2, NORA_I2C_CON2_BITE);
+    nora_i2c_reg_write_field(r->BITO,
+                                   NORA_I2C_BITO_BITOTMR_MASK,
                                    76u);
 
-    brg = dspic33ak_i2c_calc_brg(config->fcy_hz, config->bus_hz);
+    brg = nora_i2c_calc_brg(config->fcy_hz, config->bus_hz);
 
     /* LBRG and HBRG are equal for a simple 50% duty-cycle SCL setup. */
     *r->LBRG = brg;
@@ -138,50 +139,50 @@ dspic33ak_i2c_status_t dspic33ak_i2c_init(
     g_pending_timeout_ms[inst] = config->pending_timeout_ms;
     pending_clear(inst);
     g_initialized[inst] = true;
-    dspic33ak_i2c_set_role(inst, DSPIC33AK_I2C_ROLE_MASTER);
+    nora_i2c_set_role(inst, NORA_I2C_ROLE_MASTER);
 
-    dspic33ak_i2c_reg_set(r->CON1, DSPIC33AK_I2C_CON1_ON);
+    nora_i2c_reg_set(r->CON1, NORA_I2C_CON1_ON);
 
-    return DSPIC33AK_I2C_OK;
+    return NORA_I2C_OK;
 }
 
 /* --------------------------------------------------------------------------
  * Deinitialize I2C instance
  * -------------------------------------------------------------------------- */
-dspic33ak_i2c_status_t dspic33ak_i2c_deinit(
-    dspic33ak_i2c_instance_t inst)
+nora_i2c_status_t nora_i2c_deinit(
+    nora_i2c_instance_t inst)
 {
-    const dspic33ak_i2c_regs_t *r;
-    dspic33ak_i2c_status_t st;
+    const nora_i2c_regs_t *r;
+    nora_i2c_status_t st;
 
-    if (!dspic33ak_i2c_inst_is_valid(inst)) {
-        return DSPIC33AK_I2C_ERR_INVALID_ARG;
+    if (!nora_i2c_inst_is_valid(inst)) {
+        return NORA_I2C_ERR_INVALID_ARG;
     }
 
-    st = dspic33ak_i2c_get_regs(inst, &r);
-    if (st != DSPIC33AK_I2C_OK) {
+    st = nora_i2c_get_regs(inst, &r);
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
     st = recover_stale_pending_if_needed(inst);
-    if (st != DSPIC33AK_I2C_OK &&
-        st != DSPIC33AK_I2C_ERR_TIMEOUT &&
-        st != DSPIC33AK_I2C_ERR_BUS &&
-        st != DSPIC33AK_I2C_ERR_COLLISION) {
+    if (st != NORA_I2C_OK &&
+        st != NORA_I2C_ERR_TIMEOUT &&
+        st != NORA_I2C_ERR_BUS &&
+        st != NORA_I2C_ERR_COLLISION) {
         return st;
     }
 
-    if (st == DSPIC33AK_I2C_OK &&
-        g_pending_state[inst] == DSPIC33AK_I2C_PENDING_NONE) {
-        if (dspic33ak_i2c_reg_is_set(r->STAT2, DSPIC33AK_I2C_STAT2_HSTACT) ||
-            dspic33ak_i2c_reg_is_set(r->STAT1, DSPIC33AK_I2C_STAT1_TRSTAT) ||
-            dspic33ak_i2c_reg_is_set(r->CON1,
-                                      DSPIC33AK_I2C_CON1_SEN |
-                                      DSPIC33AK_I2C_CON1_RSEN |
-                                      DSPIC33AK_I2C_CON1_PEN |
-                                      DSPIC33AK_I2C_CON1_RCEN |
-                                      DSPIC33AK_I2C_CON1_ACKEN)) {
-            return DSPIC33AK_I2C_ERR_BUSY;
+    if (st == NORA_I2C_OK &&
+        g_pending_state[inst] == NORA_I2C_PENDING_NONE) {
+        if (nora_i2c_reg_is_set(r->STAT2, NORA_I2C_STAT2_HSTACT) ||
+            nora_i2c_reg_is_set(r->STAT1, NORA_I2C_STAT1_TRSTAT) ||
+            nora_i2c_reg_is_set(r->CON1,
+                                      NORA_I2C_CON1_SEN |
+                                      NORA_I2C_CON1_RSEN |
+                                      NORA_I2C_CON1_PEN |
+                                      NORA_I2C_CON1_RCEN |
+                                      NORA_I2C_CON1_ACKEN)) {
+            return NORA_I2C_ERR_BUSY;
         }
     }
 
@@ -190,14 +191,14 @@ dspic33ak_i2c_status_t dspic33ak_i2c_deinit(
      * recovery path.  Force the peripheral and HAL state off instead of
      * leaving the caller with no way out when pending timeout is disabled.
      */
-    dspic33ak_i2c_reg_clear(r->CON1, DSPIC33AK_I2C_CON1_ON);
+    nora_i2c_reg_clear(r->CON1, NORA_I2C_CON1_ON);
 
     g_timeout_ms[inst] = 0u;
     g_get_ms[inst] = 0;
     g_pending_timeout_ms[inst] = 0u;
     pending_clear(inst);
     g_initialized[inst] = false;
-    dspic33ak_i2c_set_role(inst, DSPIC33AK_I2C_ROLE_NONE);
+    nora_i2c_set_role(inst, NORA_I2C_ROLE_NONE);
 
     return st;
 }
@@ -205,26 +206,26 @@ dspic33ak_i2c_status_t dspic33ak_i2c_deinit(
 /* --------------------------------------------------------------------------
  * Update bus speed on an initialized idle instance
  * -------------------------------------------------------------------------- */
-dspic33ak_i2c_status_t dspic33ak_i2c_set_bus_speed(
-    dspic33ak_i2c_instance_t inst,
+nora_i2c_status_t nora_i2c_set_bus_speed(
+    nora_i2c_instance_t inst,
     uint32_t fcy_hz,
     uint32_t bus_hz)
 {
-    const dspic33ak_i2c_regs_t *r;
-    dspic33ak_i2c_status_t st;
+    const nora_i2c_regs_t *r;
+    nora_i2c_status_t st;
     uint32_t brg;
     bool was_on;
 
-    if (!dspic33ak_i2c_inst_is_valid(inst)) {
-        return DSPIC33AK_I2C_ERR_INVALID_ARG;
+    if (!nora_i2c_inst_is_valid(inst)) {
+        return NORA_I2C_ERR_INVALID_ARG;
     }
 
     if (fcy_hz == 0u || bus_hz == 0u) {
-        return DSPIC33AK_I2C_ERR_INVALID_ARG;
+        return NORA_I2C_ERR_INVALID_ARG;
     }
 
     st = require_initialized(inst, &r);
-    if (st != DSPIC33AK_I2C_OK) {
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
@@ -233,8 +234,8 @@ dspic33ak_i2c_status_t dspic33ak_i2c_set_bus_speed(
      * simply blocks the speed change; recovery stays the responsibility of the
      * read-after-restart / stop / deinit paths.
      */
-    if (g_pending_state[inst] != DSPIC33AK_I2C_PENDING_NONE) {
-        return DSPIC33AK_I2C_ERR_BUSY;
+    if (g_pending_state[inst] != NORA_I2C_PENDING_NONE) {
+        return NORA_I2C_ERR_BUSY;
     }
 
     /*
@@ -244,63 +245,63 @@ dspic33ak_i2c_status_t dspic33ak_i2c_set_bus_speed(
      * deinit.
      */
     if (host_active(inst) ||
-        dspic33ak_i2c_reg_is_set(r->STAT1, DSPIC33AK_I2C_STAT1_TRSTAT) ||
-        dspic33ak_i2c_reg_is_set(r->CON1,
-                                  DSPIC33AK_I2C_CON1_SEN |
-                                  DSPIC33AK_I2C_CON1_RSEN |
-                                  DSPIC33AK_I2C_CON1_PEN |
-                                  DSPIC33AK_I2C_CON1_RCEN |
-                                  DSPIC33AK_I2C_CON1_ACKEN)) {
-        return DSPIC33AK_I2C_ERR_BUSY;
+        nora_i2c_reg_is_set(r->STAT1, NORA_I2C_STAT1_TRSTAT) ||
+        nora_i2c_reg_is_set(r->CON1,
+                                  NORA_I2C_CON1_SEN |
+                                  NORA_I2C_CON1_RSEN |
+                                  NORA_I2C_CON1_PEN |
+                                  NORA_I2C_CON1_RCEN |
+                                  NORA_I2C_CON1_ACKEN)) {
+        return NORA_I2C_ERR_BUSY;
     }
 
-    brg = dspic33ak_i2c_calc_brg(fcy_hz, bus_hz);
+    brg = nora_i2c_calc_brg(fcy_hz, bus_hz);
 
     /*
      * Safe-side update: turn the peripheral off while LBRG/HBRG change, then
      * restore the previous ON state.
      */
-    was_on = dspic33ak_i2c_reg_is_set(r->CON1, DSPIC33AK_I2C_CON1_ON);
+    was_on = nora_i2c_reg_is_set(r->CON1, NORA_I2C_CON1_ON);
     if (was_on) {
-        dspic33ak_i2c_reg_clear(r->CON1, DSPIC33AK_I2C_CON1_ON);
+        nora_i2c_reg_clear(r->CON1, NORA_I2C_CON1_ON);
     }
 
     *r->LBRG = brg;
     *r->HBRG = brg;
 
     if (was_on) {
-        dspic33ak_i2c_reg_set(r->CON1, DSPIC33AK_I2C_CON1_ON);
+        nora_i2c_reg_set(r->CON1, NORA_I2C_CON1_ON);
     }
 
-    return DSPIC33AK_I2C_OK;
+    return NORA_I2C_OK;
 }
 
-/* dspic33ak_i2c_is_present() and dspic33ak_i2c_is_initialized() are shared;
- * see dspic33ak_i2c_common.c (is_initialized reflects the master OR slave
- * role recorded via dspic33ak_i2c_set_role()). */
+/* nora_i2c_is_present() and nora_i2c_is_initialized() are shared;
+ * see nora_i2c_dspic33a_common.c (is_initialized reflects the master OR slave
+ * role recorded via nora_i2c_set_role()). */
 
 /* --------------------------------------------------------------------------
  * Blocking write transaction
  * -------------------------------------------------------------------------- */
-dspic33ak_i2c_status_t dspic33ak_i2c_write(
-    dspic33ak_i2c_instance_t inst,
+nora_i2c_status_t nora_i2c_write(
+    nora_i2c_instance_t inst,
     uint8_t addr7,
     const uint8_t *tx,
     size_t tx_len)
 {
-    dspic33ak_i2c_status_t st;
+    nora_i2c_status_t st;
 
     if (tx_len != 0u && tx == 0) {
-        return DSPIC33AK_I2C_ERR_INVALID_ARG;
+        return NORA_I2C_ERR_INVALID_ARG;
     }
 
     st = begin_independent_transaction(inst);
-    if (st != DSPIC33AK_I2C_OK) {
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
     st = write_no_stop_sequence(inst, addr7, tx, tx_len);
-    if (st != DSPIC33AK_I2C_OK) {
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
@@ -310,32 +311,32 @@ dspic33ak_i2c_status_t dspic33ak_i2c_write(
 /* --------------------------------------------------------------------------
  * Blocking read transaction
  * -------------------------------------------------------------------------- */
-dspic33ak_i2c_status_t dspic33ak_i2c_read(
-    dspic33ak_i2c_instance_t inst,
+nora_i2c_status_t nora_i2c_read(
+    nora_i2c_instance_t inst,
     uint8_t addr7,
     uint8_t *rx,
     size_t rx_len)
 {
-    dspic33ak_i2c_status_t st;
+    nora_i2c_status_t st;
     size_t i;
 
     if (rx == 0 || rx_len == 0u) {
-        return DSPIC33AK_I2C_ERR_INVALID_ARG;
+        return NORA_I2C_ERR_INVALID_ARG;
     }
 
     st = begin_independent_transaction(inst);
-    if (st != DSPIC33AK_I2C_OK) {
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
     st = start_blocking(inst);
-    if (st != DSPIC33AK_I2C_OK) {
+    if (st != NORA_I2C_OK) {
         (void)stop_quiet(inst);
         return st;
     }
 
     st = send_address_blocking(inst, addr7, true);
-    if (st != DSPIC33AK_I2C_OK) {
+    if (st != NORA_I2C_OK) {
         (void)stop_quiet(inst);
         return st;
     }
@@ -343,7 +344,7 @@ dspic33ak_i2c_status_t dspic33ak_i2c_read(
     for (i = 0u; i < rx_len; i++) {
         bool ack = ((i + 1u) < rx_len);
         st = read_byte_blocking(inst, &rx[i], ack);
-        if (st != DSPIC33AK_I2C_OK) {
+        if (st != NORA_I2C_OK) {
             (void)stop_quiet(inst);
             return st;
         }
@@ -355,27 +356,27 @@ dspic33ak_i2c_status_t dspic33ak_i2c_read(
 /* --------------------------------------------------------------------------
  * Blocking write-read transaction with repeated START
  * -------------------------------------------------------------------------- */
-dspic33ak_i2c_status_t dspic33ak_i2c_write_read(
-    dspic33ak_i2c_instance_t inst,
+nora_i2c_status_t nora_i2c_write_read(
+    nora_i2c_instance_t inst,
     uint8_t addr7,
     const uint8_t *tx,
     size_t tx_len,
     uint8_t *rx,
     size_t rx_len)
 {
-    dspic33ak_i2c_status_t st;
+    nora_i2c_status_t st;
 
     if ((tx_len != 0u && tx == 0) || rx == 0 || rx_len == 0u) {
-        return DSPIC33AK_I2C_ERR_INVALID_ARG;
+        return NORA_I2C_ERR_INVALID_ARG;
     }
 
     st = begin_independent_transaction(inst);
-    if (st != DSPIC33AK_I2C_OK) {
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
     st = write_no_stop_sequence(inst, addr7, tx, tx_len);
-    if (st != DSPIC33AK_I2C_OK) {
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
@@ -385,20 +386,20 @@ dspic33ak_i2c_status_t dspic33ak_i2c_write_read(
 /* --------------------------------------------------------------------------
  * Blocking master write transaction without STOP
  * -------------------------------------------------------------------------- */
-dspic33ak_i2c_status_t dspic33ak_i2c_master_write_no_stop(
-    dspic33ak_i2c_instance_t inst,
+nora_i2c_status_t nora_i2c_master_write_no_stop(
+    nora_i2c_instance_t inst,
     uint8_t addr7,
     const uint8_t *tx,
     size_t tx_len)
 {
-    dspic33ak_i2c_status_t st;
+    nora_i2c_status_t st;
 
     if (tx_len != 0u && tx == 0) {
-        return DSPIC33AK_I2C_ERR_INVALID_ARG;
+        return NORA_I2C_ERR_INVALID_ARG;
     }
 
     st = begin_independent_transaction(inst);
-    if (st != DSPIC33AK_I2C_OK) {
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
@@ -408,25 +409,25 @@ dspic33ak_i2c_status_t dspic33ak_i2c_master_write_no_stop(
 /* --------------------------------------------------------------------------
  * Blocking master read after repeated START from a pending write
  * -------------------------------------------------------------------------- */
-dspic33ak_i2c_status_t dspic33ak_i2c_master_read_after_restart(
-    dspic33ak_i2c_instance_t inst,
+nora_i2c_status_t nora_i2c_master_read_after_restart(
+    nora_i2c_instance_t inst,
     uint8_t addr7,
     uint8_t *rx,
     size_t rx_len)
 {
-    dspic33ak_i2c_status_t st;
+    nora_i2c_status_t st;
 
     if (rx == 0 || rx_len == 0u) {
-        return DSPIC33AK_I2C_ERR_INVALID_ARG;
+        return NORA_I2C_ERR_INVALID_ARG;
     }
 
     st = recover_stale_pending_if_needed(inst);
-    if (st != DSPIC33AK_I2C_OK) {
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
-    if (g_pending_state[inst] != DSPIC33AK_I2C_PENDING_MASTER_WRITE) {
-        return DSPIC33AK_I2C_ERR_SEQUENCE;
+    if (g_pending_state[inst] != NORA_I2C_PENDING_MASTER_WRITE) {
+        return NORA_I2C_ERR_SEQUENCE;
     }
 
     return read_after_restart_sequence(inst, addr7, rx, rx_len);
@@ -435,18 +436,18 @@ dspic33ak_i2c_status_t dspic33ak_i2c_master_read_after_restart(
 /* --------------------------------------------------------------------------
  * Blocking master STOP for an explicit pending transaction end
  * -------------------------------------------------------------------------- */
-dspic33ak_i2c_status_t dspic33ak_i2c_master_stop(
-    dspic33ak_i2c_instance_t inst)
+nora_i2c_status_t nora_i2c_master_stop(
+    nora_i2c_instance_t inst)
 {
-    dspic33ak_i2c_status_t st;
+    nora_i2c_status_t st;
 
     st = recover_stale_pending_if_needed(inst);
-    if (st != DSPIC33AK_I2C_OK) {
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
-    if (g_pending_state[inst] == DSPIC33AK_I2C_PENDING_NONE) {
-        return DSPIC33AK_I2C_ERR_SEQUENCE;
+    if (g_pending_state[inst] == NORA_I2C_PENDING_NONE) {
+        return NORA_I2C_ERR_SEQUENCE;
     }
 
     return stop_pending_sequence(inst);
@@ -459,60 +460,60 @@ dspic33ak_i2c_status_t dspic33ak_i2c_master_stop(
 /* --------------------------------------------------------------------------
  * Issue START condition
  * -------------------------------------------------------------------------- */
-dspic33ak_i2c_status_t dspic33ak_i2c_ll_start_issue(
-    dspic33ak_i2c_instance_t inst)
+nora_i2c_status_t nora_i2c_ll_start_issue(
+    nora_i2c_instance_t inst)
 {
-    const dspic33ak_i2c_regs_t *r;
-    dspic33ak_i2c_status_t st = require_initialized(inst, &r);
+    const nora_i2c_regs_t *r;
+    nora_i2c_status_t st = require_initialized(inst, &r);
 
-    if (st != DSPIC33AK_I2C_OK) {
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
     clear_transfer_status(r);
-    dspic33ak_i2c_reg_set(r->CON1, DSPIC33AK_I2C_CON1_SEN);
-    return DSPIC33AK_I2C_OK;
+    nora_i2c_reg_set(r->CON1, NORA_I2C_CON1_SEN);
+    return NORA_I2C_OK;
 }
 
 /* --------------------------------------------------------------------------
  * Check START busy flag
  * -------------------------------------------------------------------------- */
-bool dspic33ak_i2c_ll_start_busy(dspic33ak_i2c_instance_t inst)
+bool nora_i2c_ll_start_busy(nora_i2c_instance_t inst)
 {
-    const dspic33ak_i2c_regs_t *r;
+    const nora_i2c_regs_t *r;
 
-    if (dspic33ak_i2c_get_regs(inst, &r) != DSPIC33AK_I2C_OK) {
+    if (nora_i2c_get_regs(inst, &r) != NORA_I2C_OK) {
         return false;
     }
 
-    return dspic33ak_i2c_reg_is_set(r->CON1, DSPIC33AK_I2C_CON1_SEN);
+    return nora_i2c_reg_is_set(r->CON1, NORA_I2C_CON1_SEN);
 }
 
 /* --------------------------------------------------------------------------
  * Check START done status
  * -------------------------------------------------------------------------- */
-bool dspic33ak_i2c_ll_start_done(dspic33ak_i2c_instance_t inst)
+bool nora_i2c_ll_start_done(nora_i2c_instance_t inst)
 {
-    const dspic33ak_i2c_regs_t *r;
+    const nora_i2c_regs_t *r;
 
-    if (dspic33ak_i2c_get_regs(inst, &r) != DSPIC33AK_I2C_OK) {
+    if (nora_i2c_get_regs(inst, &r) != NORA_I2C_OK) {
         return false;
     }
 
-    return dspic33ak_i2c_reg_is_set(r->STAT2, DSPIC33AK_I2C_STAT2_STARTE) ||
-           dspic33ak_i2c_reg_is_set(r->STAT1, DSPIC33AK_I2C_STAT1_S);
+    return nora_i2c_reg_is_set(r->STAT2, NORA_I2C_STAT2_STARTE) ||
+           nora_i2c_reg_is_set(r->STAT1, NORA_I2C_STAT1_S);
 }
 
 /* --------------------------------------------------------------------------
  * Issue repeated START condition
  * -------------------------------------------------------------------------- */
-dspic33ak_i2c_status_t dspic33ak_i2c_ll_restart_issue(
-    dspic33ak_i2c_instance_t inst)
+nora_i2c_status_t nora_i2c_ll_restart_issue(
+    nora_i2c_instance_t inst)
 {
-    const dspic33ak_i2c_regs_t *r;
-    dspic33ak_i2c_status_t st = require_initialized(inst, &r);
+    const nora_i2c_regs_t *r;
+    nora_i2c_status_t st = require_initialized(inst, &r);
 
-    if (st != DSPIC33AK_I2C_OK) {
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
@@ -523,33 +524,33 @@ dspic33ak_i2c_status_t dspic33ak_i2c_ll_restart_issue(
      * STOP.  Use RSEN so this low-level API maps directly to the dsPIC33AK
      * repeated-START request bit.
      */
-    dspic33ak_i2c_reg_clear(r->STAT2, DSPIC33AK_I2C_STAT2_STARTE);
-    dspic33ak_i2c_reg_set(r->CON1, DSPIC33AK_I2C_CON1_RSEN);
-    return DSPIC33AK_I2C_OK;
+    nora_i2c_reg_clear(r->STAT2, NORA_I2C_STAT2_STARTE);
+    nora_i2c_reg_set(r->CON1, NORA_I2C_CON1_RSEN);
+    return NORA_I2C_OK;
 }
 
 /* --------------------------------------------------------------------------
  * Check repeated START busy flag
  * -------------------------------------------------------------------------- */
-bool dspic33ak_i2c_ll_restart_busy(dspic33ak_i2c_instance_t inst)
+bool nora_i2c_ll_restart_busy(nora_i2c_instance_t inst)
 {
-    const dspic33ak_i2c_regs_t *r;
+    const nora_i2c_regs_t *r;
 
-    if (dspic33ak_i2c_get_regs(inst, &r) != DSPIC33AK_I2C_OK) {
+    if (nora_i2c_get_regs(inst, &r) != NORA_I2C_OK) {
         return false;
     }
 
-    return dspic33ak_i2c_reg_is_set(r->CON1, DSPIC33AK_I2C_CON1_RSEN);
+    return nora_i2c_reg_is_set(r->CON1, NORA_I2C_CON1_RSEN);
 }
 
 /* --------------------------------------------------------------------------
  * Check repeated START done status
  * -------------------------------------------------------------------------- */
-bool dspic33ak_i2c_ll_restart_done(dspic33ak_i2c_instance_t inst)
+bool nora_i2c_ll_restart_done(nora_i2c_instance_t inst)
 {
-    const dspic33ak_i2c_regs_t *r;
+    const nora_i2c_regs_t *r;
 
-    if (dspic33ak_i2c_get_regs(inst, &r) != DSPIC33AK_I2C_OK) {
+    if (nora_i2c_get_regs(inst, &r) != NORA_I2C_OK) {
         return false;
     }
 
@@ -558,101 +559,101 @@ bool dspic33ak_i2c_ll_restart_done(dspic33ak_i2c_instance_t inst)
      * STAT1.S alone is not sufficient for repeated START completion because
      * it may already be set by the previous START condition.
      */
-    return !dspic33ak_i2c_reg_is_set(r->CON1, DSPIC33AK_I2C_CON1_RSEN) &&
-            dspic33ak_i2c_reg_is_set(r->STAT2, DSPIC33AK_I2C_STAT2_STARTE);
+    return !nora_i2c_reg_is_set(r->CON1, NORA_I2C_CON1_RSEN) &&
+            nora_i2c_reg_is_set(r->STAT2, NORA_I2C_STAT2_STARTE);
 }
 
 /* --------------------------------------------------------------------------
  * Issue STOP condition
  * -------------------------------------------------------------------------- */
-dspic33ak_i2c_status_t dspic33ak_i2c_ll_stop_issue(
-    dspic33ak_i2c_instance_t inst)
+nora_i2c_status_t nora_i2c_ll_stop_issue(
+    nora_i2c_instance_t inst)
 {
-    const dspic33ak_i2c_regs_t *r;
-    dspic33ak_i2c_status_t st = require_initialized(inst, &r);
+    const nora_i2c_regs_t *r;
+    nora_i2c_status_t st = require_initialized(inst, &r);
 
-    if (st != DSPIC33AK_I2C_OK) {
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
-    dspic33ak_i2c_reg_clear(r->STAT2, DSPIC33AK_I2C_STAT2_STOPE);
-    dspic33ak_i2c_reg_set(r->CON1, DSPIC33AK_I2C_CON1_PEN);
-    return DSPIC33AK_I2C_OK;
+    nora_i2c_reg_clear(r->STAT2, NORA_I2C_STAT2_STOPE);
+    nora_i2c_reg_set(r->CON1, NORA_I2C_CON1_PEN);
+    return NORA_I2C_OK;
 }
 
 /* --------------------------------------------------------------------------
  * Check STOP busy flag
  * -------------------------------------------------------------------------- */
-bool dspic33ak_i2c_ll_stop_busy(dspic33ak_i2c_instance_t inst)
+bool nora_i2c_ll_stop_busy(nora_i2c_instance_t inst)
 {
-    const dspic33ak_i2c_regs_t *r;
+    const nora_i2c_regs_t *r;
 
-    if (dspic33ak_i2c_get_regs(inst, &r) != DSPIC33AK_I2C_OK) {
+    if (nora_i2c_get_regs(inst, &r) != NORA_I2C_OK) {
         return false;
     }
 
-    return dspic33ak_i2c_reg_is_set(r->CON1, DSPIC33AK_I2C_CON1_PEN);
+    return nora_i2c_reg_is_set(r->CON1, NORA_I2C_CON1_PEN);
 }
 
 /* --------------------------------------------------------------------------
  * Check STOP done status
  * -------------------------------------------------------------------------- */
-bool dspic33ak_i2c_ll_stop_done(dspic33ak_i2c_instance_t inst)
+bool nora_i2c_ll_stop_done(nora_i2c_instance_t inst)
 {
-    const dspic33ak_i2c_regs_t *r;
+    const nora_i2c_regs_t *r;
 
-    if (dspic33ak_i2c_get_regs(inst, &r) != DSPIC33AK_I2C_OK) {
+    if (nora_i2c_get_regs(inst, &r) != NORA_I2C_OK) {
         return false;
     }
 
-    return dspic33ak_i2c_reg_is_set(r->STAT2, DSPIC33AK_I2C_STAT2_STOPE);
+    return nora_i2c_reg_is_set(r->STAT2, NORA_I2C_STAT2_STOPE);
 }
 
 /* --------------------------------------------------------------------------
  * Issue one-byte write
  * -------------------------------------------------------------------------- */
-dspic33ak_i2c_status_t dspic33ak_i2c_ll_write_byte_issue(
-    dspic33ak_i2c_instance_t inst,
+nora_i2c_status_t nora_i2c_ll_write_byte_issue(
+    nora_i2c_instance_t inst,
     uint8_t data)
 {
-    const dspic33ak_i2c_regs_t *r;
-    dspic33ak_i2c_status_t st = require_initialized(inst, &r);
+    const nora_i2c_regs_t *r;
+    nora_i2c_status_t st = require_initialized(inst, &r);
 
-    if (st != DSPIC33AK_I2C_OK) {
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
-    if (dspic33ak_i2c_reg_is_set(r->STAT1, DSPIC33AK_I2C_STAT1_IWCOL)) {
-        dspic33ak_i2c_reg_clear(r->STAT1, DSPIC33AK_I2C_STAT1_IWCOL);
+    if (nora_i2c_reg_is_set(r->STAT1, NORA_I2C_STAT1_IWCOL)) {
+        nora_i2c_reg_clear(r->STAT1, NORA_I2C_STAT1_IWCOL);
     }
 
-    dspic33ak_i2c_reg_clear(r->STAT2, DSPIC33AK_I2C_STAT2_NACKE);
+    nora_i2c_reg_clear(r->STAT2, NORA_I2C_STAT2_NACKE);
     *r->TRN = data;
-    return DSPIC33AK_I2C_OK;
+    return NORA_I2C_OK;
 }
 
 /* --------------------------------------------------------------------------
  * Check one-byte write busy flag
  * -------------------------------------------------------------------------- */
-bool dspic33ak_i2c_ll_write_byte_busy(dspic33ak_i2c_instance_t inst)
+bool nora_i2c_ll_write_byte_busy(nora_i2c_instance_t inst)
 {
-    const dspic33ak_i2c_regs_t *r;
+    const nora_i2c_regs_t *r;
 
-    if (dspic33ak_i2c_get_regs(inst, &r) != DSPIC33AK_I2C_OK) {
+    if (nora_i2c_get_regs(inst, &r) != NORA_I2C_OK) {
         return false;
     }
 
-    return dspic33ak_i2c_reg_is_set(r->STAT1, DSPIC33AK_I2C_STAT1_TRSTAT);
+    return nora_i2c_reg_is_set(r->STAT1, NORA_I2C_STAT1_TRSTAT);
 }
 
 /* --------------------------------------------------------------------------
  * Check ACK result after one-byte write
  * -------------------------------------------------------------------------- */
-bool dspic33ak_i2c_ll_write_byte_acked(dspic33ak_i2c_instance_t inst)
+bool nora_i2c_ll_write_byte_acked(nora_i2c_instance_t inst)
 {
-    const dspic33ak_i2c_regs_t *r;
+    const nora_i2c_regs_t *r;
 
-    if (dspic33ak_i2c_get_regs(inst, &r) != DSPIC33AK_I2C_OK) {
+    if (nora_i2c_get_regs(inst, &r) != NORA_I2C_OK) {
         return false;
     }
 
@@ -661,7 +662,7 @@ bool dspic33ak_i2c_ll_write_byte_acked(dspic33ak_i2c_instance_t inst)
      * write_byte_blocking().  Avoid using ACKSTAT here because this driver
      * uses NACKE and D_A as the observable transfer outcome.
      */
-    if (dspic33ak_i2c_reg_is_set(r->STAT2, DSPIC33AK_I2C_STAT2_NACKE)) {
+    if (nora_i2c_reg_is_set(r->STAT2, NORA_I2C_STAT2_NACKE)) {
         return false;
     }
 
@@ -671,173 +672,173 @@ bool dspic33ak_i2c_ll_write_byte_acked(dspic33ak_i2c_instance_t inst)
 /* --------------------------------------------------------------------------
  * Issue one-byte read
  * -------------------------------------------------------------------------- */
-dspic33ak_i2c_status_t dspic33ak_i2c_ll_read_byte_issue(
-    dspic33ak_i2c_instance_t inst)
+nora_i2c_status_t nora_i2c_ll_read_byte_issue(
+    nora_i2c_instance_t inst)
 {
-    const dspic33ak_i2c_regs_t *r;
-    dspic33ak_i2c_status_t st = require_initialized(inst, &r);
+    const nora_i2c_regs_t *r;
+    nora_i2c_status_t st = require_initialized(inst, &r);
 
-    if (st != DSPIC33AK_I2C_OK) {
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
-    dspic33ak_i2c_reg_set(r->CON1, DSPIC33AK_I2C_CON1_RCEN);
-    return DSPIC33AK_I2C_OK;
+    nora_i2c_reg_set(r->CON1, NORA_I2C_CON1_RCEN);
+    return NORA_I2C_OK;
 }
 
 /* --------------------------------------------------------------------------
  * Check receive buffer ready
  * -------------------------------------------------------------------------- */
-bool dspic33ak_i2c_ll_read_byte_ready(dspic33ak_i2c_instance_t inst)
+bool nora_i2c_ll_read_byte_ready(nora_i2c_instance_t inst)
 {
-    const dspic33ak_i2c_regs_t *r;
+    const nora_i2c_regs_t *r;
 
-    if (dspic33ak_i2c_get_regs(inst, &r) != DSPIC33AK_I2C_OK) {
+    if (nora_i2c_get_regs(inst, &r) != NORA_I2C_OK) {
         return false;
     }
 
-    return dspic33ak_i2c_reg_is_set(r->STAT1, DSPIC33AK_I2C_STAT1_RBF);
+    return nora_i2c_reg_is_set(r->STAT1, NORA_I2C_STAT1_RBF);
 }
 
 /* --------------------------------------------------------------------------
  * Get received byte
  * -------------------------------------------------------------------------- */
-dspic33ak_i2c_status_t dspic33ak_i2c_ll_read_byte_get(
-    dspic33ak_i2c_instance_t inst,
+nora_i2c_status_t nora_i2c_ll_read_byte_get(
+    nora_i2c_instance_t inst,
     uint8_t *data)
 {
-    const dspic33ak_i2c_regs_t *r;
-    dspic33ak_i2c_status_t st;
+    const nora_i2c_regs_t *r;
+    nora_i2c_status_t st;
 
     if (data == 0) {
-        return DSPIC33AK_I2C_ERR_INVALID_ARG;
+        return NORA_I2C_ERR_INVALID_ARG;
     }
 
-    st = dspic33ak_i2c_get_regs(inst, &r);
-    if (st != DSPIC33AK_I2C_OK) {
+    st = nora_i2c_get_regs(inst, &r);
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
     *data = (uint8_t)(*r->RCV & 0xFFu);
-    return DSPIC33AK_I2C_OK;
+    return NORA_I2C_OK;
 }
 
 /* --------------------------------------------------------------------------
  * Issue ACK or NACK after read
  * -------------------------------------------------------------------------- */
-dspic33ak_i2c_status_t dspic33ak_i2c_ll_ack_issue(
-    dspic33ak_i2c_instance_t inst,
+nora_i2c_status_t nora_i2c_ll_ack_issue(
+    nora_i2c_instance_t inst,
     bool ack)
 {
-    const dspic33ak_i2c_regs_t *r;
-    dspic33ak_i2c_status_t st = require_initialized(inst, &r);
+    const nora_i2c_regs_t *r;
+    nora_i2c_status_t st = require_initialized(inst, &r);
 
-    if (st != DSPIC33AK_I2C_OK) {
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
     if (ack) {
-        dspic33ak_i2c_reg_clear(r->CON1, DSPIC33AK_I2C_CON1_ACKDT);
+        nora_i2c_reg_clear(r->CON1, NORA_I2C_CON1_ACKDT);
     } else {
-        dspic33ak_i2c_reg_set(r->CON1, DSPIC33AK_I2C_CON1_ACKDT);
+        nora_i2c_reg_set(r->CON1, NORA_I2C_CON1_ACKDT);
     }
 
-    dspic33ak_i2c_reg_set(r->CON1, DSPIC33AK_I2C_CON1_ACKEN);
-    return DSPIC33AK_I2C_OK;
+    nora_i2c_reg_set(r->CON1, NORA_I2C_CON1_ACKEN);
+    return NORA_I2C_OK;
 }
 
 /* --------------------------------------------------------------------------
  * Check ACK/NACK issue busy flag
  * -------------------------------------------------------------------------- */
-bool dspic33ak_i2c_ll_ack_busy(dspic33ak_i2c_instance_t inst)
+bool nora_i2c_ll_ack_busy(nora_i2c_instance_t inst)
 {
-    const dspic33ak_i2c_regs_t *r;
+    const nora_i2c_regs_t *r;
 
-    if (dspic33ak_i2c_get_regs(inst, &r) != DSPIC33AK_I2C_OK) {
+    if (nora_i2c_get_regs(inst, &r) != NORA_I2C_OK) {
         return false;
     }
 
-    return dspic33ak_i2c_reg_is_set(r->CON1, DSPIC33AK_I2C_CON1_ACKEN);
+    return nora_i2c_reg_is_set(r->CON1, NORA_I2C_CON1_ACKEN);
 }
 
 /* --------------------------------------------------------------------------
  * Check I2C error status
  * -------------------------------------------------------------------------- */
-bool dspic33ak_i2c_ll_has_error(dspic33ak_i2c_instance_t inst)
+bool nora_i2c_ll_has_error(nora_i2c_instance_t inst)
 {
-    const dspic33ak_i2c_regs_t *r;
+    const nora_i2c_regs_t *r;
 
-    if (dspic33ak_i2c_get_regs(inst, &r) != DSPIC33AK_I2C_OK) {
+    if (nora_i2c_get_regs(inst, &r) != NORA_I2C_OK) {
         return true;
     }
 
-    return dspic33ak_i2c_reg_is_set(r->STAT2, DSPIC33AK_I2C_STAT2_ERR);
+    return nora_i2c_reg_is_set(r->STAT2, NORA_I2C_STAT2_ERR);
 }
 
 /* --------------------------------------------------------------------------
  * Check NACK status
  * -------------------------------------------------------------------------- */
-bool dspic33ak_i2c_ll_has_nack(dspic33ak_i2c_instance_t inst)
+bool nora_i2c_ll_has_nack(nora_i2c_instance_t inst)
 {
-    const dspic33ak_i2c_regs_t *r;
+    const nora_i2c_regs_t *r;
 
-    if (dspic33ak_i2c_get_regs(inst, &r) != DSPIC33AK_I2C_OK) {
+    if (nora_i2c_get_regs(inst, &r) != NORA_I2C_OK) {
         return true;
     }
 
-    return dspic33ak_i2c_reg_is_set(r->STAT2, DSPIC33AK_I2C_STAT2_NACKE);
+    return nora_i2c_reg_is_set(r->STAT2, NORA_I2C_STAT2_NACKE);
 }
 
 /* --------------------------------------------------------------------------
  * Check bus collision status
  * -------------------------------------------------------------------------- */
-bool dspic33ak_i2c_ll_has_collision(dspic33ak_i2c_instance_t inst)
+bool nora_i2c_ll_has_collision(nora_i2c_instance_t inst)
 {
-    const dspic33ak_i2c_regs_t *r;
+    const nora_i2c_regs_t *r;
 
-    if (dspic33ak_i2c_get_regs(inst, &r) != DSPIC33AK_I2C_OK) {
+    if (nora_i2c_get_regs(inst, &r) != NORA_I2C_OK) {
         return true;
     }
 
-    return dspic33ak_i2c_reg_is_set(r->STAT1,
-                                    DSPIC33AK_I2C_STAT1_IWCOL |
-                                    DSPIC33AK_I2C_STAT1_BCL);
+    return nora_i2c_reg_is_set(r->STAT1,
+                                    NORA_I2C_STAT1_IWCOL |
+                                    NORA_I2C_STAT1_BCL);
 }
 
 /* --------------------------------------------------------------------------
  * Enable selected I2C interrupts - future helper
  * -------------------------------------------------------------------------- */
-dspic33ak_i2c_status_t dspic33ak_i2c_irq_enable(
-    dspic33ak_i2c_instance_t inst,
+nora_i2c_status_t nora_i2c_irq_enable(
+    nora_i2c_instance_t inst,
     uint32_t irq_mask)
 {
     (void)inst;
     (void)irq_mask;
-    return DSPIC33AK_I2C_ERR_UNSUPPORTED;
+    return NORA_I2C_ERR_UNSUPPORTED;
 }
 
 /* --------------------------------------------------------------------------
  * Disable selected I2C interrupts - future helper
  * -------------------------------------------------------------------------- */
-dspic33ak_i2c_status_t dspic33ak_i2c_irq_disable(
-    dspic33ak_i2c_instance_t inst,
+nora_i2c_status_t nora_i2c_irq_disable(
+    nora_i2c_instance_t inst,
     uint32_t irq_mask)
 {
     (void)inst;
     (void)irq_mask;
-    return DSPIC33AK_I2C_ERR_UNSUPPORTED;
+    return NORA_I2C_ERR_UNSUPPORTED;
 }
 
 /* --------------------------------------------------------------------------
  * Clear selected I2C interrupt flags - future helper
  * -------------------------------------------------------------------------- */
-dspic33ak_i2c_status_t dspic33ak_i2c_irq_clear(
-    dspic33ak_i2c_instance_t inst,
+nora_i2c_status_t nora_i2c_irq_clear(
+    nora_i2c_instance_t inst,
     uint32_t irq_mask)
 {
     (void)inst;
     (void)irq_mask;
-    return DSPIC33AK_I2C_ERR_UNSUPPORTED;
+    return NORA_I2C_ERR_UNSUPPORTED;
 }
 
 /* ========================================================================== */
@@ -845,50 +846,50 @@ dspic33ak_i2c_status_t dspic33ak_i2c_irq_clear(
 /* ========================================================================== */
 
 /* inst_is_valid and get_regs are shared primitives defined in
- * dspic33ak_i2c_common.c. */
+ * nora_i2c_dspic33a_common.c. */
 
 /* --------------------------------------------------------------------------
  * Resolve registers and require initialized state
  * -------------------------------------------------------------------------- */
-static dspic33ak_i2c_status_t require_initialized(
-    dspic33ak_i2c_instance_t inst,
-    const dspic33ak_i2c_regs_t **regs)
+static nora_i2c_status_t require_initialized(
+    nora_i2c_instance_t inst,
+    const nora_i2c_regs_t **regs)
 {
-    dspic33ak_i2c_status_t st;
+    nora_i2c_status_t st;
 
-    if (!dspic33ak_i2c_inst_is_valid(inst)) {
-        return DSPIC33AK_I2C_ERR_INVALID_ARG;
+    if (!nora_i2c_inst_is_valid(inst)) {
+        return NORA_I2C_ERR_INVALID_ARG;
     }
 
-    st = dspic33ak_i2c_get_regs(inst, regs);
-    if (st != DSPIC33AK_I2C_OK) {
+    st = nora_i2c_get_regs(inst, regs);
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
     if (!g_initialized[inst]) {
-        return DSPIC33AK_I2C_ERR_NOT_INITIALIZED;
+        return NORA_I2C_ERR_NOT_INITIALIZED;
     }
 
-    return DSPIC33AK_I2C_OK;
+    return NORA_I2C_OK;
 }
 
 /* --------------------------------------------------------------------------
  * Require initialized state without exposing register pointer to caller
  * -------------------------------------------------------------------------- */
-static dspic33ak_i2c_status_t check_initialized(dspic33ak_i2c_instance_t inst)
+static nora_i2c_status_t check_initialized(nora_i2c_instance_t inst)
 {
-    const dspic33ak_i2c_regs_t *r;
+    const nora_i2c_regs_t *r;
     return require_initialized(inst, &r);
 }
 
-/* calc_brg is a shared primitive defined in dspic33ak_i2c_common.c. */
+/* calc_brg is a shared primitive defined in nora_i2c_dspic33a_common.c. */
 
 /* --------------------------------------------------------------------------
  * Check whether timeout is enabled
  * -------------------------------------------------------------------------- */
-static bool timeout_enabled(dspic33ak_i2c_instance_t inst)
+static bool timeout_enabled(nora_i2c_instance_t inst)
 {
-    return dspic33ak_i2c_inst_is_valid(inst) &&
+    return nora_i2c_inst_is_valid(inst) &&
            (g_get_ms[inst] != 0) &&
            (g_timeout_ms[inst] != 0u);
 }
@@ -896,7 +897,7 @@ static bool timeout_enabled(dspic33ak_i2c_instance_t inst)
 /* --------------------------------------------------------------------------
  * Capture timeout start tick
  * -------------------------------------------------------------------------- */
-static uint32_t timeout_start_ms(dspic33ak_i2c_instance_t inst)
+static uint32_t timeout_start_ms(nora_i2c_instance_t inst)
 {
     if (!timeout_enabled(inst)) {
         return 0u;
@@ -908,7 +909,7 @@ static uint32_t timeout_start_ms(dspic33ak_i2c_instance_t inst)
 /* --------------------------------------------------------------------------
  * Check timeout expiration
  * -------------------------------------------------------------------------- */
-static bool timeout_expired(dspic33ak_i2c_instance_t inst, uint32_t start_ms)
+static bool timeout_expired(nora_i2c_instance_t inst, uint32_t start_ms)
 {
     uint32_t now;
 
@@ -923,9 +924,9 @@ static bool timeout_expired(dspic33ak_i2c_instance_t inst, uint32_t start_ms)
 /* --------------------------------------------------------------------------
  * Check whether pending transaction timeout is enabled
  * -------------------------------------------------------------------------- */
-static bool pending_timeout_enabled(dspic33ak_i2c_instance_t inst)
+static bool pending_timeout_enabled(nora_i2c_instance_t inst)
 {
-    return dspic33ak_i2c_inst_is_valid(inst) &&
+    return nora_i2c_inst_is_valid(inst) &&
            (g_get_ms[inst] != 0) &&
            (g_pending_timeout_ms[inst] != 0u);
 }
@@ -933,11 +934,11 @@ static bool pending_timeout_enabled(dspic33ak_i2c_instance_t inst)
 /* --------------------------------------------------------------------------
  * Check pending transaction timeout expiration
  * -------------------------------------------------------------------------- */
-static bool pending_timeout_expired(dspic33ak_i2c_instance_t inst)
+static bool pending_timeout_expired(nora_i2c_instance_t inst)
 {
     uint32_t now;
 
-    if (g_pending_state[inst] == DSPIC33AK_I2C_PENDING_NONE) {
+    if (g_pending_state[inst] == NORA_I2C_PENDING_NONE) {
         return false;
     }
 
@@ -953,13 +954,13 @@ static bool pending_timeout_expired(dspic33ak_i2c_instance_t inst)
 /* --------------------------------------------------------------------------
  * Clear pending transaction state
  * -------------------------------------------------------------------------- */
-static void pending_clear(dspic33ak_i2c_instance_t inst)
+static void pending_clear(nora_i2c_instance_t inst)
 {
-    if (!dspic33ak_i2c_inst_is_valid(inst)) {
+    if (!nora_i2c_inst_is_valid(inst)) {
         return;
     }
 
-    g_pending_state[inst] = DSPIC33AK_I2C_PENDING_NONE;
+    g_pending_state[inst] = NORA_I2C_PENDING_NONE;
     g_pending_start_ms[inst] = 0u;
 }
 
@@ -967,10 +968,10 @@ static void pending_clear(dspic33ak_i2c_instance_t inst)
  * Set pending transaction state
  * -------------------------------------------------------------------------- */
 static void pending_set(
-    dspic33ak_i2c_instance_t inst,
-    dspic33ak_i2c_pending_state_t state)
+    nora_i2c_instance_t inst,
+    nora_i2c_pending_state_t state)
 {
-    if (!dspic33ak_i2c_inst_is_valid(inst)) {
+    if (!nora_i2c_inst_is_valid(inst)) {
         return;
     }
 
@@ -983,36 +984,36 @@ static void pending_set(
 /* --------------------------------------------------------------------------
  * Recover a stale no-STOP transaction if its pending timeout has elapsed
  * -------------------------------------------------------------------------- */
-static dspic33ak_i2c_status_t recover_stale_pending_if_needed(
-    dspic33ak_i2c_instance_t inst)
+static nora_i2c_status_t recover_stale_pending_if_needed(
+    nora_i2c_instance_t inst)
 {
-    dspic33ak_i2c_status_t st;
+    nora_i2c_status_t st;
 
     st = check_initialized(inst);
-    if (st != DSPIC33AK_I2C_OK) {
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
     if (!pending_timeout_expired(inst)) {
-        return DSPIC33AK_I2C_OK;
+        return NORA_I2C_OK;
     }
 
     st = stop_quiet(inst);
-    if (st != DSPIC33AK_I2C_OK) {
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
     pending_clear(inst);
-    return DSPIC33AK_I2C_ERR_TIMEOUT;
+    return NORA_I2C_ERR_TIMEOUT;
 }
 
 /* --------------------------------------------------------------------------
  * Public API guard for starting a new non-pending transaction
  * -------------------------------------------------------------------------- */
-static dspic33ak_i2c_status_t begin_independent_transaction(
-    dspic33ak_i2c_instance_t inst)
+static nora_i2c_status_t begin_independent_transaction(
+    nora_i2c_instance_t inst)
 {
-    dspic33ak_i2c_status_t st;
+    nora_i2c_status_t st;
 
     /*
      * recover_stale_pending_if_needed() returns ERR_TIMEOUT when it had to
@@ -1021,79 +1022,79 @@ static dspic33ak_i2c_status_t begin_independent_transaction(
      * rather than have a fresh transfer silently started in its place.
      */
     st = recover_stale_pending_if_needed(inst);
-    if (st != DSPIC33AK_I2C_OK) {
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
-    if (g_pending_state[inst] != DSPIC33AK_I2C_PENDING_NONE) {
-        return DSPIC33AK_I2C_ERR_BUSY;
+    if (g_pending_state[inst] != NORA_I2C_PENDING_NONE) {
+        return NORA_I2C_ERR_BUSY;
     }
 
-    return DSPIC33AK_I2C_OK;
+    return NORA_I2C_OK;
 }
 
 /* --------------------------------------------------------------------------
  * Internal master write sequence that intentionally leaves STOP pending
  * -------------------------------------------------------------------------- */
-static dspic33ak_i2c_status_t write_no_stop_sequence(
-    dspic33ak_i2c_instance_t inst,
+static nora_i2c_status_t write_no_stop_sequence(
+    nora_i2c_instance_t inst,
     uint8_t addr7,
     const uint8_t *tx,
     size_t tx_len)
 {
-    dspic33ak_i2c_status_t st;
+    nora_i2c_status_t st;
     size_t i;
 
     st = start_blocking(inst);
-    if (st != DSPIC33AK_I2C_OK) {
+    if (st != NORA_I2C_OK) {
         (void)stop_quiet(inst);
         return st;
     }
 
     st = send_address_blocking(inst, addr7, false);
-    if (st != DSPIC33AK_I2C_OK) {
+    if (st != NORA_I2C_OK) {
         (void)stop_quiet(inst);
         return st;
     }
 
     for (i = 0u; i < tx_len; i++) {
         st = write_byte_blocking(inst, tx[i]);
-        if (st != DSPIC33AK_I2C_OK) {
+        if (st != NORA_I2C_OK) {
             (void)stop_quiet(inst);
             return st;
         }
     }
 
-    pending_set(inst, DSPIC33AK_I2C_PENDING_MASTER_WRITE);
-    return DSPIC33AK_I2C_OK;
+    pending_set(inst, NORA_I2C_PENDING_MASTER_WRITE);
+    return NORA_I2C_OK;
 }
 
 /* --------------------------------------------------------------------------
  * Internal repeated START read sequence from a pending write
  * -------------------------------------------------------------------------- */
-static dspic33ak_i2c_status_t read_after_restart_sequence(
-    dspic33ak_i2c_instance_t inst,
+static nora_i2c_status_t read_after_restart_sequence(
+    nora_i2c_instance_t inst,
     uint8_t addr7,
     uint8_t *rx,
     size_t rx_len)
 {
-    dspic33ak_i2c_status_t st;
+    nora_i2c_status_t st;
     size_t i;
 
     st = restart_blocking(inst);
-    if (st != DSPIC33AK_I2C_OK) {
+    if (st != NORA_I2C_OK) {
         return abort_pending_sequence(inst, st);
     }
 
     st = send_address_blocking(inst, addr7, true);
-    if (st != DSPIC33AK_I2C_OK) {
+    if (st != NORA_I2C_OK) {
         return abort_pending_sequence(inst, st);
     }
 
     for (i = 0u; i < rx_len; i++) {
         bool ack = ((i + 1u) < rx_len);
         st = read_byte_blocking(inst, &rx[i], ack);
-        if (st != DSPIC33AK_I2C_OK) {
+        if (st != NORA_I2C_OK) {
             return abort_pending_sequence(inst, st);
         }
     }
@@ -1104,10 +1105,10 @@ static dspic33ak_i2c_status_t read_after_restart_sequence(
 /* --------------------------------------------------------------------------
  * Internal STOP sequence for a known pending transaction
  * -------------------------------------------------------------------------- */
-static dspic33ak_i2c_status_t stop_pending_sequence(
-    dspic33ak_i2c_instance_t inst)
+static nora_i2c_status_t stop_pending_sequence(
+    nora_i2c_instance_t inst)
 {
-    dspic33ak_i2c_status_t st;
+    nora_i2c_status_t st;
 
     /*
      * Clear the pending state only once STOP has actually completed.  If STOP
@@ -1116,22 +1117,22 @@ static dspic33ak_i2c_status_t stop_pending_sequence(
      * pending timeout) instead of starting a new transfer on a stuck bus.
      */
     st = stop_quiet(inst);
-    if (st != DSPIC33AK_I2C_OK) {
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
     pending_clear(inst);
-    return DSPIC33AK_I2C_OK;
+    return NORA_I2C_OK;
 }
 
 /* --------------------------------------------------------------------------
  * Try to STOP after a pending transaction error
  * -------------------------------------------------------------------------- */
-static dspic33ak_i2c_status_t abort_pending_sequence(
-    dspic33ak_i2c_instance_t inst,
-    dspic33ak_i2c_status_t original_status)
+static nora_i2c_status_t abort_pending_sequence(
+    nora_i2c_instance_t inst,
+    nora_i2c_status_t original_status)
 {
-    dspic33ak_i2c_status_t stop_status;
+    nora_i2c_status_t stop_status;
 
     /*
      * Best-effort STOP after a failed transfer.  If STOP itself fails the bus
@@ -1141,7 +1142,7 @@ static dspic33ak_i2c_status_t abort_pending_sequence(
      * transfer error (e.g. ERR_NACK) as the diagnostic result.
      */
     stop_status = stop_quiet(inst);
-    if (stop_status != DSPIC33AK_I2C_OK) {
+    if (stop_status != NORA_I2C_OK) {
         return stop_status;
     }
 
@@ -1152,149 +1153,149 @@ static dspic33ak_i2c_status_t abort_pending_sequence(
 /* --------------------------------------------------------------------------
  * Clear transfer-related status bits
  * -------------------------------------------------------------------------- */
-static void clear_transfer_status(const dspic33ak_i2c_regs_t *r)
+static void clear_transfer_status(const nora_i2c_regs_t *r)
 {
     /*
      * Keep status cleanup narrow.  Do not blindly write zero to all status
      * bits; only clear the bits used by this readable driver.
      */
-    dspic33ak_i2c_reg_clear(r->STAT1,
-                            DSPIC33AK_I2C_STAT1_IWCOL |
-                            DSPIC33AK_I2C_STAT1_I2COV |
-                            DSPIC33AK_I2C_STAT1_BCL);
-    dspic33ak_i2c_reg_clear(r->STAT2,
-                            DSPIC33AK_I2C_STAT2_ERR |
-                            DSPIC33AK_I2C_STAT2_STARTE |
-                            DSPIC33AK_I2C_STAT2_STOPE |
-                            DSPIC33AK_I2C_STAT2_NACKE);
+    nora_i2c_reg_clear(r->STAT1,
+                            NORA_I2C_STAT1_IWCOL |
+                            NORA_I2C_STAT1_I2COV |
+                            NORA_I2C_STAT1_BCL);
+    nora_i2c_reg_clear(r->STAT2,
+                            NORA_I2C_STAT2_ERR |
+                            NORA_I2C_STAT2_STARTE |
+                            NORA_I2C_STAT2_STOPE |
+                            NORA_I2C_STAT2_NACKE);
 }
 
 /* --------------------------------------------------------------------------
  * Convert bus fault status to driver status
  * -------------------------------------------------------------------------- */
-static dspic33ak_i2c_status_t check_bus_fault(dspic33ak_i2c_instance_t inst)
+static nora_i2c_status_t check_bus_fault(nora_i2c_instance_t inst)
 {
-    if (dspic33ak_i2c_ll_has_collision(inst)) {
-        return DSPIC33AK_I2C_ERR_COLLISION;
+    if (nora_i2c_ll_has_collision(inst)) {
+        return NORA_I2C_ERR_COLLISION;
     }
 
-    if (dspic33ak_i2c_ll_has_nack(inst)) {
-        return DSPIC33AK_I2C_ERR_NACK;
+    if (nora_i2c_ll_has_nack(inst)) {
+        return NORA_I2C_ERR_NACK;
     }
 
-    if (dspic33ak_i2c_ll_has_error(inst)) {
-        return DSPIC33AK_I2C_ERR_BUS;
+    if (nora_i2c_ll_has_error(inst)) {
+        return NORA_I2C_ERR_BUS;
     }
 
-    return DSPIC33AK_I2C_OK;
+    return NORA_I2C_OK;
 }
 
 /* --------------------------------------------------------------------------
  * Wait for condition using optional timeout
  * -------------------------------------------------------------------------- */
-static dspic33ak_i2c_status_t wait_until(
-    dspic33ak_i2c_instance_t inst,
-    bool (*done_fn)(dspic33ak_i2c_instance_t),
+static nora_i2c_status_t wait_until(
+    nora_i2c_instance_t inst,
+    bool (*done_fn)(nora_i2c_instance_t),
     bool check_nack)
 {
     uint32_t start_ms = timeout_start_ms(inst);
-    dspic33ak_i2c_status_t st;
+    nora_i2c_status_t st;
 
     while (!done_fn(inst)) {
         if (check_nack) {
             st = check_bus_fault(inst);
         } else {
-            if (dspic33ak_i2c_ll_has_collision(inst)) {
-                st = DSPIC33AK_I2C_ERR_COLLISION;
-            } else if (dspic33ak_i2c_ll_has_error(inst)) {
-                st = DSPIC33AK_I2C_ERR_BUS;
+            if (nora_i2c_ll_has_collision(inst)) {
+                st = NORA_I2C_ERR_COLLISION;
+            } else if (nora_i2c_ll_has_error(inst)) {
+                st = NORA_I2C_ERR_BUS;
             } else {
-                st = DSPIC33AK_I2C_OK;
+                st = NORA_I2C_OK;
             }
         }
 
-        if (st != DSPIC33AK_I2C_OK) {
+        if (st != NORA_I2C_OK) {
             return st;
         }
 
         if (timeout_expired(inst, start_ms)) {
-            return DSPIC33AK_I2C_ERR_TIMEOUT;
+            return NORA_I2C_ERR_TIMEOUT;
         }
     }
 
-    if (dspic33ak_i2c_ll_has_collision(inst)) {
-        return DSPIC33AK_I2C_ERR_COLLISION;
+    if (nora_i2c_ll_has_collision(inst)) {
+        return NORA_I2C_ERR_COLLISION;
     }
 
-    if (dspic33ak_i2c_ll_has_error(inst)) {
-        return DSPIC33AK_I2C_ERR_BUS;
+    if (nora_i2c_ll_has_error(inst)) {
+        return NORA_I2C_ERR_BUS;
     }
 
     if (check_nack) {
         return check_bus_fault(inst);
     }
 
-    return DSPIC33AK_I2C_OK;
+    return NORA_I2C_OK;
 }
 
 /* --------------------------------------------------------------------------
  * Adapter: host state machine active condition
  * -------------------------------------------------------------------------- */
-static bool host_active(dspic33ak_i2c_instance_t inst)
+static bool host_active(nora_i2c_instance_t inst)
 {
-    const dspic33ak_i2c_regs_t *r;
+    const nora_i2c_regs_t *r;
 
-    if (dspic33ak_i2c_get_regs(inst, &r) != DSPIC33AK_I2C_OK) {
+    if (nora_i2c_get_regs(inst, &r) != NORA_I2C_OK) {
         return false;
     }
 
-    return dspic33ak_i2c_reg_is_set(r->STAT2, DSPIC33AK_I2C_STAT2_HSTACT);
+    return nora_i2c_reg_is_set(r->STAT2, NORA_I2C_STAT2_HSTACT);
 }
 
 /* --------------------------------------------------------------------------
  * Adapter: write byte ready condition
  * -------------------------------------------------------------------------- */
-static bool write_byte_ready(dspic33ak_i2c_instance_t inst)
+static bool write_byte_ready(nora_i2c_instance_t inst)
 {
     /*
      * Same hardware bit as write_byte_done(), different phase meaning:
      * before TRN write, TRSTAT clear means the transmit state is ready.
      */
-    return !dspic33ak_i2c_ll_write_byte_busy(inst);
+    return !nora_i2c_ll_write_byte_busy(inst);
 }
 
 /* --------------------------------------------------------------------------
  * Adapter: write byte done condition
  * -------------------------------------------------------------------------- */
-static bool write_byte_done(dspic33ak_i2c_instance_t inst)
+static bool write_byte_done(nora_i2c_instance_t inst)
 {
     /*
      * Same hardware bit as write_byte_ready(), different phase meaning:
      * after TRN write, TRSTAT clear means the current byte transfer is done.
      */
-    return !dspic33ak_i2c_ll_write_byte_busy(inst);
+    return !nora_i2c_ll_write_byte_busy(inst);
 }
 
 /* --------------------------------------------------------------------------
  * Adapter: data/address phase accepted condition
  * -------------------------------------------------------------------------- */
-static bool write_data_accepted(dspic33ak_i2c_instance_t inst)
+static bool write_data_accepted(nora_i2c_instance_t inst)
 {
-    const dspic33ak_i2c_regs_t *r;
+    const nora_i2c_regs_t *r;
 
-    if (dspic33ak_i2c_get_regs(inst, &r) != DSPIC33AK_I2C_OK) {
+    if (nora_i2c_get_regs(inst, &r) != NORA_I2C_OK) {
         return false;
     }
 
-    return dspic33ak_i2c_reg_is_set(r->STAT1, DSPIC33AK_I2C_STAT1_D_A);
+    return nora_i2c_reg_is_set(r->STAT1, NORA_I2C_STAT1_D_A);
 }
 
 /* --------------------------------------------------------------------------
  * Adapter: ACK issue done condition
  * -------------------------------------------------------------------------- */
-static bool ack_done(dspic33ak_i2c_instance_t inst)
+static bool ack_done(nora_i2c_instance_t inst)
 {
-    return !dspic33ak_i2c_ll_ack_busy(inst);
+    return !nora_i2c_ll_ack_busy(inst);
 }
 
 /* --------------------------------------------------------------------------
@@ -1310,27 +1311,27 @@ static bool ack_done(dspic33ak_i2c_instance_t inst)
  * both STOPE set and PEN clear so callers never start a new transfer on a bus
  * whose STOP has not yet retired.
  * -------------------------------------------------------------------------- */
-static bool stop_fully_done(dspic33ak_i2c_instance_t inst)
+static bool stop_fully_done(nora_i2c_instance_t inst)
 {
-    const dspic33ak_i2c_regs_t *r;
+    const nora_i2c_regs_t *r;
 
-    if (dspic33ak_i2c_get_regs(inst, &r) != DSPIC33AK_I2C_OK) {
+    if (nora_i2c_get_regs(inst, &r) != NORA_I2C_OK) {
         return false;
     }
 
-    return dspic33ak_i2c_reg_is_set(r->STAT2, DSPIC33AK_I2C_STAT2_STOPE) &&
-           !dspic33ak_i2c_reg_is_set(r->CON1, DSPIC33AK_I2C_CON1_PEN);
+    return nora_i2c_reg_is_set(r->STAT2, NORA_I2C_STAT2_STOPE) &&
+           !nora_i2c_reg_is_set(r->CON1, NORA_I2C_CON1_PEN);
 }
 
 /* --------------------------------------------------------------------------
  * Issue STOP and wait quietly
  * -------------------------------------------------------------------------- */
-static dspic33ak_i2c_status_t stop_quiet(dspic33ak_i2c_instance_t inst)
+static nora_i2c_status_t stop_quiet(nora_i2c_instance_t inst)
 {
-    dspic33ak_i2c_status_t st;
+    nora_i2c_status_t st;
 
-    st = dspic33ak_i2c_ll_stop_issue(inst);
-    if (st != DSPIC33AK_I2C_OK) {
+    st = nora_i2c_ll_stop_issue(inst);
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
@@ -1340,41 +1341,41 @@ static dspic33ak_i2c_status_t stop_quiet(dspic33ak_i2c_instance_t inst)
 /* --------------------------------------------------------------------------
  * Issue START and wait
  * -------------------------------------------------------------------------- */
-static dspic33ak_i2c_status_t start_blocking(dspic33ak_i2c_instance_t inst)
+static nora_i2c_status_t start_blocking(nora_i2c_instance_t inst)
 {
-    dspic33ak_i2c_status_t st;
+    nora_i2c_status_t st;
 
-    st = dspic33ak_i2c_ll_start_issue(inst);
-    if (st != DSPIC33AK_I2C_OK) {
+    st = nora_i2c_ll_start_issue(inst);
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
-    return wait_until(inst, dspic33ak_i2c_ll_start_done, false);
+    return wait_until(inst, nora_i2c_ll_start_done, false);
 }
 
 /* --------------------------------------------------------------------------
  * Issue repeated START and wait
  * -------------------------------------------------------------------------- */
-static dspic33ak_i2c_status_t restart_blocking(dspic33ak_i2c_instance_t inst)
+static nora_i2c_status_t restart_blocking(nora_i2c_instance_t inst)
 {
-    dspic33ak_i2c_status_t st;
+    nora_i2c_status_t st;
 
-    st = dspic33ak_i2c_ll_restart_issue(inst);
-    if (st != DSPIC33AK_I2C_OK) {
+    st = nora_i2c_ll_restart_issue(inst);
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
-    return wait_until(inst, dspic33ak_i2c_ll_restart_done, false);
+    return wait_until(inst, nora_i2c_ll_restart_done, false);
 }
 
 /* --------------------------------------------------------------------------
  * Write one byte and wait
  * -------------------------------------------------------------------------- */
-static dspic33ak_i2c_status_t write_byte_blocking(
-    dspic33ak_i2c_instance_t inst,
+static nora_i2c_status_t write_byte_blocking(
+    nora_i2c_instance_t inst,
     uint8_t data)
 {
-    dspic33ak_i2c_status_t st;
+    nora_i2c_status_t st;
 
     /*
      * Byte write sequence:
@@ -1385,64 +1386,64 @@ static dspic33ak_i2c_status_t write_byte_blocking(
      *   5. wait until the module reports address/data phase accepted
      */
     st = wait_until(inst, write_byte_ready, false);
-    if (st != DSPIC33AK_I2C_OK) {
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
     st = wait_until(inst, host_active, false);
-    if (st != DSPIC33AK_I2C_OK) {
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
-    st = dspic33ak_i2c_ll_write_byte_issue(inst, data);
-    if (st != DSPIC33AK_I2C_OK) {
+    st = nora_i2c_ll_write_byte_issue(inst, data);
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
     st = wait_until(inst, write_byte_done, false);
-    if (st != DSPIC33AK_I2C_OK) {
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
     st = wait_until(inst, write_data_accepted, false);
-    if (st != DSPIC33AK_I2C_OK) {
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
-    if (!dspic33ak_i2c_ll_write_byte_acked(inst)) {
-        return DSPIC33AK_I2C_ERR_NACK;
+    if (!nora_i2c_ll_write_byte_acked(inst)) {
+        return NORA_I2C_ERR_NACK;
     }
 
-    return DSPIC33AK_I2C_OK;
+    return NORA_I2C_OK;
 }
 
 /* --------------------------------------------------------------------------
  * Read one byte, issue ACK/NACK, and wait
  * -------------------------------------------------------------------------- */
-static dspic33ak_i2c_status_t read_byte_blocking(
-    dspic33ak_i2c_instance_t inst,
+static nora_i2c_status_t read_byte_blocking(
+    nora_i2c_instance_t inst,
     uint8_t *data,
     bool ack)
 {
-    dspic33ak_i2c_status_t st;
+    nora_i2c_status_t st;
 
-    st = dspic33ak_i2c_ll_read_byte_issue(inst);
-    if (st != DSPIC33AK_I2C_OK) {
+    st = nora_i2c_ll_read_byte_issue(inst);
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
-    st = wait_until(inst, dspic33ak_i2c_ll_read_byte_ready, false);
-    if (st != DSPIC33AK_I2C_OK) {
+    st = wait_until(inst, nora_i2c_ll_read_byte_ready, false);
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
-    st = dspic33ak_i2c_ll_read_byte_get(inst, data);
-    if (st != DSPIC33AK_I2C_OK) {
+    st = nora_i2c_ll_read_byte_get(inst, data);
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
-    st = dspic33ak_i2c_ll_ack_issue(inst, ack);
-    if (st != DSPIC33AK_I2C_OK) {
+    st = nora_i2c_ll_ack_issue(inst, ack);
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
@@ -1452,8 +1453,8 @@ static dspic33ak_i2c_status_t read_byte_blocking(
 /* --------------------------------------------------------------------------
  * Send 7-bit address with R/W bit
  * -------------------------------------------------------------------------- */
-static dspic33ak_i2c_status_t send_address_blocking(
-    dspic33ak_i2c_instance_t inst,
+static nora_i2c_status_t send_address_blocking(
+    nora_i2c_instance_t inst,
     uint8_t addr7,
     bool read)
 {

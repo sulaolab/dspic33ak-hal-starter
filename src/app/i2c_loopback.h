@@ -22,7 +22,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "dspic33ak_i2c.h"
+#include "nora_i2c.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -33,10 +33,10 @@ bool i2c_loopback_init(void);
 
 /* Run one master Write + master Read round trip against the slave and log all
  * four directions. master_inst is the bus-master to drive
- * (DSPIC33AK_I2C_INST_2 on this board); beat varies the payload so the pattern
+ * (NORA_I2C_INST_2 on this board); beat varies the payload so the pattern
  * visibly moves from line to line. Call repeatedly (e.g. per heartbeat once
  * i2c_loopback_init() has succeeded). */
-void i2c_loopback_tick(dspic33ak_i2c_instance_t master_inst, uint32_t beat);
+void i2c_loopback_tick(nora_i2c_instance_t master_inst, uint32_t beat);
 
 #ifdef __cplusplus
 }

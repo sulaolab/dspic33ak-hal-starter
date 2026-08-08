@@ -170,6 +170,7 @@ them — but once generated they persist across builds and they carry the
 | step 1 (spi/timer/nvm/udid) | 84,116 | 0 |
 | step 3 (dma/gpio + spi_i2s_tdm) | 91,364 | **+7,248** |
 | step 4 (clock) | 91,920 | +556 |
+| step 5 (i2c) | 92,316 | +396 |
 
 The +7,248 B is Sonora's richer TDM module: `sumprof_*` / `tdmsum_*` ISR-load
 profiling and the extra diag paths are part of its public API and are compiled
@@ -218,6 +219,12 @@ byte-identical to Sonora):
 - `nora_nvm.h` keeps `NORA_NVM_PageErase` / `NORA_NVM_ReadWord` / … —
   callable functions spelled `NORA_*`, which `nora_hal_public_api.md` reserves
   for compile-time identifiers only.
+- `nora_clock_dspic33a.h:30` writes a path as `board/clock/*` inside a block
+  comment, so the compiler emits `warning: "/*" within comment [-Wcomment]`
+  three times per build. Cosmetic, but it is the only warning this project
+  produces; fixing it belongs upstream.
+- `nora_dma_dspic33a_reg.h:11` refers to a file called `dspic33ak_i2c_reg.h`,
+  which no longer exists on either side (it is `nora_i2c_dspic33a_reg.h` now).
 - `nora_spi_dspic33a.c` still uses file-local `DSPIC33AK_SPI_REG_ROW` /
   `DSPIC33AK_SPI_ARRAY_LEN` macros; `nora_dma_dspic33a_reg.h` likewise keeps
   `DSPIC33AK_DMA_*` bit macros. Private, but leftovers of the rename.

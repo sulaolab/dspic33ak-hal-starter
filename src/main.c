@@ -21,7 +21,7 @@
 #include "dspic33ak_uart.h"
 #include "nora_nvm.h"
 #include "nora_udid.h"
-#include "dspic33ak_i2c_master.h"
+#include "nora_i2c_master.h"
 #include "sst26_min.h"
 #include "i2c_scan.h"
 #include "i2c_loopback.h"
@@ -303,15 +303,15 @@ int main(void)
      * plugged into *either* the A or B socket; it cannot tell which side.
      * Plug an I2C device into the MikroBUS A or B I2C header and it shows up. */
     {
-        const dspic33ak_i2c_config_t i2c_cfg = {
+        const nora_i2c_config_t i2c_cfg = {
             .fcy_hz             = STARTER_CLOCK_FCY_HZ,           /* fcy = sysclk/2  */
             .bus_hz             = 400000u,                       /* 400 kHz         */
             .timeout_ms         = 5u,                            /* never hang      */
             .get_ms             = nora_tick_timer_get_ms,
             .pending_timeout_ms = 50u,
         };
-        if (dspic33ak_i2c_init(DSPIC33AK_I2C_INST_2, &i2c_cfg) == DSPIC33AK_I2C_OK) {
-            i2c_scan_run(DSPIC33AK_I2C_INST_2, "MikroBUS A/B");
+        if (nora_i2c_init(NORA_I2C_INST_2, &i2c_cfg) == NORA_I2C_OK) {
+            i2c_scan_run(NORA_I2C_INST_2, "MikroBUS A/B");
         } else {
             printf(" I2C: init failed\n");
         }
@@ -445,7 +445,7 @@ int main(void)
             led_sw_toggle(0u);      /* LED0 = heartbeat indicator */
             if ((beat & 1u) == 0u) {
                 if (loopback_ok) {
-                    i2c_loopback_tick(DSPIC33AK_I2C_INST_2, beat);  /* even beat: I2C */
+                    i2c_loopback_tick(NORA_I2C_INST_2, beat);  /* even beat: I2C */
                 }
             } else {
                 if (can_runtime_ready) {

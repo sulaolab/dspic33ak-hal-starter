@@ -1,7 +1,7 @@
-#include "dspic33ak_i2c_slave.h"
-#include "dspic33ak_i2c_device.h"
-#include "dspic33ak_i2c_reg.h"
-#include "dspic33ak_i2c_common.h"
+#include "nora_i2c_slave.h"
+#include "nora_i2c_dspic33a_device.h"
+#include "nora_i2c_dspic33a_reg.h"
+#include "nora_i2c_dspic33a_internal.h"
 
 /* --------------------------------------------------------------------------
  * dsPIC33AK I2C slave engine (interrupt-driven, callback-based).
@@ -26,26 +26,26 @@
  * clock after an address byte even when STREN = 0, so this is always required.
  * -------------------------------------------------------------------------- */
 
-static dspic33ak_i2c_slave_config_t g_cfg[DSPIC33AK_I2C_INST_COUNT];
-static bool                         g_active[DSPIC33AK_I2C_INST_COUNT];
-static bool                         g_reading[DSPIC33AK_I2C_INST_COUNT];
+static nora_i2c_slave_config_t g_cfg[NORA_I2C_INST_COUNT];
+static bool                         g_active[NORA_I2C_INST_COUNT];
+static bool                         g_reading[NORA_I2C_INST_COUNT];
 
 /* --------------------------------------------------------------------------
  * Init
  * -------------------------------------------------------------------------- */
-dspic33ak_i2c_status_t dspic33ak_i2c_slave_init(
-    dspic33ak_i2c_instance_t inst,
-    const dspic33ak_i2c_slave_config_t *config)
+nora_i2c_status_t nora_i2c_slave_init(
+    nora_i2c_instance_t inst,
+    const nora_i2c_slave_config_t *config)
 {
-    const dspic33ak_i2c_regs_t *r;
-    dspic33ak_i2c_status_t st;
+    const nora_i2c_regs_t *r;
+    nora_i2c_status_t st;
 
     if (config == 0 || config->addr7 > 0x7Fu) {
-        return DSPIC33AK_I2C_ERR_INVALID_ARG;
+        return NORA_I2C_ERR_INVALID_ARG;
     }
 
-    st = dspic33ak_i2c_get_regs(inst, &r);
-    if (st != DSPIC33AK_I2C_OK) {
+    st = nora_i2c_get_regs(inst, &r);
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
@@ -55,29 +55,29 @@ dspic33ak_i2c_status_t dspic33ak_i2c_slave_init(
      * slave mappings) must not be driven as a slave - that would dereference
      * NULL. Reject it instead. */
     if (r->ADD == 0 || r->MSK == 0 || r->INTC == 0 ||
-        r->irq_event.ifs == 0 || r->irq_event.iec == 0) {
-        return DSPIC33AK_I2C_ERR_NOT_PRESENT;
+        !nora_i2c_device_event_irq_is_mapped(inst)) {
+        return NORA_I2C_ERR_NOT_PRESENT;
     }
 
     /* Configure with the module disabled. */
-    dspic33ak_i2c_reg_clear(r->CON1, DSPIC33AK_I2C_CON1_ON);
+    nora_i2c_reg_clear(r->CON1, NORA_I2C_CON1_ON);
 
     /* Classic client mode: 7-bit (A10M=0), no host request bits, no smart/FIFO
      * features. PCIE makes a STOP feed the client interrupt (CLIIF). */
-    dspic33ak_i2c_reg_write(r->CON1, DSPIC33AK_I2C_CON1_PCIE);
-    dspic33ak_i2c_reg_write(r->CON2, DSPIC33AK_I2C_CON2_PSZ_1_BYTE);
+    nora_i2c_reg_write(r->CON1, NORA_I2C_CON1_PCIE);
+    nora_i2c_reg_write(r->CON2, NORA_I2C_CON2_PSZ_1_BYTE);
 
     /* Route every client condition to the event interrupt I2CxIF: address-match
      * (CADDRIE), received byte (CDRXIE) and the "send next byte" request after a
      * transmitted byte is ACKed (CDTXIE) all feed CLIIF, which CLTIE gates onto
      * I2CxIF. Without this the hardware sets RBF/TBF but raises no interrupt. */
-    *r->INTC = DSPIC33AK_I2C_INTC_CLTIE   |
-               DSPIC33AK_I2C_INTC_CADDRIE |
-               DSPIC33AK_I2C_INTC_CDRXIE  |
-               DSPIC33AK_I2C_INTC_CDTXIE;
+    *r->INTC = NORA_I2C_INTC_CLTIE   |
+               NORA_I2C_INTC_CADDRIE |
+               NORA_I2C_INTC_CDRXIE  |
+               NORA_I2C_INTC_CDTXIE;
 
     if (config->clock_stretch) {
-        dspic33ak_i2c_reg_set(r->CON1, DSPIC33AK_I2C_CON1_STREN);
+        nora_i2c_reg_set(r->CON1, NORA_I2C_CON1_STREN);
     }
 
     /* 7-bit own address (right-justified in ADD<6:0>) and address mask. */
@@ -85,36 +85,36 @@ dspic33ak_i2c_status_t dspic33ak_i2c_slave_init(
     *r->MSK = (uint32_t)config->addr_mask;
 
     /* Drop any stale receive-overflow latch. */
-    dspic33ak_i2c_reg_clear(r->STAT1, DSPIC33AK_I2C_STAT1_I2COV);
+    nora_i2c_reg_clear(r->STAT1, NORA_I2C_STAT1_I2COV);
 
     g_cfg[inst]     = *config;
     g_reading[inst] = false;
     g_active[inst]  = true;
-    dspic33ak_i2c_set_role(inst, DSPIC33AK_I2C_ROLE_SLAVE);
+    nora_i2c_set_role(inst, NORA_I2C_ROLE_SLAVE);
 
     /* All client activity (address / RX / TX-continue / STOP) is aggregated
      * into the single event interrupt via INTC above, so only that vector is
      * enabled here. */
-    dspic33ak_i2c_reg_irq_clear(&r->irq_event);
-    dspic33ak_i2c_reg_irq_enable(&r->irq_event);
+    (void)nora_i2c_device_event_irq_clear_flag(inst);
+    (void)nora_i2c_device_event_irq_enable(inst, true);
 
     /* Release SCL and turn the slave on. */
-    dspic33ak_i2c_reg_set(r->CON1, DSPIC33AK_I2C_CON1_SCLREL);
-    dspic33ak_i2c_reg_set(r->CON1, DSPIC33AK_I2C_CON1_ON);
+    nora_i2c_reg_set(r->CON1, NORA_I2C_CON1_SCLREL);
+    nora_i2c_reg_set(r->CON1, NORA_I2C_CON1_ON);
 
-    return DSPIC33AK_I2C_OK;
+    return NORA_I2C_OK;
 }
 
 /* --------------------------------------------------------------------------
  * Deinit
  * -------------------------------------------------------------------------- */
-dspic33ak_i2c_status_t dspic33ak_i2c_slave_deinit(dspic33ak_i2c_instance_t inst)
+nora_i2c_status_t nora_i2c_slave_deinit(nora_i2c_instance_t inst)
 {
-    const dspic33ak_i2c_regs_t *r;
-    dspic33ak_i2c_status_t st;
+    const nora_i2c_regs_t *r;
+    nora_i2c_status_t st;
 
-    st = dspic33ak_i2c_get_regs(inst, &r);
-    if (st != DSPIC33AK_I2C_OK) {
+    st = nora_i2c_get_regs(inst, &r);
+    if (st != NORA_I2C_OK) {
         return st;
     }
 
@@ -122,26 +122,26 @@ dspic33ak_i2c_status_t dspic33ak_i2c_slave_deinit(dspic33ak_i2c_instance_t inst)
      * (and cannot be) a slave, so there is nothing to tear down. Guard against
      * dereferencing the NULL irq/INTC pointers such an instance would carry. */
     if (r->ADD == 0 || r->MSK == 0 || r->INTC == 0 ||
-        r->irq_event.ifs == 0 || r->irq_event.iec == 0) {
-        return DSPIC33AK_I2C_ERR_NOT_PRESENT;
+        !nora_i2c_device_event_irq_is_mapped(inst)) {
+        return NORA_I2C_ERR_NOT_PRESENT;
     }
 
-    dspic33ak_i2c_reg_irq_disable(&r->irq_event);
-    dspic33ak_i2c_reg_irq_disable(&r->irq_rx);
-    dspic33ak_i2c_reg_irq_disable(&r->irq_tx);
+    (void)nora_i2c_device_event_irq_enable(inst, false);
+    (void)nora_i2c_device_rx_irq_enable(inst, false);
+    (void)nora_i2c_device_tx_irq_enable(inst, false);
 
-    dspic33ak_i2c_reg_clear(r->CON1, DSPIC33AK_I2C_CON1_ON);
+    nora_i2c_reg_clear(r->CON1, NORA_I2C_CON1_ON);
 
     g_active[inst]  = false;
     g_reading[inst] = false;
-    dspic33ak_i2c_set_role(inst, DSPIC33AK_I2C_ROLE_NONE);
+    nora_i2c_set_role(inst, NORA_I2C_ROLE_NONE);
 
-    return DSPIC33AK_I2C_OK;
+    return NORA_I2C_OK;
 }
 
-bool dspic33ak_i2c_slave_is_active(dspic33ak_i2c_instance_t inst)
+bool nora_i2c_slave_is_active(nora_i2c_instance_t inst)
 {
-    if (!dspic33ak_i2c_inst_is_valid(inst)) {
+    if (!nora_i2c_inst_is_valid(inst)) {
         return false;
     }
     return g_active[inst];
@@ -151,7 +151,7 @@ bool dspic33ak_i2c_slave_is_active(dspic33ak_i2c_instance_t inst)
  * Shared service: poll STAT1 and act on whatever is pending. Called from every
  * ISR delegate; idempotent because reading RCV clears RBF.
  * -------------------------------------------------------------------------- */
-static uint8_t next_tx_byte(dspic33ak_i2c_instance_t inst)
+static uint8_t next_tx_byte(nora_i2c_instance_t inst)
 {
     if (g_cfg[inst].on_tx_byte != 0) {
         return g_cfg[inst].on_tx_byte();
@@ -159,18 +159,18 @@ static uint8_t next_tx_byte(dspic33ak_i2c_instance_t inst)
     return 0xFFu;
 }
 
-static void slave_service(dspic33ak_i2c_instance_t inst,
-                          const dspic33ak_i2c_regs_t *r)
+static void slave_service(nora_i2c_instance_t inst,
+                          const nora_i2c_regs_t *r)
 {
     uint32_t stat = *r->STAT1;
 
-    if ((stat & DSPIC33AK_I2C_STAT1_RBF) != 0u) {
+    if ((stat & NORA_I2C_STAT1_RBF) != 0u) {
         uint8_t b = (uint8_t)(*r->RCV & 0xFFu);     /* read clears RBF */
 
-        if ((stat & DSPIC33AK_I2C_STAT1_D_A) == 0u) {
+        if ((stat & NORA_I2C_STAT1_D_A) == 0u) {
             /* Address byte: latch direction and notify. The hardware has
              * stretched SCL after the address; release it below. */
-            bool is_read = ((stat & DSPIC33AK_I2C_STAT1_R_W) != 0u);
+            bool is_read = ((stat & NORA_I2C_STAT1_R_W) != 0u);
             g_reading[inst] = is_read;
 
             if (g_cfg[inst].on_addr_match != 0) {
@@ -187,14 +187,14 @@ static void slave_service(dspic33ak_i2c_instance_t inst,
             }
         }
 
-        dspic33ak_i2c_reg_set(r->CON1, DSPIC33AK_I2C_CON1_SCLREL);
+        nora_i2c_reg_set(r->CON1, NORA_I2C_CON1_SCLREL);
     } else if (g_reading[inst]) {
         /* Master-read in progress: this interrupt is the falling edge of the
          * ACK/NACK after the byte we just transmitted. */
-        if ((stat & DSPIC33AK_I2C_STAT1_ACKSTAT) == 0u) {
+        if ((stat & NORA_I2C_STAT1_ACKSTAT) == 0u) {
             /* ACK: the host wants more -> load the next byte and release. */
             *r->TRN = (uint32_t)next_tx_byte(inst);
-            dspic33ak_i2c_reg_set(r->CON1, DSPIC33AK_I2C_CON1_SCLREL);
+            nora_i2c_reg_set(r->CON1, NORA_I2C_CON1_SCLREL);
         } else {
             /* NACK: the read is finished. Do not write TRN again; the module
              * stops stretching on its own and a STOP follows. */
@@ -202,7 +202,7 @@ static void slave_service(dspic33ak_i2c_instance_t inst,
         }
     }
 
-    if ((stat & DSPIC33AK_I2C_STAT1_P) != 0u) {
+    if ((stat & NORA_I2C_STAT1_P) != 0u) {
         /* STOP: end of transaction. */
         g_reading[inst] = false;
         if (g_cfg[inst].on_stop != 0) {
@@ -211,8 +211,8 @@ static void slave_service(dspic33ak_i2c_instance_t inst,
     }
 
     /* Never let a receive-overflow latch wedge the slave. */
-    if (dspic33ak_i2c_reg_is_set(r->STAT1, DSPIC33AK_I2C_STAT1_I2COV)) {
-        dspic33ak_i2c_reg_clear(r->STAT1, DSPIC33AK_I2C_STAT1_I2COV);
+    if (nora_i2c_reg_is_set(r->STAT1, NORA_I2C_STAT1_I2COV)) {
+        nora_i2c_reg_clear(r->STAT1, NORA_I2C_STAT1_I2COV);
     }
 }
 
@@ -222,40 +222,40 @@ static void slave_service(dspic33ak_i2c_instance_t inst,
  * keeps its flag set and re-enters rather than being cleared away. The service
  * routine is idempotent, so a spurious re-entry is harmless.
  * -------------------------------------------------------------------------- */
-void dspic33ak_i2c_slave_event_irq(dspic33ak_i2c_instance_t inst)
+void nora_i2c_slave_event_irq(nora_i2c_instance_t inst)
 {
-    const dspic33ak_i2c_regs_t *r;
+    const nora_i2c_regs_t *r;
 
-    if (dspic33ak_i2c_get_regs(inst, &r) != DSPIC33AK_I2C_OK) {
+    if (nora_i2c_get_regs(inst, &r) != NORA_I2C_OK) {
         return;
     }
-    dspic33ak_i2c_reg_irq_clear(&r->irq_event);
+    (void)nora_i2c_device_event_irq_clear_flag(inst);
     if (g_active[inst]) {
         slave_service(inst, r);
     }
 }
 
-void dspic33ak_i2c_slave_rx_irq(dspic33ak_i2c_instance_t inst)
+void nora_i2c_slave_rx_irq(nora_i2c_instance_t inst)
 {
-    const dspic33ak_i2c_regs_t *r;
+    const nora_i2c_regs_t *r;
 
-    if (dspic33ak_i2c_get_regs(inst, &r) != DSPIC33AK_I2C_OK) {
+    if (nora_i2c_get_regs(inst, &r) != NORA_I2C_OK) {
         return;
     }
-    dspic33ak_i2c_reg_irq_clear(&r->irq_rx);
+    (void)nora_i2c_device_rx_irq_clear_flag(inst);
     if (g_active[inst]) {
         slave_service(inst, r);
     }
 }
 
-void dspic33ak_i2c_slave_tx_irq(dspic33ak_i2c_instance_t inst)
+void nora_i2c_slave_tx_irq(nora_i2c_instance_t inst)
 {
-    const dspic33ak_i2c_regs_t *r;
+    const nora_i2c_regs_t *r;
 
-    if (dspic33ak_i2c_get_regs(inst, &r) != DSPIC33AK_I2C_OK) {
+    if (nora_i2c_get_regs(inst, &r) != NORA_I2C_OK) {
         return;
     }
-    dspic33ak_i2c_reg_irq_clear(&r->irq_tx);
+    (void)nora_i2c_device_tx_irq_clear_flag(inst);
     if (g_active[inst]) {
         slave_service(inst, r);
     }
