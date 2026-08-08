@@ -295,6 +295,51 @@ tree carries another session's uncommitted edits). Until they land in the
 mothership, this starter's `src/hal_can/` is *not* reproducible from sonora
 `main`.
 
+## 11e. Hardware acceptance (2026-08-09) — PASS
+
+All 11 modules NORA-ised, `build.ps1 -Full` + `flashauto.ps1` on PKOB4
+`020085204RYN000057` (dsPIC33AK512MPS512, Device ID `0xa77c`, UDID
+`FFFFFFFF010B00DBB8D0000D00D76A9D` — the same board as the clock-HAL closeout in
+`clock_hal_integration.md`). Console read through the `sonora_monitor` HTTP
+bridge (COM12 @230400); the monitor was already running and was left running.
+
+| check | result |
+|---|---|
+| clock | `sysclk : 200000000 Hz (FRC -> PLL1)` |
+| HRT self-check | PASS (`d1=79856 d10=999998`) |
+| SST26 | JEDEC `BF 26 12` good; sector verify @0x000000 OK |
+| I2C scan | 1 device, ACK at 0x1A |
+| I2C loopback | runs; data path mismatched — **pre-existing waiver**, see below |
+| CAN1 RX-ISR self-test | **PASS**, all four criteria |
+| CAN1 FD 500k/2M | live on the bus, HAL self-check PASS |
+| TDM8 smoke (MikroBUS-A) | `exp_fs~48kHz exp_bclk~12500kHz miss=0` over 22,917 blocks |
+| bank / config | P1 active, BTSEQ=0xFFF, active UCA OK |
+
+The two lines that specifically validate step 7's upstream work:
+
+```
+   RX overflow        : detected (status=yes, callback=yes; 4/24 frames held)
+   TX interrupt line  : disabled (as required)
+```
+
+The first exercises **both** paths added by `c26ecb0` — the sticky-flag read via
+`get_status()` with interrupts off, and the RX_OVERFLOW callback after re-arming
+— which is why the port needed the `rx_overflow` field and not just the clear
+function. The second is the assertion that sonora's original
+`irq_line_enable()` would have failed, now passing because `427e406` moved the
+TX CPU line to `tx_start()`.
+
+`<[CAN1 Tx] transmit queue full / timeout` with `state=error-passive TEC=128` is
+the documented no-ACK-partner behaviour on a single node, not a fault; the
+firmware prints the explanation itself.
+
+**I2C loopback is not a regression from this migration.** README's expected
+output is `>[I2C3 Rd] size=8 1122334455667788`; this setup reports `size=0` and
+an all-zero master read. `clock_hal_integration.md` §"Caveats" already records
+the identical mismatch on this same board (matching PKOB4 serial and UDID) and
+waives it as "loopback board unavailable" — i.e. it predates the NORA work. The
+waiver carries over unchanged; it remains a genuine future fixture-based check.
+
 ## 12. Sonora-side residues noticed while vendoring
 
 Reported here, deliberately **not** fixed in this starter (donor files are kept
