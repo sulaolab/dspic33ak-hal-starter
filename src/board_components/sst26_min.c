@@ -12,7 +12,7 @@
 #include <stddef.h>
 
 #include "nora_spi.h"
-#include "dspic33ak_gpio.h"
+#include "nora_gpio.h"
 #include "board_pins.h"
 #include "board.h"
 #include "sst26_min.h"
@@ -37,8 +37,8 @@
 
 static nora_spi_handle_t s_spi;
 
-#define CS_ASSERT()    (void)dspic33ak_gpio_clear(BOARD_SST26_PIN_CS)   /* active low */
-#define CS_DEASSERT()  (void)dspic33ak_gpio_set(BOARD_SST26_PIN_CS)
+#define CS_ASSERT()    (void)nora_gpio_clear(BOARD_SST26_PIN_CS)   /* active low */
+#define CS_DEASSERT()  (void)nora_gpio_set(BOARD_SST26_PIN_CS)
 #define XFER(b)        nora_spi_transfer8(&s_spi, (uint8_t)(b))
 
 static void short_delay(void)
@@ -139,7 +139,7 @@ bool sst26_min_init(void)
     }
     CS_DEASSERT();
     short_delay();
-    (void)dspic33ak_gpio_set(BOARD_SST26_PIN_RST);   /* release reset */
+    (void)nora_gpio_set(BOARD_SST26_PIN_RST);   /* release reset */
     short_delay();
 
     const nora_spi_config_t cfg = {

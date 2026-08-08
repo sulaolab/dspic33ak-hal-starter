@@ -1,5 +1,5 @@
-#ifndef DSPIC33AK_SPI_I2S_TDM_FS_CLC_H
-#define DSPIC33AK_SPI_I2S_TDM_FS_CLC_H
+#ifndef NORA_SPI_I2S_TDM_DSPIC33A_FS_CLC_H
+#define NORA_SPI_I2S_TDM_DSPIC33A_FS_CLC_H
 
 //===========================================================
 // CLC10 50%-duty frame-sync generator (silicon helper of the SPI/I2S/TDM HAL).
@@ -31,25 +31,25 @@
 // parts (no CLC10) engage() returns _NO_FS_PIN and the feature is unavailable there.
 //===========================================================
 
-#include "dspic33ak_spi_i2s_tdm_hw.h"   // tdm_spi_inst_t
+#include "nora_spi_i2s_tdm_dspic33a_hw.h"   // tdm_spi_inst_t
 
 typedef enum {
-    DSPIC33AK_SPI_I2S_TDM_FS_CLC_OK = 0,
-    DSPIC33AK_SPI_I2S_TDM_FS_CLC_BUSY,       // CLC10 already owned by a different instance/domain
-    DSPIC33AK_SPI_I2S_TDM_FS_CLC_NO_FS_PIN,  // FS/FRMSYNC not on any physical pin (or no CLC10 on device)
-} dspic33ak_spi_i2s_tdm_fs_clc_result_t;
+    NORA_SPI_I2S_TDM_FS_CLC_OK = 0,
+    NORA_SPI_I2S_TDM_FS_CLC_BUSY,       // CLC10 already owned by a different instance/domain
+    NORA_SPI_I2S_TDM_FS_CLC_NO_FS_PIN,  // FS/FRMSYNC not on any physical pin (or no CLC10 on device)
+} nora_spi_i2s_tdm_fs_clc_result_t;
 
 // Engage the CLC10 50%-FS generator for `owner` (a TDM master). Idempotent for the current
 // owner (also handles re-start after release). Returns _BUSY if another owner holds CLC10,
 // _NO_FS_PIN if the FS pin can't be resolved / CLC10 absent. Call AFTER the board has
 // routed FRMSYNC->FS pin (open()) and BEFORE enabling the SPI module.
-dspic33ak_spi_i2s_tdm_fs_clc_result_t
-    dspic33ak_spi_i2s_tdm_fs_clc_engage( tdm_spi_inst_t owner );
+nora_spi_i2s_tdm_fs_clc_result_t
+    nora_spi_i2s_tdm_fs_clc_engage( tdm_spi_inst_t owner );
 
 // Release CLC10 if `owner` holds it: disables the flip-flop AND restores the external FS pin
 // from CLC10OUT back to its original FRMSYNC (SSx) output, so a runtime reconfigure
 // (FS_50PCT -> stop -> FS_PULSE -> start) leaves the SPI driving the FS pin directly again.
 // No-op if `owner` is not the current holder.
-void dspic33ak_spi_i2s_tdm_fs_clc_release( tdm_spi_inst_t owner );
+void nora_spi_i2s_tdm_fs_clc_release( tdm_spi_inst_t owner );
 
-#endif // DSPIC33AK_SPI_I2S_TDM_FS_CLC_H
+#endif // NORA_SPI_I2S_TDM_DSPIC33A_FS_CLC_H

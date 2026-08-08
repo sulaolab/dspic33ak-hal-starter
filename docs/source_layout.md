@@ -12,7 +12,7 @@ Reusable HAL snapshots live in module-specific `src/hal_xxx/` folders:
 | Path | Ownership |
 |---|---|
 | `src/hal_clock/` | Generic dsPIC33AK Clock HAL: logical PLL / CLKGEN programming through core, device, and register-adaptation layers. |
-| `src/hal_gpio/` | GPIO HAL family: `dspic33ak_gpio.*` (electrical attributes), `dspic33ak_pps.*` (generic PPS signal routing), and `dspic33ak_gpio_event.*` (CN change-notification events). |
+| `src/hal_gpio/` | GPIO HAL family: `nora_gpio.*` (electrical attributes), `nora_pps.*` (generic PPS signal routing), and `nora_gpio_event.*` (CN change-notification events). |
 | `src/hal_uart/` | UART HAL core, device table, and optional RX ISR ring backend. |
 | `src/hal_spi/` | SPI HAL core. |
 | `src/hal_i2c/` | I2C HAL common, master, slave, and device abstraction. |
@@ -23,7 +23,7 @@ Reusable HAL snapshots live in module-specific `src/hal_xxx/` folders:
 | `src/hal_spi_i2s_tdm/` | SPI framed-mode I2S/TDM transport HAL candidate using DMA ping-pong buffers and a project-supplied config header. |
 
 These folders may contain generic, reusable HAL implementations. The distinction
-for `src/hal_gpio/` specifically: `dspic33ak_pps.*` provides generic PPS register
+for `src/hal_gpio/` specifically: `nora_pps.*` provides generic PPS register
 routing (signal-to-RPn mapping, IOLOCK management) and belongs here; board-specific
 RP assignments ("which signal goes to which physical pin on this PCB") stay in
 `src/board.c` and `src/board_pins.h`. The same split applies to clocking:
@@ -45,7 +45,7 @@ Code that binds the HALs to this board stays outside the HAL folders:
 | `src/clock/` | Starter-specific clock policy: FRC 8 MHz -> PLL1 200 MHz, application CLKGEN routing, and CLKGEN10 /10 for 20 MHz CAN FD FCAN. |
 | `src/app/` | Bus validation demos and application-level orchestration. |
 | `src/hal_udid/` | Local UDID boot-banner helper; not currently a standalone public HAL. |
-| `src/dspic33ak_spi_i2s_tdm_conf.h` | Project-supplied TDM HAL configuration, intentionally kept near the top of `src/` for MPLAB X visibility. |
+| `src/nora_spi_i2s_tdm_conf.h` | Project-supplied TDM HAL configuration, intentionally kept near the top of `src/` for MPLAB X visibility. |
 
 The root-level `board.*` files are intentionally not folded into
 `src/board_components/`: they name the board's fixed wiring and PPS routes,

@@ -14,13 +14,13 @@
 
 #include "led_sw.h"
 #include "board_pins.h"
-#include "dspic33ak_gpio.h"
-#include "dspic33ak_gpio_event.h"
+#include "nora_gpio.h"
+#include "nora_gpio_event.h"
 #include "nora_tick_timer.h"
 
 /* LED0..LED7 -> RC8..RC15, lit when driven high. LEDs are 0-indexed to match
  * the board silkscreen (LED0..LED7); the switches below are 1-indexed (SW1..3). */
-static const dspic33ak_gpio_pin_t LED_PINS[LED_SW_LED_COUNT] = {
+static const nora_gpio_pin_t LED_PINS[LED_SW_LED_COUNT] = {
     BOARD_LED0_PIN,
     BOARD_LED1_PIN,
     BOARD_LED2_PIN,
@@ -32,7 +32,7 @@ static const dspic33ak_gpio_pin_t LED_PINS[LED_SW_LED_COUNT] = {
 };
 
 /* SW1..SW3, active-low (reads 0 while pressed). */
-static const dspic33ak_gpio_rp_t SW_RPS[LED_SW_SW_COUNT] = {
+static const nora_gpio_rp_t SW_RPS[LED_SW_SW_COUNT] = {
     BOARD_SW1_RP,
     BOARD_SW2_RP,
     BOARD_SW3_RP,
@@ -60,16 +60,16 @@ static void led_sw_log_transition(uint8_t sw, bool pressed)
     }
 }
 
-static void led_sw_sw3_event_callback(dspic33ak_gpio_pin_t pin,
-                                      dspic33ak_gpio_event_edge_t edge,
+static void led_sw_sw3_event_callback(nora_gpio_pin_t pin,
+                                      nora_gpio_event_edge_t edge,
                                       void *user_data)
 {
     (void)pin;
     (void)user_data;
 
-    if (edge == DSPIC33AK_GPIO_EVENT_EDGE_FALLING) {
+    if (edge == NORA_GPIO_EVENT_EDGE_FALLING) {
         s_sw3_pressed = true;     /* active-low press */
-    } else if (edge == DSPIC33AK_GPIO_EVENT_EDGE_RISING) {
+    } else if (edge == NORA_GPIO_EVENT_EDGE_RISING) {
         s_sw3_pressed = false;    /* active-low release */
     }
 }
@@ -77,7 +77,7 @@ static void led_sw_sw3_event_callback(dspic33ak_gpio_pin_t pin,
 void __attribute__((__interrupt__, __no_auto_psv__)) _CNBInterrupt(void)
 {
     /* The event layer clears owned per-pin flags and the CNB interrupt flag. */
-    dspic33ak_gpio_event_process_isr();
+    nora_gpio_event_process_isr();
 }
 
 void led_sw_init(void)
@@ -87,31 +87,31 @@ void led_sw_init(void)
     /* LEDs: glitch-aware one-call config -- seeds LAT low (LED off) before
      * enabling the output driver, so no LED flashes during init. */
     for (i = 0u; i < LED_SW_LED_COUNT; i++) {
-        (void)dspic33ak_gpio_config_digital_output(LED_PINS[i], false);
+        (void)nora_gpio_config_digital_output(LED_PINS[i], false);
     }
 
     /* Switches: active-low with board pull-up. Use full config struct to
      * set all attributes in one call. */
-    static const dspic33ak_gpio_config_t sw_cfg = {
-        .dir = DSPIC33AK_GPIO_DIR_INPUT, .pull = DSPIC33AK_GPIO_PULL_UP,
+    static const nora_gpio_config_t sw_cfg = {
+        .dir = NORA_GPIO_DIR_INPUT, .pull = NORA_GPIO_PULL_UP,
         .analog = false, .open_drain = false, .initial_high = false,
     };
     for (i = 0u; i < LED_SW_SW_COUNT; i++) {
-        (void)dspic33ak_gpio_rp_config(SW_RPS[i], &sw_cfg);
+        (void)nora_gpio_rp_config(SW_RPS[i], &sw_cfg);
     }
 
     s_sw3_pressed = led_sw_pressed(LED_SW_SW3_NUMBER);
-    (void)dspic33ak_gpio_event_rp_attach(SW_RPS[LED_SW_SW3_INDEX],
-                                         DSPIC33AK_GPIO_EVENT_EDGE_EITHER,
+    (void)nora_gpio_event_rp_attach(SW_RPS[LED_SW_SW3_INDEX],
+                                         NORA_GPIO_EVENT_EDGE_EITHER,
                                          led_sw_sw3_event_callback,
                                          0);
-    (void)dspic33ak_gpio_event_rp_irq_enable(SW_RPS[LED_SW_SW3_INDEX], 4u);
+    (void)nora_gpio_event_rp_irq_enable(SW_RPS[LED_SW_SW3_INDEX], 4u);
 }
 
 void led_sw_set(uint8_t led, bool on)
 {
     if (led < LED_SW_LED_COUNT) {
-        dspic33ak_gpio_write(LED_PINS[led], on);
+        nora_gpio_write(LED_PINS[led], on);
     }
 }
 
@@ -119,14 +119,14 @@ void led_sw_all(bool on)
 {
     uint8_t i;
     for (i = 0u; i < LED_SW_LED_COUNT; i++) {
-        dspic33ak_gpio_write(LED_PINS[i], on);
+        nora_gpio_write(LED_PINS[i], on);
     }
 }
 
 void led_sw_toggle(uint8_t led)
 {
     if (led < LED_SW_LED_COUNT) {
-        dspic33ak_gpio_toggle(LED_PINS[led]);
+        nora_gpio_toggle(LED_PINS[led]);
     }
 }
 
@@ -135,7 +135,7 @@ bool led_sw_pressed(uint8_t sw)
     if (sw >= 1u && sw <= LED_SW_SW_COUNT) {
         /* Active-low: a pressed switch pulls the pin to 0. read() returns a
          * 3-state level; treat only a genuine LOW as pressed (ERROR -> not). */
-        return (dspic33ak_gpio_rp_read(SW_RPS[sw - 1u]) == DSPIC33AK_GPIO_LEVEL_LOW);
+        return (nora_gpio_rp_read(SW_RPS[sw - 1u]) == NORA_GPIO_LEVEL_LOW);
     }
     return false;
 }

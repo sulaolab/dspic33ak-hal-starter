@@ -1,5 +1,5 @@
 //===========================================================
-// CLC10 50%-duty frame-sync generator -- see dspic33ak_spi_i2s_tdm_fs_clc.h.
+// CLC10 50%-duty frame-sync generator -- see nora_spi_i2s_tdm_dspic33a_fs_clc.h.
 //
 // All register/PPS facts are transcribed from the dsPIC33AK512MPS512 Family Data Sheet
 // (DS70005591C) and the device header -- nothing is guessed:
@@ -17,7 +17,7 @@
 // pulsed to 1 (G3POL) at enable to reset the FF to a known state, then released to 0.
 //===========================================================
 
-#include "dspic33ak_spi_i2s_tdm_fs_clc.h"
+#include "nora_spi_i2s_tdm_dspic33a_fs_clc.h"
 
 #include <xc.h>
 #include <stdint.h>
@@ -26,7 +26,7 @@
 
 // CLC10 + RPV8 exist on the AK512; other supported parts (AK128) have no CLC10 -> the
 // 50%-FS-via-CLC feature is unavailable there and engage() reports _NO_FS_PIN.
-#if (DSPIC33AK_SPI_I2S_TDM_DEVICE == DSPIC33AK_SPI_I2S_TDM_DEV_AK512)
+#if (NORA_SPI_I2S_TDM_DSPIC33A_DEVICE == NORA_SPI_I2S_TDM_DSPIC33A_DEV_AK512)
 
 #define FS_CLC_DS1_VIRTUAL_PIN_8   (0b110u)   // CLC10SEL.DS1 : Virtual Pin 8 (= RPV8)
 #define FS_CLC_MODE_JK_FF_WITH_R   (0b110u)   // CLC10CON.MODE : J-K flip-flop with reset
@@ -58,19 +58,19 @@ static void               fs_clc_configure_clc10(void);
 //===========================================================
 // Global Function
 //===========================================================
-dspic33ak_spi_i2s_tdm_fs_clc_result_t
-    dspic33ak_spi_i2s_tdm_fs_clc_engage( tdm_spi_inst_t owner )
+nora_spi_i2s_tdm_fs_clc_result_t
+    nora_spi_i2s_tdm_fs_clc_engage( tdm_spi_inst_t owner )
 {
     uint8_t  ss_code;
     uint32_t fs_rp;
 
     if (s_claimed && (s_owner != owner))
     {
-        return DSPIC33AK_SPI_I2S_TDM_FS_CLC_BUSY;
+        return NORA_SPI_I2S_TDM_FS_CLC_BUSY;
     }
-    if (!dspic33ak_spi_i2s_tdm_hw_get_ss_pps_code(owner, &ss_code))
+    if (!nora_spi_i2s_tdm_hw_get_ss_pps_code(owner, &ss_code))
     {
-        return DSPIC33AK_SPI_I2S_TDM_FS_CLC_NO_FS_PIN;   // instance has no FRMSYNC output
+        return NORA_SPI_I2S_TDM_FS_CLC_NO_FS_PIN;   // instance has no FRMSYNC output
     }
 
     fs_rp = fs_clc_find_rp_with_code(ss_code);
@@ -91,7 +91,7 @@ dspic33ak_spi_i2s_tdm_fs_clc_result_t
         const uint32_t clc_rp = fs_clc_find_rp_with_code((uint8_t)_RPOUT_CLC10OUT);
         if (clc_rp == 0u)
         {
-            return DSPIC33AK_SPI_I2S_TDM_FS_CLC_NO_FS_PIN;   // FS not on any physical pin
+            return NORA_SPI_I2S_TDM_FS_CLC_NO_FS_PIN;   // FS not on any physical pin
         }
         fs_rp = clc_rp;                                      // ensure release() restores SSx here
         fs_clc_pps_unlock();
@@ -104,10 +104,10 @@ dspic33ak_spi_i2s_tdm_fs_clc_result_t
     s_ss_code = ss_code;
     s_owner   = owner;
     s_claimed = true;
-    return DSPIC33AK_SPI_I2S_TDM_FS_CLC_OK;
+    return NORA_SPI_I2S_TDM_FS_CLC_OK;
 }
 
-void dspic33ak_spi_i2s_tdm_fs_clc_release( tdm_spi_inst_t owner )
+void nora_spi_i2s_tdm_fs_clc_release( tdm_spi_inst_t owner )
 {
     if (!s_claimed || (s_owner != owner))
     {
@@ -188,14 +188,14 @@ static void fs_clc_configure_clc10(void)
 
 #else  // device without CLC10
 
-dspic33ak_spi_i2s_tdm_fs_clc_result_t
-    dspic33ak_spi_i2s_tdm_fs_clc_engage( tdm_spi_inst_t owner )
+nora_spi_i2s_tdm_fs_clc_result_t
+    nora_spi_i2s_tdm_fs_clc_engage( tdm_spi_inst_t owner )
 {
     (void)owner;
-    return DSPIC33AK_SPI_I2S_TDM_FS_CLC_NO_FS_PIN;   // no CLC10 on this part
+    return NORA_SPI_I2S_TDM_FS_CLC_NO_FS_PIN;   // no CLC10 on this part
 }
 
-void dspic33ak_spi_i2s_tdm_fs_clc_release( tdm_spi_inst_t owner )
+void nora_spi_i2s_tdm_fs_clc_release( tdm_spi_inst_t owner )
 {
     (void)owner;
 }

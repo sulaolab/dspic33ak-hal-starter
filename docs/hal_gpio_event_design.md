@@ -6,10 +6,10 @@ code above the GPIO core, not a full production-grade GPIO event framework.
 
 ## File Split
 
-- `src/hal_gpio/dspic33ak_gpio.h` and `src/hal_gpio/dspic33ak_gpio.c` are the
+- `src/hal_gpio/nora_gpio.h` and `src/hal_gpio/nora_gpio_dspic33a.c` are the
   GPIO core. They handle ANSEL, TRIS, LAT, PORT, ODC, CNPU, and CNPD.
-- `src/hal_gpio/dspic33ak_gpio_event.h` and
-  `src/hal_gpio/dspic33ak_gpio_event.c` provide the CN event layer above the
+- `src/hal_gpio/nora_gpio_event.h` and
+  `src/hal_gpio/nora_gpio_event.c` provide the CN event layer above the
   existing GPIO pin representation in the same vendored GPIO HAL snapshot.
 - `src/board_components/led_sw.c` owns the validation example and the
   `_CNBInterrupt()` vector.
@@ -22,46 +22,46 @@ code above the GPIO core, not a full production-grade GPIO event framework.
 The current event API is intentionally small:
 
 ```c
-bool dspic33ak_gpio_event_attach(dspic33ak_gpio_pin_t pin,
-                                 dspic33ak_gpio_event_edge_t trigger,
-                                 dspic33ak_gpio_event_callback_t callback,
+bool nora_gpio_event_attach(nora_gpio_pin_t pin,
+                                 nora_gpio_event_edge_t trigger,
+                                 nora_gpio_event_callback_t callback,
                                  void *user_data);
 
-bool dspic33ak_gpio_event_detach(dspic33ak_gpio_pin_t pin);
+bool nora_gpio_event_detach(nora_gpio_pin_t pin);
 
-bool dspic33ak_gpio_event_irq_enable(dspic33ak_gpio_pin_t pin,
+bool nora_gpio_event_irq_enable(nora_gpio_pin_t pin,
                                      uint8_t priority);
 
-bool dspic33ak_gpio_event_irq_disable(dspic33ak_gpio_pin_t pin);
+bool nora_gpio_event_irq_disable(nora_gpio_pin_t pin);
 
-bool dspic33ak_gpio_event_rp_attach(dspic33ak_gpio_rp_t rp,
-                                    dspic33ak_gpio_event_edge_t trigger,
-                                    dspic33ak_gpio_event_callback_t callback,
+bool nora_gpio_event_rp_attach(nora_gpio_rp_t rp,
+                                    nora_gpio_event_edge_t trigger,
+                                    nora_gpio_event_callback_t callback,
                                     void *user_data);
 
-bool dspic33ak_gpio_event_rp_detach(dspic33ak_gpio_rp_t rp);
+bool nora_gpio_event_rp_detach(nora_gpio_rp_t rp);
 
-bool dspic33ak_gpio_event_rp_irq_enable(dspic33ak_gpio_rp_t rp,
+bool nora_gpio_event_rp_irq_enable(nora_gpio_rp_t rp,
                                         uint8_t priority);
 
-bool dspic33ak_gpio_event_rp_irq_disable(dspic33ak_gpio_rp_t rp);
+bool nora_gpio_event_rp_irq_disable(nora_gpio_rp_t rp);
 
-bool dspic33ak_gpio_event_irq_is_enabled(dspic33ak_gpio_pin_t pin,
+bool nora_gpio_event_irq_is_enabled(nora_gpio_pin_t pin,
                                          bool *enabled);
 
-bool dspic33ak_gpio_event_irq_set_enabled(dspic33ak_gpio_pin_t pin,
+bool nora_gpio_event_irq_set_enabled(nora_gpio_pin_t pin,
                                           bool enable);
 
-bool dspic33ak_gpio_event_rp_irq_is_enabled(dspic33ak_gpio_rp_t rp,
+bool nora_gpio_event_rp_irq_is_enabled(nora_gpio_rp_t rp,
                                             bool *enabled);
 
-bool dspic33ak_gpio_event_rp_irq_set_enabled(dspic33ak_gpio_rp_t rp,
+bool nora_gpio_event_rp_irq_set_enabled(nora_gpio_rp_t rp,
                                              bool enable);
 
-void dspic33ak_gpio_event_process_isr(void);
+void nora_gpio_event_process_isr(void);
 ```
 
-Phase 1 accepts `DSPIC33AK_GPIO_EVENT_EDGE_EITHER` for `attach()`. The enum also
+Phase 1 accepts `NORA_GPIO_EVENT_EDGE_EITHER` for `attach()`. The enum also
 contains `FALLING` and `RISING` because callbacks report the detected edge, but
 single-edge attach policy is intentionally deferred until the dsPIC33AK
 `CNEN0x`/`CNEN1x` polarity mapping is finalized.
@@ -74,7 +74,7 @@ example owns the vector and forwards to the event dispatcher:
 ```c
 void __attribute__((__interrupt__, __no_auto_psv__)) _CNBInterrupt(void)
 {
-    dspic33ak_gpio_event_process_isr();
+    nora_gpio_event_process_isr();
 }
 ```
 
@@ -85,11 +85,11 @@ priority, flag, and enable bits.
 
 ## CN Flag Ownership
 
-`dspic33ak_gpio_event_process_isr()` owns cleanup for pins registered through
+`nora_gpio_event_process_isr()` owns cleanup for pins registered through
 the event layer:
 
 - It reads the per-port `CNFx` pending bits.
-- It handles only bits registered by `dspic33ak_gpio_event_attach()`.
+- It handles only bits registered by `nora_gpio_event_attach()`.
 - It clears the handled `CNFx` bits.
 - It clears the matching port interrupt flag, such as `CNBIF` through the port's
   `IFSx` register mask.
@@ -97,18 +97,18 @@ the event layer:
 The board component owns the vector and policy for this validation path, but it
 does not name the `_CNxIP`, `_CNxIF`, or `_CNxIE` symbols directly anymore.
 `led_sw_init()` attaches SW3 by RP number and calls
-`dspic33ak_gpio_event_rp_irq_enable(BOARD_SW3_RP, 4u)` after the switch is
+`nora_gpio_event_rp_irq_enable(BOARD_SW3_RP, 4u)` after the switch is
 configured.
 
 ## Edge Detection
 
 `attach()` captures the current `PORTx` level as `previous_high` before enabling
-CN for that pin. During `dspic33ak_gpio_event_process_isr()`:
+CN for that pin. During `nora_gpio_event_process_isr()`:
 
 1. The dispatcher reads the current `PORTx` level.
 2. Each pending registered pin compares current level with `previous_high`.
-3. A high-to-low transition reports `DSPIC33AK_GPIO_EVENT_EDGE_FALLING`.
-4. A low-to-high transition reports `DSPIC33AK_GPIO_EVENT_EDGE_RISING`.
+3. A high-to-low transition reports `NORA_GPIO_EVENT_EDGE_FALLING`.
+4. A low-to-high transition reports `NORA_GPIO_EVENT_EDGE_RISING`.
 5. The saved `previous_high` level is updated before the callback runs.
 
 For the board's active-low SW3 on RB2:
@@ -121,7 +121,7 @@ callback stays small and does not directly touch LED outputs.
 
 ## What Attach Does Not Do
 
-`dspic33ak_gpio_event_attach()` does not modify:
+`nora_gpio_event_attach()` does not modify:
 
 - ANSEL
 - TRIS
@@ -132,10 +132,10 @@ callback stays small and does not directly touch LED outputs.
 
 The integration layer must configure the pin as a digital input before attaching
 an event. In the current LED/SW board component, `led_sw_init()` calls
-`dspic33ak_gpio_rp_config()` with a config struct (`dir=INPUT`, `pull=UP`,
+`nora_gpio_rp_config()` with a config struct (`dir=INPUT`, `pull=UP`,
 `analog=false`) for SW1, SW2, and SW3 in a single glitch-aware call before
 attaching the SW3 event. Interrupt priority and enable are a separate explicit
-step through `dspic33ak_gpio_event_rp_irq_enable()`.
+step through `nora_gpio_event_rp_irq_enable()`.
 
 ## Starter Validation Behavior
 

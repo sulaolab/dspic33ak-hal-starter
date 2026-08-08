@@ -46,7 +46,7 @@ the GPT review fixes:
   "USB Serial Device" (**COM34** on this host). `[NEG]` output appears on both.
 - The self-test is board-independent (pure API-contract), needs no external signals.
 
-## 4. Run A — single-leg (`NEG=1`, `DSPIC33AK_TDM_USE_SPI2=0`, `SMOKE=1`)
+## 4. Run A — single-leg (`NEG=1`, `NORA_TDM_USE_SPI2=0`, `SMOKE=1`)
 
 `[NEG] ... self-test (legs=1)` → **`[NEG] pass=35 fail=0`**, `all ... PASSED`.
 
@@ -63,13 +63,13 @@ Coverage confirmed on device:
   `inst_configure in SYSTEM → CONFIG_MODE`, `stop_domain(0) SYSTEM stopped → true`,
   `stop_all_domains SYSTEM → true`, `stop_domain(31) no member → BAD_INSTANCE`,
   `stop_domain(255) ≥32 → BAD_INSTANCE`, `inst_start in SYSTEM → CONFIG_MODE`;
-- 2-leg cases correctly **logged skipped** (`needs DSPIC33AK_TDM_USE_SPI2=1`).
+- 2-leg cases correctly **logged skipped** (`needs NORA_TDM_USE_SPI2=1`).
 
 After the summary the smoke demo resumed —
 `[TDM1] SPI1 TDM8 master smoke demo started` — proving the harness left the HAL
 stopped + closed (clean).
 
-## 5. Run B — 2-leg (`NEG=1`, `DSPIC33AK_TDM_USE_SPI2=1`, `SMOKE=0`)
+## 5. Run B — 2-leg (`NEG=1`, `NORA_TDM_USE_SPI2=1`, `SMOKE=0`)
 
 `[NEG] ... self-test (legs=2)` → **`[NEG] pass=53 fail=0`**, `all ... PASSED`.
 (SMOKE must be 0 here: the smoke's fixed 1-leg system table would fail
@@ -93,7 +93,7 @@ state cannot be built through the public API); `run()` prints the note line, as 
 
 - Test toggles restored to shipping defaults in the working tree:
   `HAL_STARTER_ENABLE_TDM_NEG_TEST 0`, `HAL_STARTER_ENABLE_TDM_SMOKE_DEMO 1`,
-  `DSPIC33AK_TDM_USE_SPI2 0`. Working tree clean at `ada2adb`.
+  `NORA_TDM_USE_SPI2 0`. Working tree clean at `ada2adb`.
 - Board firmware is left as the Run B build (restore not required; the next user flashes
   their own image).
 

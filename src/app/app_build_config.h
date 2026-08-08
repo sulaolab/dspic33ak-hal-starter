@@ -19,8 +19,8 @@
  * menu, and a running build may already reference a value with -DAPP_BUILD=....
  *
  * One variation (APP_BUILD_TDM_NEG_TEST_2LEG) also needs the HAL-layer macro
- * DSPIC33AK_TDM_USE_SPI2=1. That is intentionally NOT set here: this header is
- * app-layer, and dspic33ak_spi_i2s_tdm_conf.h (the HAL's own config; see its
+ * NORA_TDM_USE_SPI2=1. That is intentionally NOT set here: this header is
+ * app-layer, and nora_spi_i2s_tdm_conf.h (the HAL's own config; see its
  * header comment) must never gain an app-layer #include -- the HAL MUST NOT
  * read app config. buildtools/build.ps1 passes that one macro on the compiler
  * command line for that preset only.
@@ -33,7 +33,7 @@
 #define APP_BUILD_TDM_FS_RUNTIME_SWITCH_TEST   (4) // Opt-in FS-pin PPS restore self-test (requires FS_50PCT)
 #define APP_BUILD_UART_ASYNC_SELFTEST          (5) // Opt-in UART1 async TX/RX self-test before the boot banner
 #define APP_BUILD_TDM_NEG_TEST_1LEG            (6) // HAL negative-validation self-test, single-leg matrix; smoke resumes after
-#define APP_BUILD_TDM_NEG_TEST_2LEG            (7) // HAL negative-validation self-test, 2-leg matrix (build.ps1 also injects DSPIC33AK_TDM_USE_SPI2=1); smoke off
+#define APP_BUILD_TDM_NEG_TEST_2LEG            (7) // HAL negative-validation self-test, 2-leg matrix (build.ps1 also injects NORA_TDM_USE_SPI2=1); smoke off
 #define APP_BUILD_CAN_BUS_TEST_ORIGINATOR      (8) // Two-board CAN FD bus test; this board is the ORIGINATOR (id 0x0A0)
 #define APP_BUILD_CAN_BUS_TEST_ECHO            (9) // Two-board CAN FD bus test; this board is the ECHO (id 0x0B0)
 
@@ -103,7 +103,7 @@
   #define CAN_BUS_TEST_ECHO                       0
 #elif (APP_BUILD == APP_BUILD_TDM_NEG_TEST_2LEG)
   #define APP_BUILD_NAME    "APP_BUILD_TDM_NEG_TEST_2LEG"
-  #define APP_BUILD_DETAIL  "HAL negative-validation self-test, 2-leg matrix (needs DSPIC33AK_TDM_USE_SPI2=1); smoke off"
+  #define APP_BUILD_DETAIL  "HAL negative-validation self-test, 2-leg matrix (needs NORA_TDM_USE_SPI2=1); smoke off"
   #define HAL_STARTER_ENABLE_TDM_SMOKE_DEMO       0
   #define APP_TDM_MASTER_FS50_BY_CLC10            1
   #define APP_TDM_FS_RUNTIME_SWITCH_TEST          0

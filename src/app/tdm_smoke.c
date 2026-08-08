@@ -27,9 +27,9 @@
 #include <math.h>
 
 #include "starter_clock.h"                 // STARTER_CLOCK_SYS_HZ (SPI1 baud clock src)
-#include "dspic33ak_dma.h"                 // dspic33ak_dma_global_init()
-#include "dspic33ak_spi_i2s_tdm.h"         // transport HAL public API
-#include "dspic33ak_spi_i2s_tdm_conf.h"    // DSPIC33AK_TDM_SLOTS_PER_FS / _BLOCK_FRAMES
+#include "nora_dma.h"                 // nora_dma_global_init()
+#include "nora_spi_i2s_tdm.h"         // transport HAL public API
+#include "nora_spi_i2s_tdm_conf.h"    // NORA_TDM_SLOTS_PER_FS / _BLOCK_FRAMES
 #include "board.h"                         // board_spi1_tdm_smoke_pins_init()
 #if (APP_TDM_MASTER_FS50_BY_CLC10 && APP_TDM_FS_RUNTIME_SWITCH_TEST)
 #include <xc.h>                            // RPOR17bits.RP70R readback for the FS-pin restore self-test
@@ -50,12 +50,12 @@
 // surprise. The arithmetic is done in uint64_t so the intermediate slots*32*fs cannot overflow.
 #define TDM_SMOKE_SPI_BRG \
     ((uint32_t)(((uint64_t)STARTER_CLOCK_SYS_HZ / \
-                 (2ull * (uint64_t)DSPIC33AK_TDM_SLOTS_PER_FS * 32ull * (uint64_t)TDM_SMOKE_TARGET_FS_HZ)) - 1ull))
+                 (2ull * (uint64_t)NORA_TDM_SLOTS_PER_FS * 32ull * (uint64_t)TDM_SMOKE_TARGET_FS_HZ)) - 1ull))
 // Build-fail (not just comment) if the requested BCLK exceeds the available SPI clock: the divisor
 // would be < 1 and the "- 1" underflow to a huge BRG. All operands are compile-time constants.
 _Static_assert(
     (uint64_t)STARTER_CLOCK_SYS_HZ >=
-        (2ull * (uint64_t)DSPIC33AK_TDM_SLOTS_PER_FS * 32ull * (uint64_t)TDM_SMOKE_TARGET_FS_HZ),
+        (2ull * (uint64_t)NORA_TDM_SLOTS_PER_FS * 32ull * (uint64_t)TDM_SMOKE_TARGET_FS_HZ),
     "TDM_SMOKE: requested BCLK (slots*32*fs) exceeds the SPI clock; SPI_BRG would underflow -- "
     "lower TDM_SMOKE_TARGET_FS_HZ or the slot count." );
 // Expected (design) BCLK and frame rate from the resolved BRG/geometry -- printed in the
@@ -63,7 +63,7 @@ _Static_assert(
 #define TDM_SMOKE_EXP_BCLK_HZ \
     (STARTER_CLOCK_SYS_HZ / (2u * (TDM_SMOKE_SPI_BRG + 1u)))
 #define TDM_SMOKE_EXP_FS_HZ \
-    (TDM_SMOKE_EXP_BCLK_HZ / ((uint32_t)DSPIC33AK_TDM_SLOTS_PER_FS * 32u))
+    (TDM_SMOKE_EXP_BCLK_HZ / ((uint32_t)NORA_TDM_SLOTS_PER_FS * 32u))
 
 // Sine lookup table: power-of-two length so the per-frame index step is a cheap mask.
 // 64 samples/cycle at fs ~48.8 kHz -> ~763 Hz (an "~800 Hz class" tone).
@@ -79,7 +79,7 @@ static int32_t  s_sine_lut[TDM_SMOKE_LUT_N];
 static float    s_tx_ref_meansq;            // mean-square of (lut>>16), the 0 dB reference
 static bool     s_started;
 static bool     s_paused_for_update;
-static dspic33ak_spi_i2s_tdm_error_t s_init_error = DSPIC33AK_SPI_I2S_TDM_ERR_NONE;
+static nora_spi_i2s_tdm_error_t s_init_error = NORA_SPI_I2S_TDM_ERR_NONE;
 
 // Published by the block callback (debug aid). Read non-atomically from the main loop: on this
 // 16-bit core a 64-bit read may TEAR against the ISR's update, so a single status line's dB can
@@ -94,8 +94,8 @@ static volatile uint32_t s_rx_count;        // last block: sample count
 static void tdm_smoke_block_cb(const int32_t *src, int32_t *dst, void *user)
 {
     (void)user;
-    const uint32_t slots  = (uint32_t)DSPIC33AK_TDM_SLOTS_PER_FS;
-    const uint32_t frames = (uint32_t)DSPIC33AK_TDM_BLOCK_FRAMES;
+    const uint32_t slots  = (uint32_t)NORA_TDM_SLOTS_PER_FS;
+    const uint32_t frames = (uint32_t)NORA_TDM_BLOCK_FRAMES;
     uint32_t       phase  = s_phase;
     uint64_t       sumsq  = 0u;
     uint32_t       w      = 0u;
@@ -122,18 +122,18 @@ static void tdm_smoke_block_cb(const int32_t *src, int32_t *dst, void *user)
 //===========================================================
 // Board/clock port: pins only (master-only demo). No external clock / CLC.
 //===========================================================
-static bool tdm_smoke_configure_pins(dspic33ak_spi_i2s_tdm_clock_role_t role)
+static bool tdm_smoke_configure_pins(nora_spi_i2s_tdm_clock_role_t role)
 {
     // This demo is master-only; reject any other role rather than silently mis-routing.
     // open() passes the committed primary leg's role here (MASTER for this smoke).
-    if (role != DSPIC33AK_SPI_I2S_TDM_CLOCK_MASTER)
+    if (role != NORA_SPI_I2S_TDM_CLOCK_MASTER)
     {
         return false;
     }
     return board_spi1_tdm_smoke_pins_init();
 }
 
-static const dspic33ak_spi_i2s_tdm_port_t s_tdm_smoke_port =
+static const nora_spi_i2s_tdm_port_t s_tdm_smoke_port =
 {
     .configure_pins      = tdm_smoke_configure_pins,
     .clc_passthrough     = NULL,    // no codec MCLK fan-out
@@ -161,11 +161,11 @@ static void tdm_smoke_build_sine(void)
 
 bool tdm_smoke_init(void)
 {
-    dspic33ak_spi_i2s_tdm_inst_t *inst;
+    nora_spi_i2s_tdm_inst_t *inst;
 
     s_started    = false;
     s_paused_for_update = false;
-    s_init_error = DSPIC33AK_SPI_I2S_TDM_ERR_NONE;
+    s_init_error = NORA_SPI_I2S_TDM_ERR_NONE;
     s_phase      = 0u;
     s_rx_sumsq   = 0u;
     s_rx_count   = 0u;
@@ -175,23 +175,23 @@ bool tdm_smoke_init(void)
     // Board/clock port (pin routing reached via the hook -- the HAL core stays board-free).
     // set_port() is a fail-closed bool API (rejects while opened/running); honour it rather than
     // continuing with an unbound port.
-    if (!dspic33ak_spi_i2s_tdm_set_port(&s_tdm_smoke_port))
+    if (!nora_spi_i2s_tdm_set_port(&s_tdm_smoke_port))
     {
-        s_init_error = dspic33ak_spi_i2s_tdm_get_last_error();
+        s_init_error = nora_spi_i2s_tdm_get_last_error();
         return false;
     }
 
-    inst = dspic33ak_spi_i2s_tdm_spi1();
+    inst = nora_spi_i2s_tdm_spi1();
     if (inst == NULL)
     {
-        s_init_error = dspic33ak_spi_i2s_tdm_get_last_error();
+        s_init_error = nora_spi_i2s_tdm_get_last_error();
         return false;
     }
 
     // Callback must be registered before start().
-    if (!dspic33ak_spi_i2s_tdm_set_block_callback(inst, tdm_smoke_block_cb, NULL))
+    if (!nora_spi_i2s_tdm_set_block_callback(inst, tdm_smoke_block_cb, NULL))
     {
-        s_init_error = dspic33ak_spi_i2s_tdm_get_last_error();
+        s_init_error = nora_spi_i2s_tdm_get_last_error();
         return false;
     }
 
@@ -200,23 +200,23 @@ bool tdm_smoke_init(void)
     // start_all_domains(). Geometry comes from the same conf.h constants that sized the HAL's
     // static DMA buffers; BRG sets the master BCLK from the system clock. Every stream field
     // is stated explicitly (no default builder + override).
-    static const dspic33ak_spi_i2s_tdm_leg_setup_t s_tdm_system[] =
+    static const nora_spi_i2s_tdm_leg_setup_t s_tdm_system[] =
     {
         {
             .stream =
             {
-                .format                        = DSPIC33AK_SPI_I2S_TDM_FORMAT_TDM,
-                .clock_role                    = DSPIC33AK_SPI_I2S_TDM_CLOCK_MASTER,
-                .slots_per_fs                  = (uint8_t)DSPIC33AK_TDM_SLOTS_PER_FS,
+                .format                        = NORA_SPI_I2S_TDM_FORMAT_TDM,
+                .clock_role                    = NORA_SPI_I2S_TDM_CLOCK_MASTER,
+                .slots_per_fs                  = (uint8_t)NORA_TDM_SLOTS_PER_FS,
                 .word_bits                     = 32u,
 #if APP_TDM_MASTER_FS50_BY_CLC10
                 // 50%-duty FS: for this TDM8 master the HAL emits a half-frame marker and
                 // engages CLC10 to toggle it into a ~50%-duty FS on the FS pin (HAL-internal).
-                .fs_shape                      = DSPIC33AK_SPI_I2S_TDM_FS_50PCT,
+                .fs_shape                      = NORA_SPI_I2S_TDM_FS_50PCT,
 #else
-                .fs_shape                      = DSPIC33AK_SPI_I2S_TDM_FS_PULSE,  // short 1-BCLK frame sync
+                .fs_shape                      = NORA_SPI_I2S_TDM_FS_PULSE,  // short 1-BCLK frame sync
 #endif
-                .block_frames                  = (uint16_t)DSPIC33AK_TDM_BLOCK_FRAMES,
+                .block_frames                  = (uint16_t)NORA_TDM_BLOCK_FRAMES,
                 .brg                           = TDM_SMOKE_SPI_BRG,
                 .mclk_enable                   = true,    // MCLKEN=1 (CLKGEN9 reference)
                 .fs_coincides_first_bclk       = true,    // SPIFE=1 : no 1-bit delay (TDM8)
@@ -229,32 +229,32 @@ bool tdm_smoke_init(void)
 
     // The DMA HAL must be globally initialized before any channel config / start (start
     // arms the SPI1 RX/TX DMA). Only the TDM demo uses DMA on this board.
-    dspic33ak_dma_global_init();
+    nora_dma_global_init();
 
     // Transactional whole-system configure (one leg here). open() takes NO role -- it derives
     // the master role from this committed primary leg and passes it to the pin hook.
-    if (!dspic33ak_spi_i2s_tdm_configure_system(
+    if (!nora_spi_i2s_tdm_configure_system(
             s_tdm_system, (uint8_t)(sizeof(s_tdm_system) / sizeof(s_tdm_system[0]))))
     {
-        s_init_error = dspic33ak_spi_i2s_tdm_get_last_error();
+        s_init_error = nora_spi_i2s_tdm_get_last_error();
         return false;
     }
-    if (!dspic33ak_spi_i2s_tdm_open())
+    if (!nora_spi_i2s_tdm_open())
     {
-        s_init_error = dspic33ak_spi_i2s_tdm_get_last_error();
+        s_init_error = nora_spi_i2s_tdm_get_last_error();
         return false;
     }
     // Start the sync domain: arms DMA + enables SPI1; the stream runs autonomously on DMA/ISR.
     // (For FS_50PCT the HAL engages CLC10 internally just before the module turns on.)
-    if (!dspic33ak_spi_i2s_tdm_start_all_domains())
+    if (!nora_spi_i2s_tdm_start_all_domains())
     {
         // Fail closed: the HAL rolls back the domains it started, but open() left the shared port
         // opened. Since close() now preserves the config mode and rejects while running (neither
         // applies here -- nothing is running), close() to release the open state; otherwise the
         // next tdm_smoke_init() would get ERR_ALREADY_OPEN from set_port()/configure_system().
         // Save the real error first (close() overwrites last-error on success).
-        const dspic33ak_spi_i2s_tdm_error_t err = dspic33ak_spi_i2s_tdm_get_last_error();
-        (void)dspic33ak_spi_i2s_tdm_close();
+        const nora_spi_i2s_tdm_error_t err = nora_spi_i2s_tdm_get_last_error();
+        (void)nora_spi_i2s_tdm_close();
         s_init_error = err;
         return false;
     }
@@ -278,23 +278,23 @@ bool tdm_smoke_init(void)
     printf(" [FS-SW] RP70R after FS_50PCT start = %u (expect 78=CLC10OUT)\n", (unsigned)RPOR17bits.RP70R);
     // stop_all_domains() is now a bool SYSTEM-mode API; this smoke is SYSTEM (configure_system),
     // so it returns true. Honour it: a failed stop is a failed self-test (fail closed).
-    if (!dspic33ak_spi_i2s_tdm_stop_all_domains())
+    if (!nora_spi_i2s_tdm_stop_all_domains())
     {
-        const dspic33ak_spi_i2s_tdm_error_t err = dspic33ak_spi_i2s_tdm_get_last_error();
-        (void)dspic33ak_spi_i2s_tdm_close();
+        const nora_spi_i2s_tdm_error_t err = nora_spi_i2s_tdm_get_last_error();
+        (void)nora_spi_i2s_tdm_close();
         s_init_error = err;
         s_started    = false;
         printf(" [FS-SW] stop FAILED: %s\n", tdm_smoke_last_error_str());
         return false;
     }
     printf(" [FS-SW] RP70R after stop(release)  = %u (expect 27=SS1 restored)\n", (unsigned)RPOR17bits.RP70R);
-    if (!dspic33ak_spi_i2s_tdm_start_all_domains())
+    if (!nora_spi_i2s_tdm_start_all_domains())
     {
         // Fail closed: a failed restart is NOT a successful init. Release the still-open port
         // (close() preserves config mode; nothing is running after a failed start) so a re-init
         // is not blocked by ERR_ALREADY_OPEN. Preserve the real error across close().
-        const dspic33ak_spi_i2s_tdm_error_t err = dspic33ak_spi_i2s_tdm_get_last_error();
-        (void)dspic33ak_spi_i2s_tdm_close();
+        const nora_spi_i2s_tdm_error_t err = nora_spi_i2s_tdm_get_last_error();
+        (void)nora_spi_i2s_tdm_close();
         s_init_error = err;
         s_started    = false;
         printf(" [FS-SW] re-start FAILED: %s\n", tdm_smoke_last_error_str());
@@ -312,14 +312,14 @@ bool tdm_smoke_pause_for_update(void)
     {
         return true;
     }
-    if (!dspic33ak_spi_i2s_tdm_stop_all_domains())
+    if (!nora_spi_i2s_tdm_stop_all_domains())
     {
-        s_init_error = dspic33ak_spi_i2s_tdm_get_last_error();
+        s_init_error = nora_spi_i2s_tdm_get_last_error();
         return false;
     }
     s_started = false;
     s_paused_for_update = true;
-    s_init_error = DSPIC33AK_SPI_I2S_TDM_ERR_NONE;
+    s_init_error = NORA_SPI_I2S_TDM_ERR_NONE;
     return true;
 }
 
@@ -329,14 +329,14 @@ bool tdm_smoke_resume_after_update_failure(void)
     {
         return true;
     }
-    if (!dspic33ak_spi_i2s_tdm_start_all_domains())
+    if (!nora_spi_i2s_tdm_start_all_domains())
     {
-        s_init_error = dspic33ak_spi_i2s_tdm_get_last_error();
+        s_init_error = nora_spi_i2s_tdm_get_last_error();
         return false;
     }
     s_started = true;
     s_paused_for_update = false;
-    s_init_error = DSPIC33AK_SPI_I2S_TDM_ERR_NONE;
+    s_init_error = NORA_SPI_I2S_TDM_ERR_NONE;
     return true;
 }
 
@@ -345,8 +345,8 @@ bool tdm_smoke_resume_after_update_failure(void)
 //===========================================================
 void tdm_smoke_status_print(void)
 {
-    dspic33ak_spi_i2s_tdm_inst_t  *inst;
-    dspic33ak_spi_i2s_tdm_status_t st;
+    nora_spi_i2s_tdm_inst_t  *inst;
+    nora_spi_i2s_tdm_status_t st;
     uint64_t sumsq;
     uint32_t cnt;
     float    rx_db = TDM_SMOKE_RX_FLOOR_DB;
@@ -358,9 +358,9 @@ void tdm_smoke_status_print(void)
         return;
     }
 
-    inst = dspic33ak_spi_i2s_tdm_spi1();
+    inst = nora_spi_i2s_tdm_spi1();
     if ((inst == NULL) ||
-        !dspic33ak_spi_i2s_tdm_inst_get_status(inst, &st, false))
+        !nora_spi_i2s_tdm_inst_get_status(inst, &st, false))
     {
         return;
     }
@@ -390,7 +390,7 @@ void tdm_smoke_status_print(void)
     sign = ((db10 < 0) && (whole == 0)) ? "-" : "";   // preserve sign for -0.x
 
     printf(" [TDM1] TDM%lu master exp_fs~%lukHz exp_bclk~%lukHz block=%lu miss=%lu rx=%s%ld.%ld dB rel\n",
-           (unsigned long)DSPIC33AK_TDM_SLOTS_PER_FS,
+           (unsigned long)NORA_TDM_SLOTS_PER_FS,
            (unsigned long)(TDM_SMOKE_EXP_FS_HZ / 1000u),
            (unsigned long)(TDM_SMOKE_EXP_BCLK_HZ / 1000u),
            (unsigned long)st.block_count,
@@ -402,21 +402,21 @@ const char *tdm_smoke_last_error_str(void)
 {
     switch (s_init_error)
     {
-        case DSPIC33AK_SPI_I2S_TDM_ERR_NONE:               return "none";
-        case DSPIC33AK_SPI_I2S_TDM_ERR_BAD_INSTANCE:       return "bad-instance";
-        case DSPIC33AK_SPI_I2S_TDM_ERR_BAD_ARGUMENT:       return "bad-argument";
-        case DSPIC33AK_SPI_I2S_TDM_ERR_NOT_CONFIGURED:     return "not-configured";
-        case DSPIC33AK_SPI_I2S_TDM_ERR_ALREADY_RUNNING:    return "already-running";
-        case DSPIC33AK_SPI_I2S_TDM_ERR_UNSUPPORTED_CONFIG: return "unsupported-config";
-        case DSPIC33AK_SPI_I2S_TDM_ERR_TOPOLOGY:           return "topology";
-        case DSPIC33AK_SPI_I2S_TDM_ERR_CLOCK_INIT:         return "clock-init";
-        case DSPIC33AK_SPI_I2S_TDM_ERR_CLOCK_NOT_READY:    return "clock-not-ready";
-        case DSPIC33AK_SPI_I2S_TDM_ERR_PIN_CONFIG:         return "pin-config";
-        case DSPIC33AK_SPI_I2S_TDM_ERR_CLC:                return "clc";
-        case DSPIC33AK_SPI_I2S_TDM_ERR_DMA_CONFIG:         return "dma-config";
-        case DSPIC33AK_SPI_I2S_TDM_ERR_NOT_OPEN:           return "not-open";
-        case DSPIC33AK_SPI_I2S_TDM_ERR_ALREADY_OPEN:       return "already-open";
-        case DSPIC33AK_SPI_I2S_TDM_ERR_CONFIG_MODE:        return "config-mode";
+        case NORA_SPI_I2S_TDM_ERR_NONE:               return "none";
+        case NORA_SPI_I2S_TDM_ERR_BAD_INSTANCE:       return "bad-instance";
+        case NORA_SPI_I2S_TDM_ERR_BAD_ARGUMENT:       return "bad-argument";
+        case NORA_SPI_I2S_TDM_ERR_NOT_CONFIGURED:     return "not-configured";
+        case NORA_SPI_I2S_TDM_ERR_ALREADY_RUNNING:    return "already-running";
+        case NORA_SPI_I2S_TDM_ERR_UNSUPPORTED_CONFIG: return "unsupported-config";
+        case NORA_SPI_I2S_TDM_ERR_TOPOLOGY:           return "topology";
+        case NORA_SPI_I2S_TDM_ERR_CLOCK_INIT:         return "clock-init";
+        case NORA_SPI_I2S_TDM_ERR_CLOCK_NOT_READY:    return "clock-not-ready";
+        case NORA_SPI_I2S_TDM_ERR_PIN_CONFIG:         return "pin-config";
+        case NORA_SPI_I2S_TDM_ERR_CLC:                return "clc";
+        case NORA_SPI_I2S_TDM_ERR_DMA_CONFIG:         return "dma-config";
+        case NORA_SPI_I2S_TDM_ERR_NOT_OPEN:           return "not-open";
+        case NORA_SPI_I2S_TDM_ERR_ALREADY_OPEN:       return "already-open";
+        case NORA_SPI_I2S_TDM_ERR_CONFIG_MODE:        return "config-mode";
         default:                                           return "unknown";
     }
 }

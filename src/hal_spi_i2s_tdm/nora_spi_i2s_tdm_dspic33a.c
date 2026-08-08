@@ -2,23 +2,26 @@
 //===========================================================
 // INCLUDES
 //===========================================================
-#include "dspic33ak_spi_i2s_tdm_conf.h"
+#include "nora_spi_i2s_tdm_conf.h"
 
 #include <xc.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
 // The silicon layer (SPIxCON1/BRG register writer, the s_spi_dev[] device-facts table,
-// per-SPI DMA-channel config) lives in dspic33ak_spi_i2s_tdm_hw.*, and the block
-// counters + ISR load/time monitor in dspic33ak_spi_i2s_tdm_diag.*. So the transport
+// per-SPI DMA-channel config) lives in nora_spi_i2s_tdm_dspic33a_hw.*, and the block
+// counters + ISR load/time monitor in nora_spi_i2s_tdm_dspic33a_diag.*. So the transport
 // core no longer pulls the SPI register masks (reg.h), high-res timer, debug GPIO, or
 // <stdio.h> -- it orchestrates instances and runs the block ISR, delegating register
 // pokes to hw.* and diagnostics to diag.*.
-#include "dspic33ak_dma.h"
-#include "dspic33ak_spi_i2s_tdm.h"
-#include "dspic33ak_spi_i2s_tdm_hw.h"      // silicon layer: tdm_spi_inst_t + register/DMA ops
-#include "dspic33ak_spi_i2s_tdm_fs_clc.h"  // CLC10 50%-FS generator (TDM master + FS_50PCT)
-#include "dspic33ak_spi_i2s_tdm_diag.h"    // block counters + ISR load/time monitor (separated)
+#include "nora_dma.h"
+#include "nora_dma_dspic33a_fast.h"  // dsPIC33A ISR/source-read fast path
+#include "nora_spi_i2s_tdm.h"
+#include "nora_spi_i2s_tdm_dspic33a_hw.h"      // silicon layer: tdm_spi_inst_t + register/DMA ops
+#include "nora_spi_i2s_tdm_dspic33a_fs_clc.h"  // CLC10 50%-FS generator (TDM master + FS_50PCT)
+#include "nora_spi_i2s_tdm_diag.h"               // public counters and load snapshots
+#include "nora_spi_i2s_tdm_dspic33a_diag_fast.h" // dsPIC33A TDMsum ISR fast path
+#include "nora_high_res_timer.h"      // free-running counter: TDMsum 'now' samples for configure/reset
 
 
 
@@ -26,23 +29,23 @@
 //===========================================================
 // Definition
 //===========================================================
-// Unknown-device guard is centralized in dspic33ak_spi_i2s_tdm.h: the
-// DSPIC33AK_SPI_I2S_TDM_DEVICE derivation #error's on any unsupported device.
+// Unknown-device guard is centralized in nora_spi_i2s_tdm_dspic33a_hw.h: the
+// NORA_SPI_I2S_TDM_DSPIC33A_DEVICE derivation #error's on any unsupported device.
 
 
 // DMA global address-window values are owned by the DMA HAL
-// (DSPIC33AK_DMA_ADDR_WINDOW_LOW / _HIGH in dspic33ak_dma.h), set by
-// dspic33ak_dma_global_init(). SPI-TDM keeps only per-channel cfg values.
+// (NORA_DMA_ADDR_WINDOW_LOW / _HIGH in nora_dma.h), set by
+// nora_dma_global_init(). SPI-TDM keeps only per-channel cfg values.
 
 
 
 
 // Debug switches live with their code now: the DMA-config-error printf in the silicon
-// layer (dspic33ak_spi_i2s_tdm_hw.c) and the scope-GPIO/load monitor in the diagnostics
-// module (dspic33ak_spi_i2s_tdm_diag.c) each carry their own ENA_TDM_DBG. The transport
+// layer (nora_spi_i2s_tdm_dspic33a_hw.c) and the scope-GPIO/load monitor in the diagnostics
+// module (nora_spi_i2s_tdm_dspic33a_diag.c) each carry their own ENA_TDM_DBG. The transport
 // core compiles with no printf/GPIO dependency.
 
-// Per-instance DMA channel assignment comes from conf.h (DSPIC33AK_TDM_SPIn_*_DMA);
+// Per-instance DMA channel assignment comes from conf.h (NORA_TDM_SPIn_*_DMA);
 // the core no longer hardcodes DMA channel index constants.
 
 #define TDM_ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
@@ -64,24 +67,24 @@
 //===========================================================
 
 // tdm_spi_inst_t (physical SPI instances) + the silicon device-facts table live in the
-// silicon layer (dspic33ak_spi_i2s_tdm_hw.*). The transport core indexes its own leg
+// silicon layer (nora_spi_i2s_tdm_hw.*). The transport core indexes its own leg
 // table with the leg-index enum below and stores the physical SPI in each leg's spi_inst.
 //
 // Explicit dense leg-index enum: one TDM_SPI_LEG_<name> per descriptor row, in table order,
 // terminated by TDM_SPI_LEG_COUNT (= the built-in leg count). Used only inside the core
 // (leg table / inst()), so it lives here rather than in a shared header. The SPI1/SPI2 row
-// names are legacy logical labels; DSPIC33AK_TDM_BASE_ON_SPI34 maps those same rows to
+// names are legacy logical labels; NORA_TDM_BASE_ON_SPI34 maps those same rows to
 // physical SPI3/SPI4. Public spiN() accessors search the stored physical spi_inst instead.
 // Adding a leg = add an enumerator here + its buffers, s_spi_legs[] row, and RX vector below.
 typedef enum {
     TDM_SPI_LEG_SPI1 = 0,
-#if DSPIC33AK_TDM_USE_SPI2
+#if NORA_TDM_USE_SPI2
     TDM_SPI_LEG_SPI2,
 #endif
-#if DSPIC33AK_TDM_USE_SPI3
+#if NORA_TDM_USE_SPI3
     TDM_SPI_LEG_SPI3,
 #endif
-#if DSPIC33AK_TDM_USE_SPI4
+#if NORA_TDM_USE_SPI4
     TDM_SPI_LEG_SPI4,
 #endif
     TDM_SPI_LEG_COUNT
@@ -93,11 +96,11 @@ typedef enum {
 // (master/slave) is a separate per-leg concern in config.clock_role.
 
 // Private SPI leg descriptor == the public opaque instance handle
-// (dspic33ak_spi_i2s_tdm_inst_t). One physical SPI leg per row owns the SPI
+// (nora_spi_i2s_tdm_inst_t). One physical SPI leg per row owns the SPI
 // peripheral, RX/TX DMA channels, ping-pong buffers, its own block callback, and
 // its own diagnostics. Each instance's RX-block ISR delivers ONLY this instance's
 // RX/TX block to this instance's callback.
-struct dspic33ak_spi_i2s_tdm_inst_s {
+struct nora_spi_i2s_tdm_inst_s {
     tdm_spi_inst_t spi_inst;
     uint8_t        rx_dma_ch;
     uint8_t        tx_dma_ch;
@@ -112,14 +115,14 @@ struct dspic33ak_spi_i2s_tdm_inst_s {
     // Orthogonal to config.clock_role (the clock driver). Which leg the arg-less singleton
     // status API reports is the stream's primary_leg_index (tdm_stream_t), not a per-leg flag.
     uint8_t        sync_domain;
-    dspic33ak_spi_i2s_tdm_config_t config;         // includes this leg's OWN clock role
+    nora_spi_i2s_tdm_config_t config;         // includes this leg's OWN clock role
     bool           config_valid;
-    dspic33ak_spi_i2s_tdm_block_cb_t block_cb;     // this instance's block callback
+    nora_spi_i2s_tdm_block_cb_t block_cb;     // this instance's block callback
     void                            *block_user;   // opaque user pointer for block_cb
-    dspic33ak_spi_i2s_tdm_diag_t     diag;         // this instance's counters + ISR load monitor
+    nora_spi_i2s_tdm_diag_t     diag;         // this instance's counters + ISR load monitor
     volatile bool                    running;      // this instance started (inst_start..inst_stop)
 };
-typedef struct dspic33ak_spi_i2s_tdm_inst_s tdm_spi_leg_t;
+typedef struct nora_spi_i2s_tdm_inst_s tdm_spi_leg_t;
 
 typedef struct
 {
@@ -134,7 +137,7 @@ typedef struct
     // gated on this so a caller cannot enter SPIEN with the port unrouted / readiness
     // unchecked (a silent dead stream). Set by open(), cleared by close().
     bool                                opened;
-    const dspic33ak_spi_i2s_tdm_port_t *port;
+    const nora_spi_i2s_tdm_port_t *port;
 
     // Block callback, diagnostics, and the running flag are now owned PER INSTANCE
     // (in tdm_spi_leg_t), not by the stream, so SPI1 and SPI2 each deliver their own
@@ -148,11 +151,11 @@ typedef struct
 
 // pin routing + CLC pass-through live on the board adapter and are reached
 // through the registered port callbacks, NOT called by name -- the core no
-// longer includes audio_app_board.h.
+// longer includes the Sonora board/audio adapter header.
 
 // Silicon-layer SPI register/DMA ops (tdm_spi_apply_config, *_dma_trigger_enable,
 // *_module_enable, *_irq_*, *_soft_stop, *_dma_config) now live in the hw module and
-// are reached as dspic33ak_spi_i2s_tdm_hw_*() taking a tdm_spi_inst_t + raw fields.
+// are reached as nora_spi_i2s_tdm_hw_*() taking a tdm_spi_inst_t + raw fields.
 
 // Per-instance teardown/clear helpers (one physical SPI's own DMA buffers/channels).
 static void        tdm_inst_clear_buffers( const tdm_spi_leg_t *leg );
@@ -163,7 +166,7 @@ static bool        tdm_spi_leg_is_valid( const tdm_spi_leg_t *leg );
 static bool        tdm_stream_topology_is_valid( const tdm_stream_t *stream );
 static const tdm_spi_leg_t *tdm_stream_primary_leg( const tdm_stream_t *stream );
 static bool        tdm_spi_leg_get_effective_config( const tdm_spi_leg_t *leg,
-                                                     dspic33ak_spi_i2s_tdm_config_t *effective_cfg );
+                                                     nora_spi_i2s_tdm_config_t *effective_cfg );
 
 // Config-mode + lifecycle helpers (definitions below). tdm_inst_stop_impl is the
 // mode-agnostic per-leg teardown that both the public inst_stop() gate and the SYSTEM
@@ -176,16 +179,30 @@ static bool        tdm_any_leg_running( void );
 static bool        tdm_inst_is_primary( const tdm_spi_leg_t *inst );
 // tdm_set_error() is defined further down (static inline); forward-declare it because the
 // lifecycle setters above its definition (set_port/close) now record an error code.
-static inline void tdm_set_error( dspic33ak_spi_i2s_tdm_error_t err );
+static inline void tdm_set_error( nora_spi_i2s_tdm_error_t err );
 
 // RX-DMA IE bracket, config-envelope validation, and the per-instance RX-block ISR
 // body. Definitions live in the Local Function section; forward-declared here so the
 // global readers (get_load/get_status) and the ISR wrappers above their definitions
 // resolve them. tdm_rx_ie_*/tdm_rx_block are static inline (folded in the hot path).
+//
+// always_inline on tdm_rx_block is load-bearing, not decoration. `static inline` is only
+// a request: this function sits just under XC-DSC's inline-cost threshold, and the nora_
+// rename pushed it over -- the compiler then emitted ONE shared out-of-line body and turned
+// every RX vector into a 6-instruction thunk that calls it. Measured against main at the
+// same configuration and preset: __DMA0Interrupt/__DMA2Interrupt 637 -> 6 instructions with
+// a shared 859-instruction _tdm_rx_block. That silently retracts the guarantee the vector
+// comments below rely on (literal channel numbers and half size folding into the register
+// access, no runtime channel->leg lookup) and adds call overhead to an ISR that already
+// runs at 76.6% at 48k and 90.0% at 8k. The attribute costs ~1.1 KB of flash to duplicate
+// the body per vector; that is the price of the folding, and it is worth paying here.
+// tools/asrc/hotpath_invariance.py is what catches a regression of this shape -- run it
+// against a main-side baseline, not against a checked-in one.
 static inline bool tdm_rx_ie_disable( uint8_t rx_dma_ch );
 static inline void tdm_rx_ie_restore( uint8_t rx_dma_ch, bool was_enabled );
-static bool        tdm_config_is_supported( const tdm_spi_leg_t* leg, const dspic33ak_spi_i2s_tdm_config_t* cfg );
-static inline void tdm_rx_block( tdm_spi_leg_t* inst, uint8_t rx_ch, uint8_t tx_ch, uint32_t half_pos );
+static bool        tdm_config_is_supported( const tdm_spi_leg_t* leg, const nora_spi_i2s_tdm_config_t* cfg );
+static inline __attribute__((always_inline)) void tdm_rx_block(
+    tdm_spi_leg_t* inst, uint8_t rx_ch, uint8_t tx_ch, uint32_t half_pos );
 
 
 
@@ -213,29 +230,32 @@ static inline void  tdm_get_dest_ptr( uint32_t dma_tx_addr, int32_t* const pTxDa
 
 // Explicit per-leg RX/TX ping-pong buffers. Each is 2*slots*blk words (Ping+Pong). The macro takes
 // per-leg slots/blk so a future build COULD give a leg its own geometry, but this build sizes every
-// leg from the single global DSPIC33AK_TDM_SLOTS_PER_FS / _BLOCK_FRAMES. The names follow the leg
+// leg from the single global NORA_TDM_SLOTS_PER_FS / _BLOCK_FRAMES. The names follow the leg
 // names so the leg table can wire them; same geometry macros as the leg table + ISR so the three
 // stay consistent.
 // Keep each complete ping-pong array on its own-size boundary. Besides making the DMA base
 // deterministic as unrelated BSS grows, this prevents one transfer array from straddling a
 // data-RAM bank boundary (observed when the bidirectional ASRC state grew from 8ch to 16ch).
 #define TDM_DMA_BUFFER_BYTES \
-    (2u * TDM_LEG_HALF_WORDS(DSPIC33AK_TDM_SLOTS_PER_FS, DSPIC33AK_TDM_BLOCK_FRAMES) * sizeof(int32_t))
-#define TDM_DMA_BUFFER_ALIGN TDM_DMA_BUFFER_BYTES
-TDM_COMPILEASSERT( (TDM_DMA_BUFFER_ALIGN & (TDM_DMA_BUFFER_ALIGN - 1u)) == 0u );
-static int32_t    Tx_SPI1[ 2 * TDM_LEG_HALF_WORDS(DSPIC33AK_TDM_SLOTS_PER_FS, DSPIC33AK_TDM_BLOCK_FRAMES) ] __attribute__((aligned(TDM_DMA_BUFFER_ALIGN)));
-static int32_t    Rx_SPI1[ 2 * TDM_LEG_HALF_WORDS(DSPIC33AK_TDM_SLOTS_PER_FS, DSPIC33AK_TDM_BLOCK_FRAMES) ] __attribute__((aligned(TDM_DMA_BUFFER_ALIGN)));
-#if DSPIC33AK_TDM_USE_SPI2
-static int32_t    Tx_SPI2[ 2 * TDM_LEG_HALF_WORDS(DSPIC33AK_TDM_SLOTS_PER_FS, DSPIC33AK_TDM_BLOCK_FRAMES) ] __attribute__((aligned(TDM_DMA_BUFFER_ALIGN)));
-static int32_t    Rx_SPI2[ 2 * TDM_LEG_HALF_WORDS(DSPIC33AK_TDM_SLOTS_PER_FS, DSPIC33AK_TDM_BLOCK_FRAMES) ] __attribute__((aligned(TDM_DMA_BUFFER_ALIGN)));
+    (2u * TDM_LEG_HALF_WORDS(NORA_TDM_SLOTS_PER_FS, NORA_TDM_BLOCK_FRAMES) * sizeof(int32_t))
+#define TDM_DMA_BUFFER_ALIGN  (TDM_DMA_BUFFER_BYTES)
+/* aligned(N) requires a power of two.  Derive N from the selected app's geometry
+ * instead of embedding the ASRC TDM8 x 16-frame size (1024 bytes) in the HAL. */
+TDM_COMPILEASSERT( TDM_DMA_BUFFER_BYTES > 0u );
+TDM_COMPILEASSERT( (TDM_DMA_BUFFER_BYTES & (TDM_DMA_BUFFER_BYTES - 1u)) == 0u );
+static int32_t    Tx_SPI1[ 2 * TDM_LEG_HALF_WORDS(NORA_TDM_SLOTS_PER_FS, NORA_TDM_BLOCK_FRAMES) ] __attribute__((aligned(TDM_DMA_BUFFER_ALIGN)));
+static int32_t    Rx_SPI1[ 2 * TDM_LEG_HALF_WORDS(NORA_TDM_SLOTS_PER_FS, NORA_TDM_BLOCK_FRAMES) ] __attribute__((aligned(TDM_DMA_BUFFER_ALIGN)));
+#if NORA_TDM_USE_SPI2
+static int32_t    Tx_SPI2[ 2 * TDM_LEG_HALF_WORDS(NORA_TDM_SLOTS_PER_FS, NORA_TDM_BLOCK_FRAMES) ] __attribute__((aligned(TDM_DMA_BUFFER_ALIGN)));
+static int32_t    Rx_SPI2[ 2 * TDM_LEG_HALF_WORDS(NORA_TDM_SLOTS_PER_FS, NORA_TDM_BLOCK_FRAMES) ] __attribute__((aligned(TDM_DMA_BUFFER_ALIGN)));
 #endif
-#if DSPIC33AK_TDM_USE_SPI3
-static int32_t    Tx_SPI3[ 2 * TDM_LEG_HALF_WORDS(DSPIC33AK_TDM_SLOTS_PER_FS, DSPIC33AK_TDM_BLOCK_FRAMES) ] __attribute__((aligned(TDM_DMA_BUFFER_ALIGN)));
-static int32_t    Rx_SPI3[ 2 * TDM_LEG_HALF_WORDS(DSPIC33AK_TDM_SLOTS_PER_FS, DSPIC33AK_TDM_BLOCK_FRAMES) ] __attribute__((aligned(TDM_DMA_BUFFER_ALIGN)));
+#if NORA_TDM_USE_SPI3
+static int32_t    Tx_SPI3[ 2 * TDM_LEG_HALF_WORDS(NORA_TDM_SLOTS_PER_FS, NORA_TDM_BLOCK_FRAMES) ] __attribute__((aligned(TDM_DMA_BUFFER_ALIGN)));
+static int32_t    Rx_SPI3[ 2 * TDM_LEG_HALF_WORDS(NORA_TDM_SLOTS_PER_FS, NORA_TDM_BLOCK_FRAMES) ] __attribute__((aligned(TDM_DMA_BUFFER_ALIGN)));
 #endif
-#if DSPIC33AK_TDM_USE_SPI4
-static int32_t    Tx_SPI4[ 2 * TDM_LEG_HALF_WORDS(DSPIC33AK_TDM_SLOTS_PER_FS, DSPIC33AK_TDM_BLOCK_FRAMES) ] __attribute__((aligned(TDM_DMA_BUFFER_ALIGN)));
-static int32_t    Rx_SPI4[ 2 * TDM_LEG_HALF_WORDS(DSPIC33AK_TDM_SLOTS_PER_FS, DSPIC33AK_TDM_BLOCK_FRAMES) ] __attribute__((aligned(TDM_DMA_BUFFER_ALIGN)));
+#if NORA_TDM_USE_SPI4
+static int32_t    Tx_SPI4[ 2 * TDM_LEG_HALF_WORDS(NORA_TDM_SLOTS_PER_FS, NORA_TDM_BLOCK_FRAMES) ] __attribute__((aligned(TDM_DMA_BUFFER_ALIGN)));
+static int32_t    Rx_SPI4[ 2 * TDM_LEG_HALF_WORDS(NORA_TDM_SLOTS_PER_FS, NORA_TDM_BLOCK_FRAMES) ] __attribute__((aligned(TDM_DMA_BUFFER_ALIGN)));
 #endif
 
 // Application processing buffers are outside the HAL's ownership. The HAL core owns and clears
@@ -247,7 +267,7 @@ static int32_t    Rx_SPI4[ 2 * TDM_LEG_HALF_WORDS(DSPIC33AK_TDM_SLOTS_PER_FS, DS
 //
 // The DEVICE FACTS table (s_spi_dev[]: SPIxBUF/CON1/BRG/IMSK + DMA trigger CHSELs +
 // CPU IRQ bits, indexed by tdm_spi_inst_t) lives in the silicon layer
-// (dspic33ak_spi_i2s_tdm_hw.*). Here the transport core keeps only its DRIVER
+// (nora_spi_i2s_tdm_hw.*). Here the transport core keeps only its DRIVER
 // ALLOCATION: s_spi_legs[], one physical SPI leg per row with the SPI instance, RX/TX
 // DMA channels, owned ping-pong buffers, and current logical config. start() passes
 // each leg's spi_inst + DMA channels/buffers down to the hw_* ops.
@@ -262,82 +282,82 @@ static tdm_spi_leg_t s_spi_legs[] =
 {
     [TDM_SPI_LEG_SPI1] =
     {
-#if DSPIC33AK_TDM_BASE_ON_SPI34
+#if NORA_TDM_BASE_ON_SPI34
         .spi_inst               = TDM_SPI3,
-        .rx_dma_ch              = DSPIC33AK_TDM_SPI3_RX_DMA,
-        .tx_dma_ch              = DSPIC33AK_TDM_SPI3_TX_DMA,
+        .rx_dma_ch              = NORA_TDM_SPI3_RX_DMA,
+        .tx_dma_ch              = NORA_TDM_SPI3_TX_DMA,
 #else
         .spi_inst               = TDM_SPI1,
-        .rx_dma_ch              = DSPIC33AK_TDM_SPI1_RX_DMA,
-        .tx_dma_ch              = DSPIC33AK_TDM_SPI1_TX_DMA,
+        .rx_dma_ch              = NORA_TDM_SPI1_RX_DMA,
+        .tx_dma_ch              = NORA_TDM_SPI1_TX_DMA,
 #endif
         .rx_buffer              = Rx_SPI1,
         .tx_buffer              = Tx_SPI1,
         .buffer_word_count      = TDM_ARRAY_SIZE(Rx_SPI1),
-        .geom_slots_per_fs      = (uint8_t)(DSPIC33AK_TDM_SLOTS_PER_FS),
-        .geom_block_frames      = (uint16_t)(DSPIC33AK_TDM_BLOCK_FRAMES),
-        .sync_domain            = (uint8_t)(DSPIC33AK_TDM_SPI1_SYNC_DOMAIN),
+        .geom_slots_per_fs      = (uint8_t)(NORA_TDM_SLOTS_PER_FS),
+        .geom_block_frames      = (uint16_t)(NORA_TDM_BLOCK_FRAMES),
+        .sync_domain            = (uint8_t)(NORA_TDM_SPI1_SYNC_DOMAIN),
         .block_cb               = NULL,
         .block_user             = NULL,
         .diag                   = { .isr_min_count = 0xFFFFFFFFUL },  /* rest zero; start() calls diag_reset() */
     },
-#if DSPIC33AK_TDM_USE_SPI2
+#if NORA_TDM_USE_SPI2
     [TDM_SPI_LEG_SPI2] =
     {
-#if DSPIC33AK_TDM_BASE_ON_SPI34
+#if NORA_TDM_BASE_ON_SPI34
         .spi_inst               = TDM_SPI4,
-        .rx_dma_ch              = DSPIC33AK_TDM_SPI4_RX_DMA,
-        .tx_dma_ch              = DSPIC33AK_TDM_SPI4_TX_DMA,
+        .rx_dma_ch              = NORA_TDM_SPI4_RX_DMA,
+        .tx_dma_ch              = NORA_TDM_SPI4_TX_DMA,
 #else
         .spi_inst               = TDM_SPI2,
-        .rx_dma_ch              = DSPIC33AK_TDM_SPI2_RX_DMA,
-        .tx_dma_ch              = DSPIC33AK_TDM_SPI2_TX_DMA,
+        .rx_dma_ch              = NORA_TDM_SPI2_RX_DMA,
+        .tx_dma_ch              = NORA_TDM_SPI2_TX_DMA,
 #endif
         .rx_buffer              = Rx_SPI2,
         .tx_buffer              = Tx_SPI2,
         .buffer_word_count      = TDM_ARRAY_SIZE(Rx_SPI2),
-        .geom_slots_per_fs      = (uint8_t)(DSPIC33AK_TDM_SLOTS_PER_FS),
-        .geom_block_frames      = (uint16_t)(DSPIC33AK_TDM_BLOCK_FRAMES),
-        .sync_domain            = (uint8_t)(DSPIC33AK_TDM_SPI2_SYNC_DOMAIN),
+        .geom_slots_per_fs      = (uint8_t)(NORA_TDM_SLOTS_PER_FS),
+        .geom_block_frames      = (uint16_t)(NORA_TDM_BLOCK_FRAMES),
+        .sync_domain            = (uint8_t)(NORA_TDM_SPI2_SYNC_DOMAIN),
         .block_cb               = NULL,
         .block_user             = NULL,
         .diag                   = { .isr_min_count = 0xFFFFFFFFUL },
     },
-#endif // DSPIC33AK_TDM_USE_SPI2
-#if DSPIC33AK_TDM_USE_SPI3
+#endif // NORA_TDM_USE_SPI2
+#if NORA_TDM_USE_SPI3
     [TDM_SPI_LEG_SPI3] =
     {
         .spi_inst               = TDM_SPI3,
-        .rx_dma_ch              = DSPIC33AK_TDM_SPI3_RX_DMA,
-        .tx_dma_ch              = DSPIC33AK_TDM_SPI3_TX_DMA,
+        .rx_dma_ch              = NORA_TDM_SPI3_RX_DMA,
+        .tx_dma_ch              = NORA_TDM_SPI3_TX_DMA,
         .rx_buffer              = Rx_SPI3,
         .tx_buffer              = Tx_SPI3,
         .buffer_word_count      = TDM_ARRAY_SIZE(Rx_SPI3),
-        .geom_slots_per_fs      = (uint8_t)(DSPIC33AK_TDM_SLOTS_PER_FS),
-        .geom_block_frames      = (uint16_t)(DSPIC33AK_TDM_BLOCK_FRAMES),
-        .sync_domain            = (uint8_t)(DSPIC33AK_TDM_SPI3_SYNC_DOMAIN),
+        .geom_slots_per_fs      = (uint8_t)(NORA_TDM_SLOTS_PER_FS),
+        .geom_block_frames      = (uint16_t)(NORA_TDM_BLOCK_FRAMES),
+        .sync_domain            = (uint8_t)(NORA_TDM_SPI3_SYNC_DOMAIN),
         .block_cb               = NULL,
         .block_user             = NULL,
         .diag                   = { .isr_min_count = 0xFFFFFFFFUL },
     },
-#endif // DSPIC33AK_TDM_USE_SPI3
-#if DSPIC33AK_TDM_USE_SPI4
+#endif // NORA_TDM_USE_SPI3
+#if NORA_TDM_USE_SPI4
     [TDM_SPI_LEG_SPI4] =
     {
         .spi_inst               = TDM_SPI4,
-        .rx_dma_ch              = DSPIC33AK_TDM_SPI4_RX_DMA,
-        .tx_dma_ch              = DSPIC33AK_TDM_SPI4_TX_DMA,
+        .rx_dma_ch              = NORA_TDM_SPI4_RX_DMA,
+        .tx_dma_ch              = NORA_TDM_SPI4_TX_DMA,
         .rx_buffer              = Rx_SPI4,
         .tx_buffer              = Tx_SPI4,
         .buffer_word_count      = TDM_ARRAY_SIZE(Rx_SPI4),
-        .geom_slots_per_fs      = (uint8_t)(DSPIC33AK_TDM_SLOTS_PER_FS),
-        .geom_block_frames      = (uint16_t)(DSPIC33AK_TDM_BLOCK_FRAMES),
-        .sync_domain            = (uint8_t)(DSPIC33AK_TDM_SPI4_SYNC_DOMAIN),
+        .geom_slots_per_fs      = (uint8_t)(NORA_TDM_SLOTS_PER_FS),
+        .geom_block_frames      = (uint16_t)(NORA_TDM_BLOCK_FRAMES),
+        .sync_domain            = (uint8_t)(NORA_TDM_SPI4_SYNC_DOMAIN),
         .block_cb               = NULL,
         .block_user             = NULL,
         .diag                   = { .isr_min_count = 0xFFFFFFFFUL },
     },
-#endif // DSPIC33AK_TDM_USE_SPI4
+#endif // NORA_TDM_USE_SPI4
 };
 
 static tdm_stream_t s_stream =
@@ -403,8 +423,8 @@ static bool tdm_any_leg_running( void )
 // running; set_block_callback() updates the pair under that instance's RX DMA IE mask.
 
 // Stream-health counters and the ISR load/time monitor live in the separated
-// diagnostics module (dspic33ak_spi_i2s_tdm_diag.*); each instance (tdm_spi_leg_t)
-// holds its own dspic33ak_spi_i2s_tdm_diag_t and updates it ONLY through the diag_*
+// diagnostics module (nora_spi_i2s_tdm_diag.*); each instance (tdm_spi_leg_t)
+// holds its own nora_spi_i2s_tdm_diag_t and updates it ONLY through the diag_*
 // functions. Each instance's RX-block ISR feeds its diag (note_block / check_deadline
 // / isr_begin / isr_end); start() resets every instance's diag. The singleton
 // get_load()/get_status() report the primary leg's diag under its RX DMA IE mask because
@@ -422,21 +442,21 @@ TDM_COMPILEASSERT( TDM_ARRAY_SIZE(s_spi_legs) <= (size_t)TDM_SPI_INST_COUNT );
 
 // Per-instance geometry sanity (compile-time), one set per leg: slots/blk
 // fit their leg fields (uint8_t / uint16_t), the 2*slots*blk word count cannot overflow
-// int32 indexing, and the generated buffer is exactly that size. The upstream rows use the
+// int32 indexing, and the generated buffer is exactly that size. The Sonora rows use the
 // stream-wide macros (already range-checked in conf.h); these guard a standalone carve-out
 // that gives a row its own slots/blk -- so the per-instance-geometry promise has teeth.
-TDM_COMPILEASSERT( (DSPIC33AK_TDM_SLOTS_PER_FS) > 0 && (DSPIC33AK_TDM_SLOTS_PER_FS) <= 255 );
-TDM_COMPILEASSERT( (DSPIC33AK_TDM_BLOCK_FRAMES) > 0 && (DSPIC33AK_TDM_BLOCK_FRAMES) <= 65535 );
-TDM_COMPILEASSERT( (DSPIC33AK_TDM_SLOTS_PER_FS) <= (2147483647 / (2 * (DSPIC33AK_TDM_BLOCK_FRAMES))) );
-TDM_COMPILEASSERT( TDM_ARRAY_SIZE(Rx_SPI1) == (2u * (DSPIC33AK_TDM_SLOTS_PER_FS) * (DSPIC33AK_TDM_BLOCK_FRAMES)) );
-#if DSPIC33AK_TDM_USE_SPI2
-TDM_COMPILEASSERT( TDM_ARRAY_SIZE(Rx_SPI2) == (2u * (DSPIC33AK_TDM_SLOTS_PER_FS) * (DSPIC33AK_TDM_BLOCK_FRAMES)) );
+TDM_COMPILEASSERT( (NORA_TDM_SLOTS_PER_FS) > 0 && (NORA_TDM_SLOTS_PER_FS) <= 255 );
+TDM_COMPILEASSERT( (NORA_TDM_BLOCK_FRAMES) > 0 && (NORA_TDM_BLOCK_FRAMES) <= 65535 );
+TDM_COMPILEASSERT( (NORA_TDM_SLOTS_PER_FS) <= (2147483647 / (2 * (NORA_TDM_BLOCK_FRAMES))) );
+TDM_COMPILEASSERT( TDM_ARRAY_SIZE(Rx_SPI1) == (2u * (NORA_TDM_SLOTS_PER_FS) * (NORA_TDM_BLOCK_FRAMES)) );
+#if NORA_TDM_USE_SPI2
+TDM_COMPILEASSERT( TDM_ARRAY_SIZE(Rx_SPI2) == (2u * (NORA_TDM_SLOTS_PER_FS) * (NORA_TDM_BLOCK_FRAMES)) );
 #endif
-#if DSPIC33AK_TDM_USE_SPI3
-TDM_COMPILEASSERT( TDM_ARRAY_SIZE(Rx_SPI3) == (2u * (DSPIC33AK_TDM_SLOTS_PER_FS) * (DSPIC33AK_TDM_BLOCK_FRAMES)) );
+#if NORA_TDM_USE_SPI3
+TDM_COMPILEASSERT( TDM_ARRAY_SIZE(Rx_SPI3) == (2u * (NORA_TDM_SLOTS_PER_FS) * (NORA_TDM_BLOCK_FRAMES)) );
 #endif
-#if DSPIC33AK_TDM_USE_SPI4
-TDM_COMPILEASSERT( TDM_ARRAY_SIZE(Rx_SPI4) == (2u * (DSPIC33AK_TDM_SLOTS_PER_FS) * (DSPIC33AK_TDM_BLOCK_FRAMES)) );
+#if NORA_TDM_USE_SPI4
+TDM_COMPILEASSERT( TDM_ARRAY_SIZE(Rx_SPI4) == (2u * (NORA_TDM_SLOTS_PER_FS) * (NORA_TDM_BLOCK_FRAMES)) );
 #endif
 
 
@@ -447,8 +467,8 @@ TDM_COMPILEASSERT( TDM_ARRAY_SIZE(Rx_SPI4) == (2u * (DSPIC33AK_TDM_SLOTS_PER_FS)
 //===========================================================
 
 // DMA global init/validate were removed in favor of the low-level DMA HAL.
-// main() calls dspic33ak_dma_global_init() once at startup; the per-channel
-// config below checks dspic33ak_dma_channel_config()/_enable() return values.
+// main() calls nora_dma_global_init() once at startup; the per-channel
+// config below checks nora_dma_channel_config()/_enable() return values.
 
 
 /*
@@ -463,15 +483,15 @@ TDM_COMPILEASSERT( TDM_ARRAY_SIZE(Rx_SPI4) == (2u * (DSPIC33AK_TDM_SLOTS_PER_FS)
  * open -- or under a live stream -- would leave the routed hardware disagreeing with the
  * registered hooks. Call it before open() (typically once at init).
  */
-bool dspic33ak_spi_i2s_tdm_set_port( const dspic33ak_spi_i2s_tdm_port_t* port )
+bool nora_spi_i2s_tdm_set_port( const nora_spi_i2s_tdm_port_t* port )
 {
     if( s_stream.opened || tdm_any_leg_running() )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_ALREADY_OPEN );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_ALREADY_OPEN );
         return false;
     }
     s_stream.port = port;
-    tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_NONE );
+    tdm_set_error( NORA_SPI_I2S_TDM_ERR_NONE );
     return true;
 }
 
@@ -483,21 +503,21 @@ bool dspic33ak_spi_i2s_tdm_set_port( const dspic33ak_spi_i2s_tdm_port_t* port )
  * asks clock_source_ready(role); without a port it returns true so the HAL can
  * run as a self-clocked/no-gate transport.
  */
-bool dspic33ak_spi_i2s_tdm_is_active( void )
+bool nora_spi_i2s_tdm_is_active( void )
 {
     const tdm_stream_t *stream = &s_stream;
 
     // Stream-readiness gate routed through the clock port. No port (or no
     // clock_source_ready hook) => always ready (self-clocked, no external gate).
-    // The upstream platform wires this to the board's USB-audio clock readiness.
+    // The Sonora platform wires this to the board's USB-audio clock readiness.
     // Pass the configured role. Before the first configure(), treat the transport
     // explicitly as SLAVE instead of relying on enum zero-initialization.
     if( ( stream->port != NULL ) && ( stream->port->clock_source_ready != NULL ) )
     {
         const tdm_spi_leg_t *primary = tdm_stream_primary_leg( stream );
-        dspic33ak_spi_i2s_tdm_clock_role_t role =
+        nora_spi_i2s_tdm_clock_role_t role =
             ( ( primary != NULL ) && primary->config_valid ) ? primary->config.clock_role
-                                                             : DSPIC33AK_SPI_I2S_TDM_CLOCK_SLAVE;
+                                                             : NORA_SPI_I2S_TDM_CLOCK_SLAVE;
         return stream->port->clock_source_ready( role );
     }
     return true;
@@ -519,13 +539,13 @@ bool dspic33ak_spi_i2s_tdm_is_active( void )
  * it does NOT carry its own source-readiness. So even a nominally "independent" master domain
  * (e.g. an ASRC SPI2 on sync_domain 1) is gated on the primary leg's readiness here: if the
  * primary's external clock is not ready, start_domain() on any domain returns CLOCK_NOT_READY.
- * That matches the upstream product policy ("no A clock -> hold the whole transport"). Per-domain
+ * That matches the Sonora product policy ("no A clock -> hold the whole transport"). Per-domain
  * source readiness is intentionally NOT supported; revisit (a per-domain readiness hook) before
  * relying on truly independent async domains in a generic standalone reuse.
  */
 static bool tdm_stream_ready_for_start( void )
 {
-    return dspic33ak_spi_i2s_tdm_is_active();
+    return nora_spi_i2s_tdm_is_active();
 }
 
 
@@ -536,7 +556,7 @@ static bool tdm_stream_ready_for_start( void )
  * is separate from is_active(), which only means the clock/source gate is ready. For
  * a specific instance use inst_get_status().running.
  */
-bool dspic33ak_spi_i2s_tdm_is_running( void )
+bool nora_spi_i2s_tdm_is_running( void )
 {
     const tdm_spi_leg_t *primary = tdm_stream_primary_leg( &s_stream );
     return ( primary != NULL ) && primary->running;
@@ -550,7 +570,7 @@ bool dspic33ak_spi_i2s_tdm_is_running( void )
  * hook. The app consumes this edge to run a mute-bounded stop/reconfigure/restart
  * sequence; without a hook, the HAL reports NONE.
  */
-dspic33ak_spi_i2s_tdm_clock_event_t dspic33ak_spi_i2s_tdm_consume_clock_event( void )
+nora_spi_i2s_tdm_clock_event_t nora_spi_i2s_tdm_consume_clock_event( void )
 {
     const tdm_stream_t *stream = &s_stream;
 
@@ -560,7 +580,7 @@ dspic33ak_spi_i2s_tdm_clock_event_t dspic33ak_spi_i2s_tdm_consume_clock_event( v
     {
         return stream->port->consume_clock_event();
     }
-    return DSPIC33AK_SPI_I2S_TDM_CLOCK_EVENT_NONE;
+    return NORA_SPI_I2S_TDM_CLOCK_EVENT_NONE;
 }
 
 
@@ -580,7 +600,7 @@ dspic33ak_spi_i2s_tdm_clock_event_t dspic33ak_spi_i2s_tdm_consume_clock_event( v
  * Number of SPI instances this build has (the size of the leg table).
  * Pair with inst(i) to enumerate: for i in 0 .. instance_count()-1.
  */
-uint8_t dspic33ak_spi_i2s_tdm_instance_count( void )
+uint8_t nora_spi_i2s_tdm_instance_count( void )
 {
     return s_stream.leg_count;
 }
@@ -593,7 +613,7 @@ uint8_t dspic33ak_spi_i2s_tdm_instance_count( void )
  * therefore their meaning remains literal even when a board maps logical legs 0/1 onto
  * physical SPI3/SPI4.
  */
-dspic33ak_spi_i2s_tdm_inst_t* dspic33ak_spi_i2s_tdm_inst( uint8_t index )
+nora_spi_i2s_tdm_inst_t* nora_spi_i2s_tdm_inst( uint8_t index )
 {
     if( index >= (uint8_t)TDM_SPI_LEG_COUNT )
     {
@@ -602,7 +622,7 @@ dspic33ak_spi_i2s_tdm_inst_t* dspic33ak_spi_i2s_tdm_inst( uint8_t index )
     return &s_spi_legs[index];
 }
 
-static dspic33ak_spi_i2s_tdm_inst_t* tdm_find_physical_spi( tdm_spi_inst_t spi_inst )
+static nora_spi_i2s_tdm_inst_t* tdm_find_physical_spi( tdm_spi_inst_t spi_inst )
 {
     uint8_t i;
 
@@ -616,24 +636,24 @@ static dspic33ak_spi_i2s_tdm_inst_t* tdm_find_physical_spi( tdm_spi_inst_t spi_i
     return NULL;
 }
 
-dspic33ak_spi_i2s_tdm_inst_t* dspic33ak_spi_i2s_tdm_spi1( void )
+nora_spi_i2s_tdm_inst_t* nora_spi_i2s_tdm_spi1( void )
 {
     return tdm_find_physical_spi( TDM_SPI1 );
 }
 
-dspic33ak_spi_i2s_tdm_inst_t* dspic33ak_spi_i2s_tdm_spi2( void )
+nora_spi_i2s_tdm_inst_t* nora_spi_i2s_tdm_spi2( void )
 {
     return tdm_find_physical_spi( TDM_SPI2 );
 }
 
-dspic33ak_spi_i2s_tdm_inst_t* dspic33ak_spi_i2s_tdm_spi3( void )
+nora_spi_i2s_tdm_inst_t* nora_spi_i2s_tdm_spi3( void )
 {
     return tdm_find_physical_spi( TDM_SPI3 );
 }
 
-dspic33ak_spi_i2s_tdm_inst_t* dspic33ak_spi_i2s_tdm_spi4( void )
+nora_spi_i2s_tdm_inst_t* nora_spi_i2s_tdm_spi4( void )
 {
-#if DSPIC33AK_SPI_I2S_TDM_DEVICE == DSPIC33AK_SPI_I2S_TDM_DEV_AK512
+#if NORA_SPI_I2S_TDM_DSPIC33A_DEVICE == NORA_SPI_I2S_TDM_DSPIC33A_DEV_AK512
     return tdm_find_physical_spi( TDM_SPI4 );
 #else
     return NULL;
@@ -645,14 +665,14 @@ dspic33ak_spi_i2s_tdm_inst_t* dspic33ak_spi_i2s_tdm_spi4( void )
 // Last-error diagnostic (debug aid; see the header contract). Plain last-writer-wins
 // store -- NOT updated from the ISR hot path and NOT stream health.
 //===========================================================
-static volatile dspic33ak_spi_i2s_tdm_error_t s_last_error = DSPIC33AK_SPI_I2S_TDM_ERR_NONE;
+static volatile nora_spi_i2s_tdm_error_t s_last_error = NORA_SPI_I2S_TDM_ERR_NONE;
 
-static inline void tdm_set_error( dspic33ak_spi_i2s_tdm_error_t err )
+static inline void tdm_set_error( nora_spi_i2s_tdm_error_t err )
 {
     s_last_error = err;
 }
 
-dspic33ak_spi_i2s_tdm_error_t dspic33ak_spi_i2s_tdm_get_last_error( void )
+nora_spi_i2s_tdm_error_t nora_spi_i2s_tdm_get_last_error( void )
 {
     return s_last_error;
 }
@@ -671,7 +691,7 @@ dspic33ak_spi_i2s_tdm_error_t dspic33ak_spi_i2s_tdm_get_last_error( void )
  * SPI1's. Returns NULL if inst is NULL/stopped or the half cannot be resolved; the
  * caller must NULL-check before writing.
  */
-int32_t* dspic33ak_spi_i2s_tdm_inst_tx_fill_ptr( dspic33ak_spi_i2s_tdm_inst_t* inst )
+int32_t* nora_spi_i2s_tdm_inst_tx_fill_ptr( nora_spi_i2s_tdm_inst_t* inst )
 {
     int32_t* dst = NULL;
 
@@ -680,7 +700,7 @@ int32_t* dspic33ak_spi_i2s_tdm_inst_tx_fill_ptr( dspic33ak_spi_i2s_tdm_inst_t* i
         return NULL;
     }
     // Per-leg pong-half offset = slots * blk (runtime path; the hot ISR uses a literal).
-    tdm_get_dest_ptr( dspic33ak_dma_read_src( inst->tx_dma_ch ), inst->tx_buffer,
+    tdm_get_dest_ptr( nora_dma_read_src_hot( (nora_dma_channel_t)inst->tx_dma_ch ), inst->tx_buffer,
                       (uint32_t)inst->geom_slots_per_fs * inst->geom_block_frames, &dst );
     return dst;
 }
@@ -709,20 +729,20 @@ int32_t* dspic33ak_spi_i2s_tdm_inst_tx_fill_ptr( dspic33ak_spi_i2s_tdm_inst_t* i
  * and the caller must NOT write B this block. The target half itself is deterministic (from
  * ref_fill_half); the live-DMA read is only the secondary veto that produces UNSAFE/UNRESOLVED.
  */
-dspic33ak_spi_i2s_tdm_mirror_result_t dspic33ak_spi_i2s_tdm_inst_tx_fill_mirror(
-        dspic33ak_spi_i2s_tdm_inst_t*       inst,
-        const dspic33ak_spi_i2s_tdm_inst_t* ref,
+nora_spi_i2s_tdm_mirror_result_t nora_spi_i2s_tdm_inst_tx_fill_mirror(
+        nora_spi_i2s_tdm_inst_t*       inst,
+        const nora_spi_i2s_tdm_inst_t* ref,
         const int32_t*                      ref_fill_half,
         int32_t**                           dst )
 {
     if( dst == NULL )
     {
-        return DSPIC33AK_TDM_MIRROR_BAD_ARGUMENT;
+        return NORA_TDM_MIRROR_BAD_ARGUMENT;
     }
     *dst = NULL;   // fail-closed default: only OK sets a non-NULL pointer
     if( ( inst == NULL ) || ( ref == NULL ) || ( ref_fill_half == NULL ) )
     {
-        return DSPIC33AK_TDM_MIRROR_BAD_ARGUMENT;
+        return NORA_TDM_MIRROR_BAD_ARGUMENT;
     }
     // inst and ref must be handles returned by this HAL's accessors (spiN()/inst(i)).
     // tdm_spi_leg_is_valid() checks each descriptor's local invariants (known SPI instance,
@@ -730,7 +750,7 @@ dspic33ak_spi_i2s_tdm_mirror_result_t dspic33ak_spi_i2s_tdm_inst_tx_fill_mirror(
     // arbitrary bogus pointer. Reject on that check or a stopped inst as BAD_ARGUMENT.
     if( !tdm_spi_leg_is_valid( inst ) || !tdm_spi_leg_is_valid( ref ) || !inst->running )
     {
-        return DSPIC33AK_TDM_MIRROR_BAD_ARGUMENT;
+        return NORA_TDM_MIRROR_BAD_ARGUMENT;
     }
     const uint32_t ref_half  = (uint32_t)ref->geom_slots_per_fs  * ref->geom_block_frames;
     const uint32_t inst_half = (uint32_t)inst->geom_slots_per_fs * inst->geom_block_frames;
@@ -746,7 +766,7 @@ dspic33ak_spi_i2s_tdm_mirror_result_t dspic33ak_spi_i2s_tdm_inst_tx_fill_mirror(
     const uintptr_t raddr = (uintptr_t)ref_fill_half;
     if( ( raddr < rbase ) || ( raddr >= rend ) )
     {
-        return DSPIC33AK_TDM_MIRROR_BAD_ARGUMENT;
+        return NORA_TDM_MIRROR_BAD_ARGUMENT;
     }
     const bool     pong       = ( raddr >= rmid );
     const uint32_t target_off = pong ? inst_half : 0u;   // words: the half we would fill
@@ -760,18 +780,18 @@ dspic33ak_spi_i2s_tdm_mirror_result_t dspic33ak_spi_i2s_tdm_inst_tx_fill_mirror(
     const uintptr_t ibase = (uintptr_t)&inst->tx_buffer[ 0 ];
     const uintptr_t imid  = (uintptr_t)&inst->tx_buffer[ inst_half ];
     const uintptr_t iend  = (uintptr_t)&inst->tx_buffer[ 2u * inst_half ];
-    const uintptr_t iaddr = (uintptr_t)dspic33ak_dma_read_src( inst->tx_dma_ch );
+    const uintptr_t iaddr = (uintptr_t)nora_dma_read_src_hot( (nora_dma_channel_t)inst->tx_dma_ch );
     if( ( iaddr < ibase ) || ( iaddr >= iend ) )
     {
-        return DSPIC33AK_TDM_MIRROR_UNRESOLVED_DMA_POSITION;
+        return NORA_TDM_MIRROR_UNRESOLVED_DMA_POSITION;
     }
     const uint32_t active_off = ( iaddr >= imid ) ? inst_half : 0u;
     if( active_off == target_off )
     {
-        return DSPIC33AK_TDM_MIRROR_UNSAFE_ACTIVE_HALF;
+        return NORA_TDM_MIRROR_UNSAFE_ACTIVE_HALF;
     }
     *dst = inst->tx_buffer + target_off;
-    return DSPIC33AK_TDM_MIRROR_OK;
+    return NORA_TDM_MIRROR_OK;
 }
 
 
@@ -784,7 +804,7 @@ dspic33ak_spi_i2s_tdm_mirror_result_t dspic33ak_spi_i2s_tdm_inst_tx_fill_mirror(
  * single-producer path). Reads the live DMA source address, so sample it at a
  * deterministic instant (e.g. a block-boundary ISR) and compare two co-clocked legs.
  */
-int dspic33ak_spi_i2s_tdm_inst_tx_active_half( dspic33ak_spi_i2s_tdm_inst_t* inst )
+int nora_spi_i2s_tdm_inst_tx_active_half( nora_spi_i2s_tdm_inst_t* inst )
 {
     if( ( inst == NULL ) || !inst->running )
     {
@@ -794,7 +814,7 @@ int dspic33ak_spi_i2s_tdm_inst_tx_active_half( dspic33ak_spi_i2s_tdm_inst_t* ins
     const uintptr_t base = (uintptr_t)&inst->tx_buffer[ 0 ];
     const uintptr_t mid  = (uintptr_t)&inst->tx_buffer[ half ];
     const uintptr_t end  = (uintptr_t)&inst->tx_buffer[ 2u * half ];
-    const uintptr_t addr = (uintptr_t)dspic33ak_dma_read_src( inst->tx_dma_ch );
+    const uintptr_t addr = (uintptr_t)nora_dma_read_src_hot( (nora_dma_channel_t)inst->tx_dma_ch );
 
     if( ( addr < base ) || ( addr >= end ) )
     {
@@ -812,7 +832,7 @@ int dspic33ak_spi_i2s_tdm_inst_tx_active_half( dspic33ak_spi_i2s_tdm_inst_t* ins
  * between two co-clocked legs (equal half but different position => a fixed offset that can
  * still tear a late cross-fill write). Sample at a deterministic instant and diff two legs.
  */
-int32_t dspic33ak_spi_i2s_tdm_inst_tx_active_pos( dspic33ak_spi_i2s_tdm_inst_t* inst )
+int32_t nora_spi_i2s_tdm_inst_tx_active_pos( nora_spi_i2s_tdm_inst_t* inst )
 {
     if( ( inst == NULL ) || !inst->running )
     {
@@ -821,7 +841,7 @@ int32_t dspic33ak_spi_i2s_tdm_inst_tx_active_pos( dspic33ak_spi_i2s_tdm_inst_t* 
     const uint32_t  half = (uint32_t)inst->geom_slots_per_fs * inst->geom_block_frames;
     const uintptr_t base = (uintptr_t)&inst->tx_buffer[ 0 ];
     const uintptr_t end  = (uintptr_t)&inst->tx_buffer[ 2u * half ];
-    const uintptr_t addr = (uintptr_t)dspic33ak_dma_read_src( inst->tx_dma_ch );
+    const uintptr_t addr = (uintptr_t)nora_dma_read_src_hot( (nora_dma_channel_t)inst->tx_dma_ch );
 
     if( ( addr < base ) || ( addr >= end ) )
     {
@@ -843,22 +863,22 @@ int32_t dspic33ak_spi_i2s_tdm_inst_tx_active_pos( dspic33ak_spi_i2s_tdm_inst_t* 
  * be registered before inst_start() and not swapped/cleared mid-stream. Re-registering
  * the identical (cb,user) while running is allowed (idempotent no-op -> true).
  */
-bool dspic33ak_spi_i2s_tdm_set_block_callback( dspic33ak_spi_i2s_tdm_inst_t* inst,
-                                               dspic33ak_spi_i2s_tdm_block_cb_t cb,
+bool nora_spi_i2s_tdm_set_block_callback( nora_spi_i2s_tdm_inst_t* inst,
+                                               nora_spi_i2s_tdm_block_cb_t cb,
                                                void* user )
 {
     bool     rxie_bak;
 
     if( inst == NULL )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_BAD_INSTANCE );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_BAD_INSTANCE );
         return false;
     }
 
     // While running, only a no-op re-register of the same pair is permitted.
     if( inst->running && ( cb != inst->block_cb || user != inst->block_user ) )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_ALREADY_RUNNING );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_ALREADY_RUNNING );
         return false;
     }
 
@@ -868,7 +888,7 @@ bool dspic33ak_spi_i2s_tdm_set_block_callback( dspic33ak_spi_i2s_tdm_inst_t* ins
     inst->block_user = user;
 
     tdm_rx_ie_restore( inst->rx_dma_ch, rxie_bak );
-    tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_NONE );
+    tdm_set_error( NORA_SPI_I2S_TDM_ERR_NONE );
     return true;
 }
 
@@ -886,9 +906,9 @@ bool dspic33ak_spi_i2s_tdm_set_block_callback( dspic33ak_spi_i2s_tdm_inst_t* ins
  * registered this is a no-op success (self-clocked). It does NOT block waiting for a clock
  * (single readiness check) and does NOT touch any SPI/DMA -- per-instance start arms the
  * hardware. A board hook that also routes a SECONDARY leg reads that leg's committed role via
- * dspic33ak_spi_i2s_tdm_inst_get_setup() and skips a leg left unconfigured.
+ * nora_spi_i2s_tdm_inst_get_setup() and skips a leg left unconfigured.
  */
-bool dspic33ak_spi_i2s_tdm_open( void )
+bool nora_spi_i2s_tdm_open( void )
 {
     const tdm_stream_t *stream = &s_stream;
 
@@ -896,7 +916,7 @@ bool dspic33ak_spi_i2s_tdm_open( void )
     // have side effects -- external-clock bring-up, CLC engage) -- just succeed.
     if( s_stream.opened )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_NONE );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_NONE );
         return true;
     }
 
@@ -907,7 +927,7 @@ bool dspic33ak_spi_i2s_tdm_open( void )
     // cannot see.
     if( !tdm_stream_topology_is_valid( stream ) )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_TOPOLOGY );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_TOPOLOGY );
         return false;
     }
 
@@ -917,36 +937,36 @@ bool dspic33ak_spi_i2s_tdm_open( void )
     const tdm_spi_leg_t *primary = tdm_stream_primary_leg( stream );
     if( ( primary == NULL ) || !primary->config_valid )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_NOT_CONFIGURED );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_NOT_CONFIGURED );
         return false;
     }
-    const dspic33ak_spi_i2s_tdm_clock_role_t role = primary->config.clock_role;
+    const nora_spi_i2s_tdm_clock_role_t role = primary->config.clock_role;
 
     if( stream->port != NULL )
     {
         if( ( stream->port->clock_source_init != NULL ) && !stream->port->clock_source_init( role ) )
         {
-            tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_CLOCK_INIT );
+            tdm_set_error( NORA_SPI_I2S_TDM_ERR_CLOCK_INIT );
             return false;   // external clock could not be brought up (e.g. unsupported role)
         }
         if( ( stream->port->clock_source_ready != NULL ) && !stream->port->clock_source_ready( role ) )
         {
-            tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_CLOCK_NOT_READY );
+            tdm_set_error( NORA_SPI_I2S_TDM_ERR_CLOCK_NOT_READY );
             return false;   // clock not ready yet -- caller retries open() later
         }
         if( ( stream->port->configure_pins != NULL ) && !stream->port->configure_pins( role ) )
         {
-            tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_PIN_CONFIG );
+            tdm_set_error( NORA_SPI_I2S_TDM_ERR_PIN_CONFIG );
             return false;   // role this board cannot pin-route
         }
         if( ( stream->port->clc_passthrough != NULL ) && !stream->port->clc_passthrough( role ) )
         {
-            tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_CLC );
+            tdm_set_error( NORA_SPI_I2S_TDM_ERR_CLC );
             return false;
         }
     }
     s_stream.opened = true;   // port up: start/arm may now proceed
-    tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_NONE );
+    tdm_set_error( NORA_SPI_I2S_TDM_ERR_NONE );
     return true;
 }
 
@@ -965,16 +985,16 @@ bool dspic33ak_spi_i2s_tdm_open( void )
  * mode is a property of the committed configuration, not of open/close, so a closed stream
  * keeps its SINGLE/SYSTEM shape for the next open()->start.
  */
-bool dspic33ak_spi_i2s_tdm_close( void )
+bool nora_spi_i2s_tdm_close( void )
 {
     if( tdm_any_leg_running() )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_ALREADY_RUNNING );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_ALREADY_RUNNING );
         return false;
     }
     s_stream.opened = false;   // a fresh open() is required before the next start/arm
     // No hardware teardown by design (see above). Config mode is intentionally preserved.
-    tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_NONE );
+    tdm_set_error( NORA_SPI_I2S_TDM_ERR_NONE );
     return true;
 }
 
@@ -996,21 +1016,21 @@ bool dspic33ak_spi_i2s_tdm_close( void )
  * SINGLE. Each leg carries its OWN clock role (the transport is rate-agnostic; a slave leg is
  * SLAVE because it was configured SLAVE). start() applies the stored config to the hardware.
  */
-bool dspic33ak_spi_i2s_tdm_inst_configure( dspic33ak_spi_i2s_tdm_inst_t* inst,
-                                           const dspic33ak_spi_i2s_tdm_config_t* cfg )
+bool nora_spi_i2s_tdm_inst_configure( nora_spi_i2s_tdm_inst_t* inst,
+                                           const nora_spi_i2s_tdm_config_t* cfg )
 {
     // Reconfiguring a live instance would glitch (or tear) the framing mid-block; the
     // contract is stop -> configure -> start, so reject configure while running.
     if( inst == NULL )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_BAD_INSTANCE );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_BAD_INSTANCE );
         return false;
     }
     // Configure happens BEFORE open(): open() consumes this config to derive the clock role
     // and route pins/CLC, so configuring under an open port would desync HW from the config.
     if( s_stream.opened )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_ALREADY_OPEN );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_ALREADY_OPEN );
         return false;
     }
     // Mode ownership: a SYSTEM-committed stream must be reconfigured only transactionally
@@ -1018,32 +1038,32 @@ bool dspic33ak_spi_i2s_tdm_inst_configure( dspic33ak_spi_i2s_tdm_inst_t* inst,
     // non-primary leg is configured exclusively through configure_system().
     if( s_config_mode == TDM_CONFIG_MODE_SYSTEM )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_CONFIG_MODE );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_CONFIG_MODE );
         return false;
     }
     if( !tdm_inst_is_primary( inst ) )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_CONFIG_MODE );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_CONFIG_MODE );
         return false;
     }
     if( inst->running )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_ALREADY_RUNNING );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_ALREADY_RUNNING );
         return false;
     }
     if( !tdm_spi_leg_is_valid( inst ) )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_BAD_INSTANCE );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_BAD_INSTANCE );
         return false;
     }
     if( cfg == NULL )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_BAD_ARGUMENT );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_BAD_ARGUMENT );
         return false;
     }
     if( !tdm_config_is_supported( inst, cfg ) )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_UNSUPPORTED_CONFIG );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_UNSUPPORTED_CONFIG );
         return false;
     }
     // The leg's sync_domain (from the conf.h seed here; configure_system overwrites it) must fit
@@ -1051,14 +1071,14 @@ bool dspic33ak_spi_i2s_tdm_inst_configure( dspic33ak_spi_i2s_tdm_inst_t* inst,
     // path too (configure_system already checks it). See also the conf.h SYNC_DOMAIN #error.
     if( inst->sync_domain >= 32u )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_TOPOLOGY );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_TOPOLOGY );
         return false;
     }
 
     inst->config       = *cfg;
     inst->config_valid = true;
     s_config_mode      = TDM_CONFIG_MODE_SINGLE;   // per-leg primary API now owns the config
-    tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_NONE );
+    tdm_set_error( NORA_SPI_I2S_TDM_ERR_NONE );
     return true;
 }
 
@@ -1072,8 +1092,8 @@ bool dspic33ak_spi_i2s_tdm_inst_configure( dspic33ak_spi_i2s_tdm_inst_t* inst,
  * Returning false for an unconfigured leg lets the caller distinguish it from a valid SLAVE
  * (role value 0) and SKIP an optional leg not part of this run (e.g. CMSIS single-instance).
  */
-bool dspic33ak_spi_i2s_tdm_inst_get_setup( const dspic33ak_spi_i2s_tdm_inst_t* inst,
-                                           dspic33ak_spi_i2s_tdm_leg_setup_t* setup )
+bool nora_spi_i2s_tdm_inst_get_setup( const nora_spi_i2s_tdm_inst_t* inst,
+                                           nora_spi_i2s_tdm_leg_setup_t* setup )
 {
     if( ( inst == NULL ) || ( setup == NULL ) || !inst->config_valid )
     {
@@ -1099,8 +1119,8 @@ bool dspic33ak_spi_i2s_tdm_inst_get_setup( const dspic33ak_spi_i2s_tdm_inst_t* i
  * master drives the shared clock, the rest are slaves), brg (a slave ignores it), and
  * mclk_enable. IGNROV/IGNTUR are HAL-fixed policies, not per-leg config fields.
  */
-static bool tdm_domain_framing_matches( const dspic33ak_spi_i2s_tdm_config_t* a,
-                                        const dspic33ak_spi_i2s_tdm_config_t* b )
+static bool tdm_domain_framing_matches( const nora_spi_i2s_tdm_config_t* a,
+                                        const nora_spi_i2s_tdm_config_t* b )
 {
     return ( a->format                        == b->format ) &&
            ( a->word_bits                     == b->word_bits ) &&
@@ -1129,12 +1149,12 @@ static bool tdm_domain_framing_matches( const dspic33ak_spi_i2s_tdm_config_t* a,
  * The caller owns stop->configure->start: this does NOT stop a running transport (it
  * rejects one via the STOPPED preflight), keeping the call side-effect-free on rejection.
  */
-bool dspic33ak_spi_i2s_tdm_configure_system( const dspic33ak_spi_i2s_tdm_leg_setup_t* setups,
+bool nora_spi_i2s_tdm_configure_system( const nora_spi_i2s_tdm_leg_setup_t* setups,
                                              uint8_t setup_count )
 {
     if( ( setups == NULL ) || ( setup_count != (uint8_t)TDM_SPI_LEG_COUNT ) )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_BAD_ARGUMENT );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_BAD_ARGUMENT );
         return false;
     }
     // Configure happens BEFORE open() (open() consumes the committed config). A full recommit
@@ -1142,36 +1162,36 @@ bool dspic33ak_spi_i2s_tdm_configure_system( const dspic33ak_spi_i2s_tdm_leg_set
     // leg is stopped (the STOPPED preflight below enforces the latter).
     if( s_stream.opened )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_ALREADY_OPEN );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_ALREADY_OPEN );
         return false;
     }
 
     // 1a. PREFLIGHT: each leg valid, stopped, and its stream supported. Zero side effects.
     for( uint8_t i = 0u; i < setup_count; i++ )
     {
-        dspic33ak_spi_i2s_tdm_inst_t* leg = dspic33ak_spi_i2s_tdm_inst( i );
+        nora_spi_i2s_tdm_inst_t* leg = nora_spi_i2s_tdm_inst( i );
         if( ( leg == NULL ) || !tdm_spi_leg_is_valid( leg ) )
         {
-            tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_BAD_INSTANCE );
+            tdm_set_error( NORA_SPI_I2S_TDM_ERR_BAD_INSTANCE );
             return false;
         }
         if( leg->running )
         {
-            tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_ALREADY_RUNNING );
+            tdm_set_error( NORA_SPI_I2S_TDM_ERR_ALREADY_RUNNING );
             return false;
         }
         if( !tdm_config_is_supported( leg, &setups[i].stream ) )
         {
-            tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_UNSUPPORTED_CONFIG );
+            tdm_set_error( NORA_SPI_I2S_TDM_ERR_UNSUPPORTED_CONFIG );
             return false;
         }
         // sync_domain must fit the 0..31 range that start_all_domains()'s 32-bit dedup/rollback
         // mask can track. A domain id >= 32 would be silently dropped from the started-mask, so
         // its legs could be started twice or skipped on rollback. Reject at configure (fail
-        // closed) rather than misbehave at start. (Upstream uses 0/1; this guards public reuse.)
+        // closed) rather than misbehave at start. (Sonora uses 0/1; this guards public reuse.)
         if( setups[i].sync_domain >= 32u )
         {
-            tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_TOPOLOGY );
+            tdm_set_error( NORA_SPI_I2S_TDM_ERR_TOPOLOGY );
             return false;
         }
     }
@@ -1180,16 +1200,16 @@ bool dspic33ak_spi_i2s_tdm_configure_system( const dspic33ak_spi_i2s_tdm_leg_set
     // clock source; two masters would fight for BCLK/FS).
     for( uint8_t i = 0u; i < setup_count; i++ )
     {
-        if( setups[i].stream.clock_role != DSPIC33AK_SPI_I2S_TDM_CLOCK_MASTER )
+        if( setups[i].stream.clock_role != NORA_SPI_I2S_TDM_CLOCK_MASTER )
         {
             continue;
         }
         for( uint8_t j = i + 1u; j < setup_count; j++ )
         {
             if( ( setups[j].sync_domain == setups[i].sync_domain ) &&
-                ( setups[j].stream.clock_role == DSPIC33AK_SPI_I2S_TDM_CLOCK_MASTER ) )
+                ( setups[j].stream.clock_role == NORA_SPI_I2S_TDM_CLOCK_MASTER ) )
             {
-                tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_TOPOLOGY );
+                tdm_set_error( NORA_SPI_I2S_TDM_ERR_TOPOLOGY );
                 return false;
             }
         }
@@ -1205,7 +1225,7 @@ bool dspic33ak_spi_i2s_tdm_configure_system( const dspic33ak_spi_i2s_tdm_leg_set
             if( ( setups[j].sync_domain == setups[i].sync_domain ) &&
                 !tdm_domain_framing_matches( &setups[i].stream, &setups[j].stream ) )
             {
-                tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_TOPOLOGY );
+                tdm_set_error( NORA_SPI_I2S_TDM_ERR_TOPOLOGY );
                 return false;
             }
         }
@@ -1216,13 +1236,13 @@ bool dspic33ak_spi_i2s_tdm_configure_system( const dspic33ak_spi_i2s_tdm_leg_set
     // the stream and the sync domain.
     for( uint8_t i = 0u; i < setup_count; i++ )
     {
-        dspic33ak_spi_i2s_tdm_inst_t* leg = dspic33ak_spi_i2s_tdm_inst( i );
+        nora_spi_i2s_tdm_inst_t* leg = nora_spi_i2s_tdm_inst( i );
         leg->config       = setups[i].stream;
         leg->sync_domain  = setups[i].sync_domain;
         leg->config_valid = true;
     }
     s_config_mode = TDM_CONFIG_MODE_SYSTEM;   // whole-system domain API now owns the config
-    tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_NONE );
+    tdm_set_error( NORA_SPI_I2S_TDM_ERR_NONE );
     return true;
 }
 
@@ -1243,95 +1263,95 @@ bool dspic33ak_spi_i2s_tdm_configure_system( const dspic33ak_spi_i2s_tdm_leg_set
 // several co-clocked legs and then release them back-to-back (both SPIEN within one FS frame)
 // so their ping-pong DMAs latch the SAME first FS edge = phase-locked (wdiff=0). Returns false
 // (rolled back) on any failure, same as inst_start().
-static bool tdm_inst_arm( dspic33ak_spi_i2s_tdm_inst_t* inst )
+static bool tdm_inst_arm( nora_spi_i2s_tdm_inst_t* inst )
 {
-    dspic33ak_spi_i2s_tdm_config_t eff_cfg;
+    nora_spi_i2s_tdm_config_t eff_cfg;
 
     // Gate FIRST -- do not arm DMA/SPI unless this instance is actually going to run.
     // config_valid implies the config already passed configure()'s envelope check.
     if( ( inst == NULL ) || !tdm_spi_leg_is_valid( inst ) )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_BAD_INSTANCE );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_BAD_INSTANCE );
         return false;
     }
     if( !inst->config_valid )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_NOT_CONFIGURED );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_NOT_CONFIGURED );
         return false;
     }
     if( inst->running )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_ALREADY_RUNNING );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_ALREADY_RUNNING );
         return false;
     }
     // open() (shared clock/pins/CLC + readiness) must have run first -- arming DMA/SPI without
     // it would enter SPIEN with the port unrouted (a silent dead stream). Fail closed.
     if( !s_stream.opened )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_NOT_OPEN );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_NOT_OPEN );
         return false;
     }
     // Resolve the register-level config (a validated copy of the leg's own stored config).
     if( !tdm_spi_leg_get_effective_config( inst, &eff_cfg ) )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_UNSUPPORTED_CONFIG );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_UNSUPPORTED_CONFIG );
         return false;
     }
 
     // Fresh diagnostics + a deterministic first block for this instance.
-    dspic33ak_spi_i2s_tdm_diag_reset( &inst->diag );
+    nora_spi_i2s_tdm_diag_reset( &inst->diag );
     tdm_inst_clear_buffers( inst );
 
     // Arm this instance's RX/TX DMA; on failure roll back ITS DMA/SPI so a partial
     // start leaves no channel with CHEN/IE set and the SPI off.
-    if( !dspic33ak_spi_i2s_tdm_hw_dma_config( inst->spi_inst,
+    if( !nora_spi_i2s_tdm_hw_dma_config( inst->spi_inst,
                                               inst->rx_dma_ch, inst->tx_dma_ch,
                                               inst->rx_buffer, inst->tx_buffer,
                                               inst->buffer_word_count ) )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_DMA_CONFIG );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_DMA_CONFIG );
         goto fail;
     }
 
     // Program + enable this instance's SPI: registers, then DMA-trigger events, then
     // the module ON (ON is the last step, after the port pins/CLC are routed).
-    dspic33ak_spi_i2s_tdm_hw_apply_config( inst->spi_inst, &eff_cfg );
-    dspic33ak_spi_i2s_tdm_hw_dma_trigger_enable( inst->spi_inst, true );
+    nora_spi_i2s_tdm_hw_apply_config( inst->spi_inst, &eff_cfg );
+    nora_spi_i2s_tdm_hw_dma_trigger_enable( inst->spi_inst, true );
 
     // FS_50PCT on a TDM master: the SPI emits a half-frame marker (set by apply_config);
     // engage CLC10 to toggle it into a 50%-duty FS on the same FS pin BEFORE the module
     // turns on, so the very first marker is captured. I2S (native 50%), FS_PULSE, and any
     // slave (FS is an input) need no CLC -- release it in case this instance held it before.
-    if( ( eff_cfg.clock_role   == DSPIC33AK_SPI_I2S_TDM_CLOCK_MASTER ) &&
-        ( eff_cfg.format == DSPIC33AK_SPI_I2S_TDM_FORMAT_TDM )  &&
-        ( eff_cfg.fs_shape == DSPIC33AK_SPI_I2S_TDM_FS_50PCT ) )
+    if( ( eff_cfg.clock_role   == NORA_SPI_I2S_TDM_CLOCK_MASTER ) &&
+        ( eff_cfg.format == NORA_SPI_I2S_TDM_FORMAT_TDM )  &&
+        ( eff_cfg.fs_shape == NORA_SPI_I2S_TDM_FS_50PCT ) )
     {
-        const dspic33ak_spi_i2s_tdm_fs_clc_result_t clc =
-            dspic33ak_spi_i2s_tdm_fs_clc_engage( inst->spi_inst );
-        if( clc != DSPIC33AK_SPI_I2S_TDM_FS_CLC_OK )
+        const nora_spi_i2s_tdm_fs_clc_result_t clc =
+            nora_spi_i2s_tdm_fs_clc_engage( inst->spi_inst );
+        if( clc != NORA_SPI_I2S_TDM_FS_CLC_OK )
         {
             // BUSY = CLC10 already owned by another instance/domain; NO_FS_PIN = FS not on a
             // physical pin (or no CLC10 on this part).
-            tdm_set_error( ( clc == DSPIC33AK_SPI_I2S_TDM_FS_CLC_BUSY )
-                               ? DSPIC33AK_SPI_I2S_TDM_ERR_CLC
-                               : DSPIC33AK_SPI_I2S_TDM_ERR_PIN_CONFIG );
+            tdm_set_error( ( clc == NORA_SPI_I2S_TDM_FS_CLC_BUSY )
+                               ? NORA_SPI_I2S_TDM_ERR_CLC
+                               : NORA_SPI_I2S_TDM_ERR_PIN_CONFIG );
             goto fail;
         }
     }
     else
     {
-        dspic33ak_spi_i2s_tdm_fs_clc_release( inst->spi_inst );
+        nora_spi_i2s_tdm_fs_clc_release( inst->spi_inst );
     }
 
     // ARMED: SPI module still OFF. Caller issues inst_go() to release the transfer stream.
-    tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_NONE );
+    tdm_set_error( NORA_SPI_I2S_TDM_ERR_NONE );
     return true;
 
 fail:
     tdm_inst_soft_stop_dma( inst );
     tdm_inst_clear_dma_flags( inst );
-    dspic33ak_spi_i2s_tdm_hw_soft_stop( inst->spi_inst );
-    dspic33ak_spi_i2s_tdm_hw_irq_clear_flags( inst->spi_inst );
+    nora_spi_i2s_tdm_hw_soft_stop( inst->spi_inst );
+    nora_spi_i2s_tdm_hw_irq_clear_flags( inst->spi_inst );
     inst->running = false;
     return false;
 }
@@ -1341,13 +1361,13 @@ fail:
 // this starts on the next FS edge; for a master it begins generating BCLK/FS. Issue the go()
 // of co-clocked legs back-to-back (slaves first, an internal FS master last) so all latch the
 // same FS. No-op-safe only on an armed instance; call exactly once after inst_arm().
-static void tdm_inst_go( dspic33ak_spi_i2s_tdm_inst_t* inst )
+static void tdm_inst_go( nora_spi_i2s_tdm_inst_t* inst )
 {
     if( ( inst == NULL ) || !tdm_spi_leg_is_valid( inst ) )
     {
         return;
     }
-    dspic33ak_spi_i2s_tdm_hw_module_enable( inst->spi_inst, true );
+    nora_spi_i2s_tdm_hw_module_enable( inst->spi_inst, true );
     inst->running = true;
 }
 
@@ -1361,26 +1381,26 @@ static void tdm_inst_go( dspic33ak_spi_i2s_tdm_inst_t* inst )
 // opened -> clock readiness -> arm -> go. opened is checked BEFORE readiness so a start before
 // open() returns ERR_NOT_OPEN (not a readiness-hook verdict), and the readiness re-check (the
 // open->start drop window) only runs once open() has already brought the clock source up.
-bool dspic33ak_spi_i2s_tdm_inst_start( dspic33ak_spi_i2s_tdm_inst_t* inst )
+bool nora_spi_i2s_tdm_inst_start( nora_spi_i2s_tdm_inst_t* inst )
 {
     if( ( inst == NULL ) || !tdm_spi_leg_is_valid( inst ) )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_BAD_INSTANCE );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_BAD_INSTANCE );
         return false;
     }
     if( ( s_config_mode != TDM_CONFIG_MODE_SINGLE ) || !tdm_inst_is_primary( inst ) )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_CONFIG_MODE );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_CONFIG_MODE );
         return false;
     }
     if( !s_stream.opened )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_NOT_OPEN );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_NOT_OPEN );
         return false;
     }
     if( !tdm_stream_ready_for_start() )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_CLOCK_NOT_READY );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_CLOCK_NOT_READY );
         return false;
     }
     if( !tdm_inst_arm( inst ) )
@@ -1397,10 +1417,10 @@ bool dspic33ak_spi_i2s_tdm_inst_start( dspic33ak_spi_i2s_tdm_inst_t* inst )
 // and the public SYSTEM wrappers can both use it. Tears down every member via the per-leg impl.
 static void tdm_stop_domain_impl( uint8_t domain )
 {
-    const uint8_t n = dspic33ak_spi_i2s_tdm_instance_count();
+    const uint8_t n = nora_spi_i2s_tdm_instance_count();
     for( uint8_t i = 0u; i < n; i++ )
     {
-        dspic33ak_spi_i2s_tdm_inst_t* leg = dspic33ak_spi_i2s_tdm_inst( i );
+        nora_spi_i2s_tdm_inst_t* leg = nora_spi_i2s_tdm_inst( i );
         if( ( leg != NULL ) && ( leg->sync_domain == domain ) )
         {
             tdm_inst_stop_impl( leg );
@@ -1413,24 +1433,24 @@ static void tdm_stop_domain_impl( uint8_t domain )
 // committed via configure_system() (mode==SYSTEM) -- a SINGLE-mode stream tears down through
 // inst_stop(). Symmetric with start_domain(): an out-of-range (>=32) or MEMBER-LESS domain is
 // ERR_BAD_INSTANCE (not a silent success); an existing-but-already-stopped domain is idempotent true.
-bool dspic33ak_spi_i2s_tdm_stop_domain( uint8_t domain )
+bool nora_spi_i2s_tdm_stop_domain( uint8_t domain )
 {
     if( s_config_mode != TDM_CONFIG_MODE_SYSTEM )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_CONFIG_MODE );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_CONFIG_MODE );
         return false;
     }
     if( domain >= 32u )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_BAD_INSTANCE );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_BAD_INSTANCE );
         return false;
     }
     // Reject a domain with no member leg (an unknown id), mirroring start_domain()'s members==0 check.
     uint8_t       members = 0u;
-    const uint8_t n       = dspic33ak_spi_i2s_tdm_instance_count();
+    const uint8_t n       = nora_spi_i2s_tdm_instance_count();
     for( uint8_t i = 0u; i < n; i++ )
     {
-        const tdm_spi_leg_t *leg = dspic33ak_spi_i2s_tdm_inst( i );
+        const tdm_spi_leg_t *leg = nora_spi_i2s_tdm_inst( i );
         if( ( leg != NULL ) && ( leg->sync_domain == domain ) )
         {
             members++;
@@ -1438,11 +1458,11 @@ bool dspic33ak_spi_i2s_tdm_stop_domain( uint8_t domain )
     }
     if( members == 0u )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_BAD_INSTANCE );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_BAD_INSTANCE );
         return false;
     }
     tdm_stop_domain_impl( domain );
-    tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_NONE );
+    tdm_set_error( NORA_SPI_I2S_TDM_ERR_NONE );
     return true;
 }
 
@@ -1464,9 +1484,9 @@ typedef enum {
     TDM_DOMAIN_PARTIAL,
 } tdm_domain_state_t;
 
-static tdm_domain_state_t tdm_domain_classify( uint8_t domain, dspic33ak_spi_i2s_tdm_error_t *err )
+static tdm_domain_state_t tdm_domain_classify( uint8_t domain, nora_spi_i2s_tdm_error_t *err )
 {
-    const uint8_t        n       = dspic33ak_spi_i2s_tdm_instance_count();
+    const uint8_t        n       = nora_spi_i2s_tdm_instance_count();
     const tdm_spi_leg_t *ref     = NULL;
     uint8_t              members = 0u;
     uint8_t              masters = 0u;
@@ -1474,7 +1494,7 @@ static tdm_domain_state_t tdm_domain_classify( uint8_t domain, dspic33ak_spi_i2s
 
     for( uint8_t i = 0u; i < n; i++ )
     {
-        const tdm_spi_leg_t *leg = dspic33ak_spi_i2s_tdm_inst( i );
+        const tdm_spi_leg_t *leg = nora_spi_i2s_tdm_inst( i );
         if( ( leg == NULL ) || ( leg->sync_domain != domain ) )
         {
             continue;
@@ -1482,10 +1502,10 @@ static tdm_domain_state_t tdm_domain_classify( uint8_t domain, dspic33ak_spi_i2s
         members++;
         if( !leg->config_valid )
         {
-            *err = DSPIC33AK_SPI_I2S_TDM_ERR_NOT_CONFIGURED;
+            *err = NORA_SPI_I2S_TDM_ERR_NOT_CONFIGURED;
             return TDM_DOMAIN_INVALID;
         }
-        if( leg->config.clock_role == DSPIC33AK_SPI_I2S_TDM_CLOCK_MASTER )
+        if( leg->config.clock_role == NORA_SPI_I2S_TDM_CLOCK_MASTER )
         {
             masters++;
         }
@@ -1499,18 +1519,18 @@ static tdm_domain_state_t tdm_domain_classify( uint8_t domain, dspic33ak_spi_i2s
         }
         else if( !tdm_domain_framing_matches( &ref->config, &leg->config ) )
         {
-            *err = DSPIC33AK_SPI_I2S_TDM_ERR_TOPOLOGY;
+            *err = NORA_SPI_I2S_TDM_ERR_TOPOLOGY;
             return TDM_DOMAIN_INVALID;
         }
     }
     if( members == 0u )
     {
-        *err = DSPIC33AK_SPI_I2S_TDM_ERR_BAD_INSTANCE;
+        *err = NORA_SPI_I2S_TDM_ERR_BAD_INSTANCE;
         return TDM_DOMAIN_INVALID;
     }
     if( masters > 1u )
     {
-        *err = DSPIC33AK_SPI_I2S_TDM_ERR_TOPOLOGY;
+        *err = NORA_SPI_I2S_TDM_ERR_TOPOLOGY;
         return TDM_DOMAIN_INVALID;
     }
     if( running == 0u )
@@ -1529,21 +1549,21 @@ static tdm_domain_state_t tdm_domain_classify( uint8_t domain, dspic33ak_spi_i2s
 // SYSTEM-mode API. Non-destructive: a fully-running domain is idempotent success; a partial/
 // invalid domain is rejected WITHOUT teardown. Returns false (and rolls back only THIS call's
 // arms) if a leg fails to arm. open() (shared clock/pins) must have run first; this does not.
-bool dspic33ak_spi_i2s_tdm_start_domain( uint8_t domain )
+bool nora_spi_i2s_tdm_start_domain( uint8_t domain )
 {
-    const uint8_t                 n = dspic33ak_spi_i2s_tdm_instance_count();
-    dspic33ak_spi_i2s_tdm_error_t err;
+    const uint8_t                 n = nora_spi_i2s_tdm_instance_count();
+    nora_spi_i2s_tdm_error_t err;
 
     // SYSTEM-mode ownership: domain start is only for a configure_system()-committed stream.
     if( s_config_mode != TDM_CONFIG_MODE_SYSTEM )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_CONFIG_MODE );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_CONFIG_MODE );
         return false;
     }
     // open() (shared clock/pins/CLC + readiness) MUST have run first.
     if( !s_stream.opened )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_NOT_OPEN );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_NOT_OPEN );
         return false;
     }
 
@@ -1556,19 +1576,19 @@ bool dspic33ak_spi_i2s_tdm_start_domain( uint8_t domain )
     }
     if( state == TDM_DOMAIN_ALL_RUNNING )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_NONE );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_NONE );
         return true;    // already fully up -> idempotent no-op success
     }
     if( state == TDM_DOMAIN_PARTIAL )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_ALREADY_RUNNING );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_ALREADY_RUNNING );
         return false;   // partial running -> reject, leave the domain as-is
     }
 
     // STOPPED and about to arm: re-check the clock-readiness gate (the open->start drop window).
     if( !tdm_stream_ready_for_start() )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_CLOCK_NOT_READY );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_CLOCK_NOT_READY );
         return false;
     }
 
@@ -1576,7 +1596,7 @@ bool dspic33ak_spi_i2s_tdm_start_domain( uint8_t domain )
     //     here only rolls back what THIS call armed (stop_domain is idempotent on stopped legs).
     for( uint8_t i = 0u; i < n; i++ )
     {
-        dspic33ak_spi_i2s_tdm_inst_t* leg = dspic33ak_spi_i2s_tdm_inst( i );
+        nora_spi_i2s_tdm_inst_t* leg = nora_spi_i2s_tdm_inst( i );
         if( ( leg == NULL ) || ( leg->sync_domain != domain ) )
         {
             continue;
@@ -1591,12 +1611,12 @@ bool dspic33ak_spi_i2s_tdm_start_domain( uint8_t domain )
     // (2a) GO the non-master legs first (adjacent SPIEN releases).
     for( uint8_t i = 0u; i < n; i++ )
     {
-        dspic33ak_spi_i2s_tdm_inst_t* leg = dspic33ak_spi_i2s_tdm_inst( i );
+        nora_spi_i2s_tdm_inst_t* leg = nora_spi_i2s_tdm_inst( i );
         if( ( leg == NULL ) || ( leg->sync_domain != domain ) || !leg->config_valid )
         {
             continue;
         }
-        if( leg->config.clock_role != DSPIC33AK_SPI_I2S_TDM_CLOCK_MASTER )
+        if( leg->config.clock_role != NORA_SPI_I2S_TDM_CLOCK_MASTER )
         {
             tdm_inst_go( leg );
         }
@@ -1604,17 +1624,17 @@ bool dspic33ak_spi_i2s_tdm_start_domain( uint8_t domain )
     // (2b) then the clock-MASTER leg(s) LAST -- its BCLK/FS starts after the slaves listen.
     for( uint8_t i = 0u; i < n; i++ )
     {
-        dspic33ak_spi_i2s_tdm_inst_t* leg = dspic33ak_spi_i2s_tdm_inst( i );
+        nora_spi_i2s_tdm_inst_t* leg = nora_spi_i2s_tdm_inst( i );
         if( ( leg == NULL ) || ( leg->sync_domain != domain ) || !leg->config_valid )
         {
             continue;
         }
-        if( leg->config.clock_role == DSPIC33AK_SPI_I2S_TDM_CLOCK_MASTER )
+        if( leg->config.clock_role == NORA_SPI_I2S_TDM_CLOCK_MASTER )
         {
             tdm_inst_go( leg );
         }
     }
-    tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_NONE );
+    tdm_set_error( NORA_SPI_I2S_TDM_ERR_NONE );
     return true;
 }
 
@@ -1632,22 +1652,22 @@ bool dspic33ak_spi_i2s_tdm_start_domain( uint8_t domain )
 //           actually started. On any failure, roll back ONLY newly_started_mask -- pre-existing
 //           running domains and untouched domains are preserved.
 // Returns false + ERR_NOT_CONFIGURED if no domain is configured. open() must run first.
-bool dspic33ak_spi_i2s_tdm_start_all_domains( void )
+bool nora_spi_i2s_tdm_start_all_domains( void )
 {
-    const uint8_t                 n = dspic33ak_spi_i2s_tdm_instance_count();
+    const uint8_t                 n = nora_spi_i2s_tdm_instance_count();
     uint32_t                      seen_mask    = 0u;   // distinct domains examined
     uint32_t                      stopped_mask = 0u;   // startable (all-stopped) domains
-    dspic33ak_spi_i2s_tdm_error_t err;
+    nora_spi_i2s_tdm_error_t err;
 
     // SYSTEM-mode ownership + open() precondition.
     if( s_config_mode != TDM_CONFIG_MODE_SYSTEM )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_CONFIG_MODE );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_CONFIG_MODE );
         return false;
     }
     if( !s_stream.opened )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_NOT_OPEN );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_NOT_OPEN );
         return false;
     }
 
@@ -1655,7 +1675,7 @@ bool dspic33ak_spi_i2s_tdm_start_all_domains( void )
     // domain rejects the whole call before a single leg is touched.
     for( uint8_t i = 0u; i < n; i++ )
     {
-        const tdm_spi_leg_t* leg = dspic33ak_spi_i2s_tdm_inst( i );
+        const tdm_spi_leg_t* leg = nora_spi_i2s_tdm_inst( i );
         if( ( leg == NULL ) || !leg->config_valid )
         {
             continue;
@@ -1675,7 +1695,7 @@ bool dspic33ak_spi_i2s_tdm_start_all_domains( void )
         }
         if( state == TDM_DOMAIN_PARTIAL )
         {
-            tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_ALREADY_RUNNING );
+            tdm_set_error( NORA_SPI_I2S_TDM_ERR_ALREADY_RUNNING );
             return false;   // touch nothing (do NOT tear a half-running domain down)
         }
         if( state == TDM_DOMAIN_STOPPED )
@@ -1686,7 +1706,7 @@ bool dspic33ak_spi_i2s_tdm_start_all_domains( void )
     }
     if( seen_mask == 0u )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_NOT_CONFIGURED );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_NOT_CONFIGURED );
         return false;   // no configured domain to start
     }
 
@@ -1698,7 +1718,7 @@ bool dspic33ak_spi_i2s_tdm_start_all_domains( void )
         {
             continue;
         }
-        if( !dspic33ak_spi_i2s_tdm_start_domain( dom ) )
+        if( !nora_spi_i2s_tdm_start_domain( dom ) )
         {
             for( uint8_t d = 0u; d < 32u; d++ )
             {
@@ -1711,7 +1731,7 @@ bool dspic33ak_spi_i2s_tdm_start_all_domains( void )
         }
         newly_started_mask |= ( 1uL << dom );
     }
-    tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_NONE );
+    tdm_set_error( NORA_SPI_I2S_TDM_ERR_NONE );
     return true;
 }
 
@@ -1721,10 +1741,10 @@ bool dspic33ak_spi_i2s_tdm_start_all_domains( void )
 // domain automatically. Idempotent; safe on already-stopped legs.
 static void tdm_stop_all_domains_impl( void )
 {
-    const uint8_t n = dspic33ak_spi_i2s_tdm_instance_count();
+    const uint8_t n = nora_spi_i2s_tdm_instance_count();
     for( uint8_t i = 0u; i < n; i++ )
     {
-        dspic33ak_spi_i2s_tdm_inst_t* leg = dspic33ak_spi_i2s_tdm_inst( i );
+        nora_spi_i2s_tdm_inst_t* leg = nora_spi_i2s_tdm_inst( i );
         if( leg != NULL )
         {
             tdm_inst_stop_impl( leg );
@@ -1737,15 +1757,15 @@ static void tdm_stop_all_domains_impl( void )
 // start_all_domains() so callers never enumerate individual logical legs. Rejects
 // (false, HW unchanged) unless the stream was committed via configure_system() (mode==SYSTEM);
 // a SINGLE-mode stream tears down through inst_stop(). Idempotent success otherwise.
-bool dspic33ak_spi_i2s_tdm_stop_all_domains( void )
+bool nora_spi_i2s_tdm_stop_all_domains( void )
 {
     if( s_config_mode != TDM_CONFIG_MODE_SYSTEM )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_CONFIG_MODE );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_CONFIG_MODE );
         return false;
     }
     tdm_stop_all_domains_impl();
-    tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_NONE );
+    tdm_set_error( NORA_SPI_I2S_TDM_ERR_NONE );
     return true;
 }
 
@@ -1782,15 +1802,15 @@ static void tdm_inst_stop_impl( tdm_spi_leg_t *inst )
 
     // DMA IRQs off + channels off first (no refill), then SPI module + triggers off.
     tdm_inst_soft_stop_dma( inst );
-    dspic33ak_spi_i2s_tdm_hw_soft_stop( inst->spi_inst );
+    nora_spi_i2s_tdm_hw_soft_stop( inst->spi_inst );
 
     // Release the CLC10 50%-FS generator if this instance owned it (disables the flip-flop;
     // PPS routes are left in place, like the rest of stop()). No-op if it didn't.
-    dspic33ak_spi_i2s_tdm_fs_clc_release( inst->spi_inst );
+    nora_spi_i2s_tdm_fs_clc_release( inst->spi_inst );
 
     // Clear pending status/flags, then buffers, before the next start.
     tdm_inst_clear_dma_flags( inst );
-    dspic33ak_spi_i2s_tdm_hw_irq_clear_flags( inst->spi_inst );
+    nora_spi_i2s_tdm_hw_irq_clear_flags( inst->spi_inst );
     tdm_inst_clear_buffers( inst );
 }
 
@@ -1803,20 +1823,20 @@ static void tdm_inst_stop_impl( tdm_spi_leg_t *inst )
  * (mode==SYSTEM -> tear down through stop_domain()/stop_all_domains() instead) or inst is not the
  * primary leg. Returns true after the teardown (or if the primary was already stopped -- idempotent).
  */
-bool dspic33ak_spi_i2s_tdm_inst_stop( dspic33ak_spi_i2s_tdm_inst_t* inst )
+bool nora_spi_i2s_tdm_inst_stop( nora_spi_i2s_tdm_inst_t* inst )
 {
     if( ( inst == NULL ) || !tdm_spi_leg_is_valid( inst ) )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_BAD_INSTANCE );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_BAD_INSTANCE );
         return false;
     }
     if( ( s_config_mode != TDM_CONFIG_MODE_SINGLE ) || !tdm_inst_is_primary( inst ) )
     {
-        tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_CONFIG_MODE );
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_CONFIG_MODE );
         return false;
     }
     tdm_inst_stop_impl( inst );
-    tdm_set_error( DSPIC33AK_SPI_I2S_TDM_ERR_NONE );
+    tdm_set_error( NORA_SPI_I2S_TDM_ERR_NONE );
     return true;
 }
 
@@ -1831,8 +1851,8 @@ bool dspic33ak_spi_i2s_tdm_inst_stop( dspic33ak_spi_i2s_tdm_inst_t* inst )
  * args), or until at least one timed event exists and the high-resolution timer was
  * initialized. clear_peak resets min/max/event afterward.
  */
-bool dspic33ak_spi_i2s_tdm_inst_get_load( dspic33ak_spi_i2s_tdm_inst_t* inst,
-                                          dspic33ak_spi_i2s_tdm_load_t* monitor,
+bool nora_spi_i2s_tdm_inst_get_load( nora_spi_i2s_tdm_inst_t* inst,
+                                          nora_spi_i2s_tdm_load_t* monitor,
                                           bool clear_peak )
 {
     bool     rxie_bak;
@@ -1847,7 +1867,7 @@ bool dspic33ak_spi_i2s_tdm_inst_get_load( dspic33ak_spi_i2s_tdm_inst_t* inst,
     // the snapshot + clear are consistent against the 16-bit core's non-atomic 32-bit
     // reads. The diag module itself does no masking.
     rxie_bak = tdm_rx_ie_disable( inst->rx_dma_ch );
-    valid    = dspic33ak_spi_i2s_tdm_diag_get_load( &inst->diag, monitor, clear_peak );
+    valid    = nora_spi_i2s_tdm_diag_get_load( &inst->diag, monitor, clear_peak );
     tdm_rx_ie_restore( inst->rx_dma_ch, rxie_bak );
 
     return valid;
@@ -1860,8 +1880,8 @@ bool dspic33ak_spi_i2s_tdm_inst_get_load( dspic33ak_spi_i2s_tdm_inst_t* inst,
  * block_count, block_deadline_miss_count, load, and running are THIS instance's.
  * active is engine-wide (the shared clock/source readiness gate).
  */
-bool dspic33ak_spi_i2s_tdm_inst_get_status( dspic33ak_spi_i2s_tdm_inst_t* inst,
-                                            dspic33ak_spi_i2s_tdm_status_t* status,
+bool nora_spi_i2s_tdm_inst_get_status( nora_spi_i2s_tdm_inst_t* inst,
+                                            nora_spi_i2s_tdm_status_t* status,
                                             bool clear_peak )
 {
     bool     rxie_bak;
@@ -1871,12 +1891,12 @@ bool dspic33ak_spi_i2s_tdm_inst_get_status( dspic33ak_spi_i2s_tdm_inst_t* inst,
         return false;
     }
 
-    status->active  = dspic33ak_spi_i2s_tdm_is_active();   // shared clock/source readiness gate
+    status->active  = nora_spi_i2s_tdm_is_active();   // shared clock/source readiness gate
     status->running = inst->running;                       // this instance's running state
 
     // 32-bit reads on a 16-bit core are not atomic vs this instance's RX-block ISR; mask briefly.
     rxie_bak = tdm_rx_ie_disable( inst->rx_dma_ch );
-    dspic33ak_spi_i2s_tdm_diag_read_counts( &inst->diag,
+    nora_spi_i2s_tdm_diag_read_counts( &inst->diag,
                                             &status->block_count,
                                             &status->block_deadline_miss_count );
     status->err_rov_block_count       = inst->diag.err_rov_block_count;   // masked read
@@ -1889,7 +1909,7 @@ bool dspic33ak_spi_i2s_tdm_inst_get_status( dspic33ak_spi_i2s_tdm_inst_t* inst,
     tdm_rx_ie_restore( inst->rx_dma_ch, rxie_bak );
 
     // load monitor (does its own RX-IE guard; honours clear_peak)
-    (void)dspic33ak_spi_i2s_tdm_inst_get_load( inst, &status->load, clear_peak );
+    (void)nora_spi_i2s_tdm_inst_get_load( inst, &status->load, clear_peak );
 
     return true;
 }
@@ -1903,22 +1923,89 @@ bool dspic33ak_spi_i2s_tdm_inst_get_status( dspic33ak_spi_i2s_tdm_inst_t* inst,
  * directly, and use a mutable leg because the per-instance readers honour clear_peak. Guard
  * the index (fail closed -> false) so an out-of-range primary never dereferences the table.
  */
-bool dspic33ak_spi_i2s_tdm_get_load( dspic33ak_spi_i2s_tdm_load_t* monitor, bool clear_peak )
+bool nora_spi_i2s_tdm_get_load( nora_spi_i2s_tdm_load_t* monitor, bool clear_peak )
 {
     if( s_stream.primary_leg_index >= s_stream.leg_count )
     {
         return false;
     }
-    return dspic33ak_spi_i2s_tdm_inst_get_load( &s_stream.legs[s_stream.primary_leg_index], monitor, clear_peak );
+    return nora_spi_i2s_tdm_inst_get_load( &s_stream.legs[s_stream.primary_leg_index], monitor, clear_peak );
 }
 
-bool dspic33ak_spi_i2s_tdm_get_status( dspic33ak_spi_i2s_tdm_status_t* status, bool clear_peak )
+bool nora_spi_i2s_tdm_get_status( nora_spi_i2s_tdm_status_t* status, bool clear_peak )
 {
     if( s_stream.primary_leg_index >= s_stream.leg_count )
     {
         return false;
     }
-    return dspic33ak_spi_i2s_tdm_inst_get_status( &s_stream.legs[s_stream.primary_leg_index], status, clear_peak );
+    return nora_spi_i2s_tdm_inst_get_status( &s_stream.legs[s_stream.primary_leg_index], status, clear_peak );
+}
+
+
+//===========================================================
+// Engine-wide TDMsum (combined TDM-occupancy) profiler: masked public wrappers.
+//
+// The profiler global is written by EVERY TDM RX-block ISR (enter/exit hooks in tdm_rx_block).
+// Those ISRs share PRIO_TDM_DMA and never preempt each other, but a FOREGROUND access is still
+// non-atomic against them on this 16-bit core, so each wrapper masks EVERY configured leg's RX
+// DMA IE around the profiler call (the same bracket the per-leg readers use, generalised to all
+// legs). The raw profiler ops do no masking themselves.
+//===========================================================
+
+// Disable every configured leg's RX DMA IE, saving prior enables into `bak[]` (indexed by leg).
+static inline void tdm_all_rx_ie_disable( bool bak[TDM_SPI_LEG_COUNT] )
+{
+    uint8_t i;
+    for( i = 0u; i < s_stream.leg_count; i++ )
+    {
+        bak[i] = tdm_rx_ie_disable( s_stream.legs[i].rx_dma_ch );
+    }
+}
+
+// Restore every configured leg's RX DMA IE from `bak[]` (re-arms only those previously enabled).
+static inline void tdm_all_rx_ie_restore( const bool bak[TDM_SPI_LEG_COUNT] )
+{
+    uint8_t i;
+    for( i = 0u; i < s_stream.leg_count; i++ )
+    {
+        tdm_rx_ie_restore( s_stream.legs[i].rx_dma_ch, bak[i] );
+    }
+}
+
+void nora_spi_i2s_tdm_tdmsum_configure( uint32_t window_period_ticks )
+{
+    bool bak[TDM_SPI_LEG_COUNT];
+    const uint32_t now = nora_high_res_timer_get_count();
+
+    tdm_all_rx_ie_disable( bak );
+    nora_spi_i2s_tdm_dspic33a_sumprof_configure( now, window_period_ticks );
+    tdm_all_rx_ie_restore( bak );
+}
+
+void nora_spi_i2s_tdm_tdmsum_reset( void )
+{
+    bool bak[TDM_SPI_LEG_COUNT];
+    const uint32_t now = nora_high_res_timer_get_count();
+
+    tdm_all_rx_ie_disable( bak );
+    nora_spi_i2s_tdm_dspic33a_sumprof_reset( now );
+    tdm_all_rx_ie_restore( bak );
+}
+
+bool nora_spi_i2s_tdm_tdmsum_get( nora_spi_i2s_tdm_tdmsum_t* out, bool clear_peak )
+{
+    bool bak[TDM_SPI_LEG_COUNT];
+
+    if( out == NULL )
+    {
+        return false;
+    }
+
+    tdm_all_rx_ie_disable( bak );
+    nora_spi_i2s_tdm_dspic33a_sumprof_snapshot( out, clear_peak );
+    tdm_all_rx_ie_restore( bak );
+
+    return out->initialized;
 }
 
 
@@ -1928,7 +2015,7 @@ bool dspic33ak_spi_i2s_tdm_get_status( dspic33ak_spi_i2s_tdm_status_t* status, b
 // The HAL ships its own DMA interrupt vectors so the transport is turnkey: link the HAL
 // and the _DMAnInterrupt slots are filled, the DMA channels are already armed by
 // start(), and the integrator only registers a per-instance block callback. (Previously
-// these lived in a separate optional TU dspic33ak_spi_i2s_tdm_irq.c + a forwarding
+// these lived in a separate optional TU nora_spi_i2s_tdm_irq.c + a forwarding
 // worker; folded back here -- no cross-TU hop -- since the toolchain/IVT coupling is
 // confined to this one section.)
 //
@@ -1942,7 +2029,7 @@ bool dspic33ak_spi_i2s_tdm_get_status( dspic33ak_spi_i2s_tdm_status_t* status, b
 // The vector NAME (_DMA<n>Interrupt) encodes the DMA channel, so each vector is bound to
 // its conf.h RX-DMA channel by a compile-time assert: at the default mapping this defines
 //     _DMA0Interrupt   (leg SPI1 RX, DMA0)
-//     _DMA2Interrupt   (leg SPI2 RX, DMA2, when DSPIC33AK_TDM_USE_SPI2)
+//     _DMA2Interrupt   (leg SPI2 RX, DMA2, when NORA_TDM_USE_SPI2)
 // Change an RX-DMA channel macro in conf.h and the build FAILS (assert) until the vector
 // name + its assert are updated to match. IVT slots are chip-wide exclusive; a genuine
 // clash surfaces as a duplicate-_DMAnInterrupt link error.
@@ -1953,83 +2040,83 @@ bool dspic33ak_spi_i2s_tdm_get_status( dspic33ak_spi_i2s_tdm_status_t* status, b
 // passed -- tdm_rx_block reads the TX channel's DMA address to pick the writable TX half
 // -- but the TX channel itself raises no interrupt (interrupt-less; see above).
 //
-// Compiled only when the HAL owns the IVT (DSPIC33AK_TDM_DEFINE_DMA_VECTORS=1, default).
-// With =0 the integrator owns the vectors and calls dspic33ak_spi_i2s_tdm_inst_rx_isr()
+// Compiled only when the HAL owns the IVT (NORA_TDM_DEFINE_DMA_VECTORS=1, default).
+// With =0 the integrator owns the vectors and calls nora_spi_i2s_tdm_inst_rx_isr()
 // (below) from their own _DMA<rx>Interrupt instead.
-#if DSPIC33AK_TDM_DEFINE_DMA_VECTORS
+#if NORA_TDM_DEFINE_DMA_VECTORS
 // Explicit HAL-owned RX vectors (was X-macro-generated). tdm_rx_block is same-TU static inline, so
 // the literal channel numbers + half size fold into the register access -- NO runtime channel->leg
 // lookup. The vector NAME encodes the DMA channel number, so bind each name to its conf.h channel
 // with a compile-time assert: change the RX-DMA channel macro and the build FAILS until the vector
 // name (and its assert) is updated to match. (tx) is passed so tdm_rx_block can pick the writable TX
 // half; the TX channel raises no interrupt.
-#if DSPIC33AK_TDM_BASE_ON_SPI34
-TDM_COMPILEASSERT( DSPIC33AK_TDM_SPI3_RX_DMA == 4 );   /* logical A -> _DMA4Interrupt */
+#if NORA_TDM_BASE_ON_SPI34
+TDM_COMPILEASSERT( NORA_TDM_SPI3_RX_DMA == 4 );   /* logical A -> _DMA4Interrupt */
 void __attribute__((interrupt, context)) _DMA4Interrupt(void)
 {
     tdm_rx_block( &s_spi_legs[TDM_SPI_LEG_SPI1],
-                  DSPIC33AK_TDM_SPI3_RX_DMA, DSPIC33AK_TDM_SPI3_TX_DMA,
-                  TDM_LEG_HALF_WORDS(DSPIC33AK_TDM_SLOTS_PER_FS, DSPIC33AK_TDM_BLOCK_FRAMES) );
+                  NORA_TDM_SPI3_RX_DMA, NORA_TDM_SPI3_TX_DMA,
+                  TDM_LEG_HALF_WORDS(NORA_TDM_SLOTS_PER_FS, NORA_TDM_BLOCK_FRAMES) );
 }
 #else
-TDM_COMPILEASSERT( DSPIC33AK_TDM_SPI1_RX_DMA == 0 );   /* _DMA0Interrupt binding */
+TDM_COMPILEASSERT( NORA_TDM_SPI1_RX_DMA == 0 );   /* _DMA0Interrupt binding */
 void __attribute__((interrupt, context)) _DMA0Interrupt(void)
 {
     tdm_rx_block( &s_spi_legs[TDM_SPI_LEG_SPI1],
-                  DSPIC33AK_TDM_SPI1_RX_DMA, DSPIC33AK_TDM_SPI1_TX_DMA,
-                  TDM_LEG_HALF_WORDS(DSPIC33AK_TDM_SLOTS_PER_FS, DSPIC33AK_TDM_BLOCK_FRAMES) );
+                  NORA_TDM_SPI1_RX_DMA, NORA_TDM_SPI1_TX_DMA,
+                  TDM_LEG_HALF_WORDS(NORA_TDM_SLOTS_PER_FS, NORA_TDM_BLOCK_FRAMES) );
 }
 #endif
-#if DSPIC33AK_TDM_USE_SPI2
-#if DSPIC33AK_TDM_BASE_ON_SPI34
-TDM_COMPILEASSERT( DSPIC33AK_TDM_SPI4_RX_DMA == 6 );   /* logical B -> _DMA6Interrupt */
+#if NORA_TDM_USE_SPI2
+#if NORA_TDM_BASE_ON_SPI34
+TDM_COMPILEASSERT( NORA_TDM_SPI4_RX_DMA == 6 );   /* logical B -> _DMA6Interrupt */
 void __attribute__((interrupt, context)) _DMA6Interrupt(void)
 {
     tdm_rx_block( &s_spi_legs[TDM_SPI_LEG_SPI2],
-                  DSPIC33AK_TDM_SPI4_RX_DMA, DSPIC33AK_TDM_SPI4_TX_DMA,
-                  TDM_LEG_HALF_WORDS(DSPIC33AK_TDM_SLOTS_PER_FS, DSPIC33AK_TDM_BLOCK_FRAMES) );
+                  NORA_TDM_SPI4_RX_DMA, NORA_TDM_SPI4_TX_DMA,
+                  TDM_LEG_HALF_WORDS(NORA_TDM_SLOTS_PER_FS, NORA_TDM_BLOCK_FRAMES) );
 }
 #else
-TDM_COMPILEASSERT( DSPIC33AK_TDM_SPI2_RX_DMA == 2 );   /* _DMA2Interrupt binding */
+TDM_COMPILEASSERT( NORA_TDM_SPI2_RX_DMA == 2 );   /* _DMA2Interrupt binding */
 void __attribute__((interrupt, context)) _DMA2Interrupt(void)
 {
     tdm_rx_block( &s_spi_legs[TDM_SPI_LEG_SPI2],
-                  DSPIC33AK_TDM_SPI2_RX_DMA, DSPIC33AK_TDM_SPI2_TX_DMA,
-                  TDM_LEG_HALF_WORDS(DSPIC33AK_TDM_SLOTS_PER_FS, DSPIC33AK_TDM_BLOCK_FRAMES) );
+                  NORA_TDM_SPI2_RX_DMA, NORA_TDM_SPI2_TX_DMA,
+                  TDM_LEG_HALF_WORDS(NORA_TDM_SLOTS_PER_FS, NORA_TDM_BLOCK_FRAMES) );
 }
 #endif
-#endif // DSPIC33AK_TDM_USE_SPI2
-#if DSPIC33AK_TDM_USE_SPI3 && !DSPIC33AK_TDM_BASE_ON_SPI34
-TDM_COMPILEASSERT( DSPIC33AK_TDM_SPI3_RX_DMA == 4 );   /* _DMA4Interrupt binding */
+#endif // NORA_TDM_USE_SPI2
+#if NORA_TDM_USE_SPI3 && !NORA_TDM_BASE_ON_SPI34
+TDM_COMPILEASSERT( NORA_TDM_SPI3_RX_DMA == 4 );   /* _DMA4Interrupt binding */
 void __attribute__((interrupt, context)) _DMA4Interrupt(void)
 {
     tdm_rx_block( &s_spi_legs[TDM_SPI_LEG_SPI3],
-                  DSPIC33AK_TDM_SPI3_RX_DMA, DSPIC33AK_TDM_SPI3_TX_DMA,
-                  TDM_LEG_HALF_WORDS(DSPIC33AK_TDM_SLOTS_PER_FS, DSPIC33AK_TDM_BLOCK_FRAMES) );
+                  NORA_TDM_SPI3_RX_DMA, NORA_TDM_SPI3_TX_DMA,
+                  TDM_LEG_HALF_WORDS(NORA_TDM_SLOTS_PER_FS, NORA_TDM_BLOCK_FRAMES) );
 }
-#endif // DSPIC33AK_TDM_USE_SPI3
-#if DSPIC33AK_TDM_USE_SPI4 && !DSPIC33AK_TDM_BASE_ON_SPI34
-TDM_COMPILEASSERT( DSPIC33AK_TDM_SPI4_RX_DMA == 6 );   /* _DMA6Interrupt binding */
+#endif // NORA_TDM_USE_SPI3
+#if NORA_TDM_USE_SPI4 && !NORA_TDM_BASE_ON_SPI34
+TDM_COMPILEASSERT( NORA_TDM_SPI4_RX_DMA == 6 );   /* _DMA6Interrupt binding */
 void __attribute__((interrupt, context)) _DMA6Interrupt(void)
 {
     tdm_rx_block( &s_spi_legs[TDM_SPI_LEG_SPI4],
-                  DSPIC33AK_TDM_SPI4_RX_DMA, DSPIC33AK_TDM_SPI4_TX_DMA,
-                  TDM_LEG_HALF_WORDS(DSPIC33AK_TDM_SLOTS_PER_FS, DSPIC33AK_TDM_BLOCK_FRAMES) );
+                  NORA_TDM_SPI4_RX_DMA, NORA_TDM_SPI4_TX_DMA,
+                  TDM_LEG_HALF_WORDS(NORA_TDM_SLOTS_PER_FS, NORA_TDM_BLOCK_FRAMES) );
 }
-#endif // DSPIC33AK_TDM_USE_SPI4
-#endif // DSPIC33AK_TDM_DEFINE_DMA_VECTORS
+#endif // NORA_TDM_USE_SPI4
+#endif // NORA_TDM_DEFINE_DMA_VECTORS
 
 /*
  * Public RX-block ISR entry for ONE instance (vector-ownership opt-out path).
  *
  * Runs the same block work as the HAL's own explicit _DMA<rx>Interrupt vector, but is a plain
  * (non-interrupt) function the integrator calls from their OWN _DMA<rx>Interrupt when
- * DSPIC33AK_TDM_DEFINE_DMA_VECTORS=0. Channels + half size come from the leg at runtime
+ * NORA_TDM_DEFINE_DMA_VECTORS=0. Channels + half size come from the leg at runtime
  * (the explicit turnkey vectors fold them as constants; this dispatch trades that for
  * IVT ownership). NULL inst is ignored. Call it for the instance's RX channel only --
  * TX is interrupt-less.
  */
-void dspic33ak_spi_i2s_tdm_inst_rx_isr( dspic33ak_spi_i2s_tdm_inst_t* inst )
+void nora_spi_i2s_tdm_inst_rx_isr( nora_spi_i2s_tdm_inst_t* inst )
 {
     if( inst == NULL )
     {
@@ -2098,10 +2185,10 @@ static void tdm_inst_soft_stop_dma( const tdm_spi_leg_t *leg )
     {
         return;
     }
-    dspic33ak_dma_irq_enable( leg->rx_dma_ch, false );
-    dspic33ak_dma_irq_enable( leg->tx_dma_ch, false );
-    (void)dspic33ak_dma_channel_enable( leg->rx_dma_ch, false );
-    (void)dspic33ak_dma_channel_enable( leg->tx_dma_ch, false );
+    nora_dma_irq_enable( leg->rx_dma_ch, false );
+    nora_dma_irq_enable( leg->tx_dma_ch, false );
+    (void)nora_dma_channel_enable( leg->rx_dma_ch, false );
+    (void)nora_dma_channel_enable( leg->tx_dma_ch, false );
 }
 
 
@@ -2117,10 +2204,10 @@ static void tdm_inst_clear_dma_flags( const tdm_spi_leg_t *leg )
     {
         return;
     }
-    dspic33ak_dma_clear_status( leg->rx_dma_ch );
-    dspic33ak_dma_clear_status( leg->tx_dma_ch );
-    dspic33ak_dma_clear_irq_flag( leg->rx_dma_ch );
-    dspic33ak_dma_clear_irq_flag( leg->tx_dma_ch );
+    nora_dma_clear_status( leg->rx_dma_ch );
+    nora_dma_clear_status( leg->tx_dma_ch );
+    nora_dma_clear_irq_flag( leg->rx_dma_ch );
+    nora_dma_clear_irq_flag( leg->tx_dma_ch );
 }
 
 
@@ -2244,7 +2331,7 @@ static const tdm_spi_leg_t *tdm_stream_primary_leg( const tdm_stream_t *stream )
  * because the HAL forces it; an instance on an independent clock can be its own master.
  */
 static bool tdm_spi_leg_get_effective_config( const tdm_spi_leg_t *leg,
-                                              dspic33ak_spi_i2s_tdm_config_t *effective_cfg )
+                                              nora_spi_i2s_tdm_config_t *effective_cfg )
 {
     if( ( effective_cfg == NULL ) || !tdm_spi_leg_is_valid( leg ) || !leg->config_valid )
     {
@@ -2264,8 +2351,8 @@ static bool tdm_spi_leg_get_effective_config( const tdm_spi_leg_t *leg,
 
 // Deadline-miss, ISR load/time, and the debug scope-GPIO/printf instrumentation
 // that used to live here (local_dma_debug_check / _start / _end) now live in the
-// separated diagnostics module (dspic33ak_spi_i2s_tdm_diag.*), reached through
-// dspic33ak_spi_i2s_tdm_diag_check_deadline / _isr_begin / _isr_end.
+// separated diagnostics module (nora_spi_i2s_tdm_diag.*), reached through
+// nora_spi_i2s_tdm_diag_check_deadline / _isr_begin / _isr_end.
 
 
 
@@ -2299,15 +2386,15 @@ static inline void tdm_get_src_ptr( uint32_t             dma_stat,
     }
 
     // half_pos = this instance's ping/pong half size in words (slots * blk).
-    switch( dspic33ak_dma_half_from_status( dma_stat ) )
+    switch( nora_dma_half_from_status( dma_stat ) )
     {
-    case DSPIC33AK_DMA_HALF_FIRST:
+    case NORA_DMA_HALF_FIRST:
         // SW can use Ping(A) side buffer.
         //////////////////////////////////////
         *src_pptr  = &pRxDat[ DMA_BUF_PING_POS ];
         break;
 
-    case DSPIC33AK_DMA_HALF_SECOND:
+    case NORA_DMA_HALF_SECOND:
         // SW can use Pong(B) side buffer.
         //////////////////////////////////////
         *src_pptr  = &pRxDat[ half_pos ];
@@ -2380,7 +2467,7 @@ static inline void tdm_get_dest_ptr( uint32_t       dma_tx_addr,
  * with 4/8/16/32 slots. This keeps configure() from programming untested framing or a
  * geometry the static buffers were not sized for.
  */
-static bool tdm_config_is_supported( const tdm_spi_leg_t* leg, const dspic33ak_spi_i2s_tdm_config_t* cfg )
+static bool tdm_config_is_supported( const tdm_spi_leg_t* leg, const nora_spi_i2s_tdm_config_t* cfg )
 {
     if( ( cfg == NULL ) || ( leg == NULL ) )  return false;
 
@@ -2391,17 +2478,17 @@ static bool tdm_config_is_supported( const tdm_spi_leg_t* leg, const dspic33ak_s
 
     // role must be an explicit SLAVE or MASTER -- otherwise a garbage value would be
     // silently treated as SLAVE everywhere (role == MASTER ? ... : SLAVE).
-    if( ( cfg->clock_role != DSPIC33AK_SPI_I2S_TDM_CLOCK_SLAVE ) &&
-        ( cfg->clock_role != DSPIC33AK_SPI_I2S_TDM_CLOCK_MASTER ) )
+    if( ( cfg->clock_role != NORA_SPI_I2S_TDM_CLOCK_SLAVE ) &&
+        ( cfg->clock_role != NORA_SPI_I2S_TDM_CLOCK_MASTER ) )
     {
         return false;
     }
 
-    if( cfg->format == DSPIC33AK_SPI_I2S_TDM_FORMAT_I2S )
+    if( cfg->format == NORA_SPI_I2S_TDM_FORMAT_I2S )
     {
         if( cfg->slots_per_fs != 2u )   return false;        // I2S = 2 slots (L/R)
     }
-    else if( cfg->format == DSPIC33AK_SPI_I2S_TDM_FORMAT_TDM )
+    else if( cfg->format == NORA_SPI_I2S_TDM_FORMAT_TDM )
     {
         // TDM: FRMCNT supports FS every 4/8/16/32 words.
         if( ( cfg->slots_per_fs != 4u ) && ( cfg->slots_per_fs != 8u ) &&
@@ -2417,8 +2504,8 @@ static bool tdm_config_is_supported( const tdm_spi_leg_t* leg, const dspic33ak_s
 
     // fs_shape must be a known value -- otherwise a garbage value would be silently
     // treated as FS_PULSE by hw_apply_config (shape == FS_50PCT ? ... : ...).
-    if( ( cfg->fs_shape != DSPIC33AK_SPI_I2S_TDM_FS_PULSE ) &&
-        ( cfg->fs_shape != DSPIC33AK_SPI_I2S_TDM_FS_50PCT ) )
+    if( ( cfg->fs_shape != NORA_SPI_I2S_TDM_FS_PULSE ) &&
+        ( cfg->fs_shape != NORA_SPI_I2S_TDM_FS_50PCT ) )
     {
         return false;
     }
@@ -2443,12 +2530,12 @@ static bool tdm_config_is_supported( const tdm_spi_leg_t* leg, const dspic33ak_s
  */
 static inline bool tdm_rx_ie_disable( uint8_t rx_dma_ch )
 {
-    return dspic33ak_dma_irq_disable_save( rx_dma_ch );
+    return nora_dma_irq_disable_save_hot( (nora_dma_channel_t)rx_dma_ch );
 }
 
 static inline void tdm_rx_ie_restore( uint8_t rx_dma_ch, bool was_enabled )
 {
-    dspic33ak_dma_irq_restore( rx_dma_ch, was_enabled );
+    nora_dma_irq_restore_hot( (nora_dma_channel_t)rx_dma_ch, was_enabled );
 }
 
 
@@ -2465,51 +2552,73 @@ static inline void tdm_rx_ie_restore( uint8_t rx_dma_ch, bool was_enabled )
  * call this with a runtime channel value. half_pos (= this instance's slots*blk) is
  * likewise a compile-time literal so the ping/pong pointer math stays folded.
  */
-static inline void tdm_rx_block( tdm_spi_leg_t* inst, uint8_t rx_ch, uint8_t tx_ch, uint32_t half_pos )
+// always_inline: see the forward declaration for why this is required and not advisory.
+static inline __attribute__((always_inline)) void tdm_rx_block(
+    tdm_spi_leg_t* inst, uint8_t rx_ch, uint8_t tx_ch, uint32_t half_pos )
 {
-          uint32_t  dma_stat;
+    nora_dma_status_t dma_stat;
     const int32_t*  src_ptr = NULL;
           int32_t*  dst_ptr = NULL;
 
-    dspic33ak_spi_i2s_tdm_diag_isr_begin( &inst->diag );
+    // Engine-wide TDMsum union hook. Measured over the SAME wall-time as the per-leg monitor
+    // below (bracketing it), so TDM1 and TDM2 add into one common-window occupancy. Gated on
+    // the same high-res-timer availability as the per-leg monitor; sum_meas is stable across
+    // this ISR so enter/exit stay balanced on every return path.
+    const bool sum_meas = nora_high_res_timer_is_initialized();
+    if( sum_meas )
+    {
+        nora_spi_i2s_tdm_dspic33a_sumprof_enter( nora_high_res_timer_get_count() );
+    }
+
+    nora_spi_i2s_tdm_diag_isr_begin( &inst->diag );
 
     // Sample + fold this instance's SPIxSTAT framed-transport health flags (SPIROV/SPITUR/
     // FRMERR) into its diag. Cheap (1 SFR read + masked ack); normally zero. The HAL only
     // records these counters -- recovery policy, if any, belongs to the application.
-    dspic33ak_spi_i2s_tdm_diag_note_errflags( &inst->diag,
-        dspic33ak_spi_i2s_tdm_hw_sample_ack_errflags( inst->spi_inst ) );
+    nora_spi_i2s_tdm_diag_note_errflags( &inst->diag,
+        nora_spi_i2s_tdm_hw_sample_ack_errflags( inst->spi_inst ) );
 
-    dma_stat = dspic33ak_dma_isr_snapshot( rx_ch );
+    dma_stat = nora_dma_isr_snapshot_hot( (nora_dma_channel_t)rx_ch );
 
     // Preserve DMAxSTAT before HALF/DONE resolution. In particular, an OVERRUN-only
     // snapshot has no completed half and will return below; its root-cause evidence must
     // survive that early exit in the public diagnostics.
-    dspic33ak_spi_i2s_tdm_diag_note_dma_status( &inst->diag, dma_stat );
+    nora_spi_i2s_tdm_diag_note_dma_status( &inst->diag, dma_stat );
 
     // Stream-health check; diagnostic print is debug-only. Each instance counts its
     // own deadline misses in its own diag (no shared/master counter).
-    dspic33ak_spi_i2s_tdm_diag_check_deadline( &inst->diag, rx_ch, dma_stat );
+    nora_spi_i2s_tdm_diag_check_deadline_hot( &inst->diag,
+                                                   rx_ch,
+                                                   dma_stat );
 
     // Map this instance's completed RX half (callback input) and the TX half it may
     // fill (callback output). Each instance handles only its own RX/TX -- no dst_b.
     tdm_get_src_ptr( dma_stat, inst->rx_buffer, half_pos, &src_ptr );
     if( src_ptr == NULL )
     {
-        dspic33ak_spi_i2s_tdm_diag_isr_end( &inst->diag );
+        nora_spi_i2s_tdm_diag_isr_end( &inst->diag );
+        if( sum_meas )
+        {
+            nora_spi_i2s_tdm_dspic33a_sumprof_exit( nora_high_res_timer_get_count() );
+        }
         return;
     }
-    tdm_get_dest_ptr( dspic33ak_dma_read_src( tx_ch ), inst->tx_buffer, half_pos, &dst_ptr );
+    tdm_get_dest_ptr( nora_dma_read_src_hot( (nora_dma_channel_t)tx_ch ), inst->tx_buffer, half_pos, &dst_ptr );
     if( dst_ptr == NULL )
     {
         // TX-DMA source is out of the buffer envelope (reload boundary / just-stopped /
         // first block / fault): there is no writable TX half this block. Skip rather than
         // hand the callback a NULL dst -- the public contract is that dst is always valid
         // when block_cb runs. (Mirrors the src_ptr guard above.)
-        dspic33ak_spi_i2s_tdm_diag_isr_end( &inst->diag );
+        nora_spi_i2s_tdm_diag_isr_end( &inst->diag );
+        if( sum_meas )
+        {
+            nora_spi_i2s_tdm_dspic33a_sumprof_exit( nora_high_res_timer_get_count() );
+        }
         return;
     }
 
-    dspic33ak_spi_i2s_tdm_diag_note_block( &inst->diag );   // one completed block (read via get_status)
+    nora_spi_i2s_tdm_diag_note_block( &inst->diag );   // one completed block (read via get_status)
 
     // Deliver the completed block through this instance's registered callback. The
     // callee owns its DSP work buffers; the driver passes only this instance's
@@ -2521,7 +2630,11 @@ static inline void tdm_rx_block( tdm_spi_leg_t* inst, uint8_t rx_ch, uint8_t tx_
         inst->block_cb( src_ptr, dst_ptr, inst->block_user );
     }
 
-    dspic33ak_spi_i2s_tdm_diag_isr_end( &inst->diag );
+    nora_spi_i2s_tdm_diag_isr_end( &inst->diag );
+    if( sum_meas )
+    {
+        nora_spi_i2s_tdm_dspic33a_sumprof_exit( nora_high_res_timer_get_count() );
+    }
 }
 
 

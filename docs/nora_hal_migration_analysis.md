@@ -69,7 +69,7 @@ vendored upstream (`src/hal_*/UPSTREAM.md`).
 ## 4. Blast radius outside `src/hal_*`
 
 `dspic33ak_*` references in consumer code: `src/app` 271, root
-(`main.c`, `board.*`, `board_pins.h`, `dspic33ak_spi_i2s_tdm_conf.h`) 95,
+(`main.c`, `board.*`, `board_pins.h`, `nora_spi_i2s_tdm_conf.h`) 95,
 `src/board_components` 35, `src/console` 18, `src/fw_update` 16,
 `src/clock` 9 — ≈444 lowercase refs, plus the `DSPIC33AK_*` macro set
 (`..._I2C_OK` 99, `..._UART_OK` 63, `..._CANFD_OK` 56, TDM geometry, …).
@@ -96,7 +96,7 @@ header (or compiling it out).
    copy sonora files, delete the old ones, update `configurations.xml`,
    rename call sites. Each step builds.
 2. **spi_i2s_tdm** — big but prefix-only; includes renaming
-   `src/dspic33ak_spi_i2s_tdm_conf.h` → `nora_spi_i2s_tdm_conf.h`.
+   `src/dspic33ak_spi_i2s_tdm_conf.h` → `src/nora_spi_i2s_tdm_conf.h`.
 3. **clock** — rename `clkgen_configure`, adopt the new getters,
    re-check `src/clock` (9 refs) against sonora's PLL model.
 4. **i2c** — translate `reg_irq_*` → `device_*_irq_*` at the call sites.
@@ -128,3 +128,63 @@ Cross-module `#include` among sonora `src/hal_*` is a single edge:
 `nora_high_res_timer.h`, `nora_tick_timer.h`. Every other module includes only
 its own headers. So the §6 order is sound as long as **dma and timer precede
 spi_i2s_tdm**; all other modules are independent and may be reordered freely.
+
+## 9. What the header-symbol comparison missed (measured during steps 1-3)
+
+The §3 table was built from exported *identifier* names. Three classes of delta
+are invisible to that method and only showed up at compile time:
+
+1. **Struct fields.** `nora_dma_channel_cfg_t` renamed `trigger_sel`
+   (raw `uint8_t` DMAxSELbits.CHSEL id) to `trigger` (logical
+   `nora_dma_trigger_t`). Same field count, different meaning — a semantic
+   change, not a rename. One call site (the TDM backend), fixed by vendoring
+   Sonora's TDM in the same step.
+2. **Consumers reaching into a *register* header.** The starter's TDM diag read
+   `DSPIC33AK_DMA_STAT_OVERRUN/HALF/DONE` out of the DMA reg header. NORA
+   deletes those macros and answers the same question through
+   `nora_dma_status_has_overrun()` / `_has_completed_half()` — which is exactly
+   what the §3 "sonora-only +10" additions are for. So a module's *additions*
+   can be the mandatory replacement for a consumer habit, not optional extras.
+3. **Function-like UPPER-CASE APIs.** `DSPIC33AK_UDID_Read`,
+   `DSPIC33AK_NVM_PageErase`, … A regex for `dspic33ak_*(` finds none of them.
+
+Consequence for the remaining modules (clock, i2c, uart, can): expect the
+compiler to surface deltas the header diff does not, especially struct fields
+and reg-macro reach-through.
+
+## 10. Build-flow gotcha
+
+`buildtools/build.ps1` regenerates `firmware.X/nbproject/Makefile-*.mk` only
+with `-Full` (or when the makefile is missing). Those generated makefiles are
+tracked, and they carry the *source file list*. So after every
+`configurations.xml` edit the build must be `build.ps1 -Full`; a bare
+`build.ps1` fails with `No rule to make target '../src/.../<old name>.c'`.
+
+## 11. Program-size effect
+
+| after step | program-region bytes | delta |
+|---|---|---|
+| base (`7d12e42`) | 84,116 | — |
+| step 1 (spi/timer/nvm/udid) | 84,116 | 0 |
+| step 3 (dma/gpio + spi_i2s_tdm) | 91,364 | **+7,248** |
+
+The +7,248 B is Sonora's richer TDM module: `sumprof_*` / `tdmsum_*` ISR-load
+profiling and the extra diag paths are part of its public API and are compiled
+unconditionally (only `ENA_TDM_DBG` blocks are gated). Nothing in the starter
+calls them. This is HAL capability, not starter functionality, so it does not
+contradict the "no new features" decision — but it is a real 7 kB. Options if
+that matters: accept it; enable `--gc-sections` *with* per-function sections in
+the project (they only work together); or gate the profiling behind a conf
+macro upstream in Sonora.
+
+## 12. Sonora-side residues noticed while vendoring
+
+Reported here, deliberately **not** fixed in this starter (donor files are kept
+byte-identical to Sonora):
+
+- `nora_nvm.h` keeps `NORA_NVM_PageErase` / `NORA_NVM_ReadWord` / … —
+  callable functions spelled `NORA_*`, which `nora_hal_public_api.md` reserves
+  for compile-time identifiers only.
+- `nora_spi_dspic33a.c` still uses file-local `DSPIC33AK_SPI_REG_ROW` /
+  `DSPIC33AK_SPI_ARRAY_LEN` macros; `nora_dma_dspic33a_reg.h` likewise keeps
+  `DSPIC33AK_DMA_*` bit macros. Private, but leftovers of the rename.

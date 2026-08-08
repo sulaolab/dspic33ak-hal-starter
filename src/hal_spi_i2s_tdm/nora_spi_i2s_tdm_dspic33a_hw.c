@@ -6,9 +6,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
-#include "dspic33ak_dma.h"               // DMA channel config/enable
-#include "dspic33ak_spi_i2s_tdm_reg.h"   // SPI framed-mode register masks (XC-DSC-free)
-#include "dspic33ak_spi_i2s_tdm_hw.h"
+#include "nora_dma.h"               // DMA channel config/enable
+#include "nora_spi_i2s_tdm_dspic33a_reg.h"   // SPI framed-mode register masks (XC-DSC-free)
+#include "nora_spi_i2s_tdm_dspic33a_hw.h"
 
 
 //===========================================================
@@ -35,31 +35,31 @@
 // Enum & Struct typedef (silicon facts)
 //===========================================================
 typedef struct {
-    volatile uint32_t *ie_reg;
-    uint32_t           ie_mask;
-    volatile uint32_t *if_reg;
-    uint32_t           if_mask;
-} tdm_cpu_irq_t;
-
-typedef struct {
     volatile void     *spi_buf;     // &SPIxBUF
     volatile uint32_t *con1;        // &SPIxCON1
     volatile uint32_t *stat;        // &SPIxSTAT (sticky error/health flags: SPIROV/SPITUR/FRMERR)
     volatile uint32_t *brg;         // &SPIxBRG
     volatile uint32_t *imsk;        // &SPIxIMSK
-    uint8_t            rx_trigger;  // DMAxSELbits.CHSEL for SPIxRX (data sheet Table 13-2)
-    uint8_t            tx_trigger;  // DMAxSELbits.CHSEL for SPIxTX (data sheet Table 13-2)
-    tdm_cpu_irq_t      rx_irq;      // CPU IEC/IFS bit for SPIxRX interrupt
-    tdm_cpu_irq_t      tx_irq;      // CPU IEC/IFS bit for SPIxTX interrupt
+    nora_dma_trigger_t rx_trigger;  // logical DMA event for SPIxRX
+    nora_dma_trigger_t tx_trigger;  // logical DMA event for SPIxTX
 } tdm_spi_dev_t;
+// NOTE: the CPU RX/TX interrupt flag and enable bits are deliberately not in this
+// table.  They live in IFSx/IECx, shared by every peripheral - on AK512 the same
+// IEC2 byte carries SPI3/SPI4 enables next to DMA0/1/2IE - so writing them through
+// a register pointer + runtime mask is a read-modify-write that can undo a bit
+// another interrupt changed in between.  hw_spi_irq_bits_* below write the DFP bit
+// aliases instead, which also removes the AK128 IEC1/IEC2 bank straddle from this
+// table.
 
 
 //===========================================================
 // Function Prototype (private)
 //===========================================================
 static bool        hw_inst_valid( tdm_spi_inst_t inst );
-static bool        hw_dma_config_channel( tdm_spi_inst_t inst, uint8_t dma_ch, int32_t *buffer, uint32_t count, bool is_rx );
+static bool        hw_dma_config_channel( tdm_spi_inst_t inst, nora_dma_channel_t dma_ch, int32_t *buffer, uint32_t count, bool is_rx );
 static void        hw_spi_irq_enable( tdm_spi_inst_t inst, bool enable );
+static void        hw_spi_irq_bits_enable( tdm_spi_inst_t inst, bool enable );
+static void        hw_spi_irq_bits_clear_flags( tdm_spi_inst_t inst );
 static void        hw_spi_irq_disable_clear( tdm_spi_inst_t inst );
 
 
@@ -72,57 +72,42 @@ static void        hw_spi_irq_disable_clear( tdm_spi_inst_t inst );
 // transport core (s_spi_legs[]); the core passes the relevant fields down here.
 static const tdm_spi_dev_t s_spi_dev[] =
 {
-#if DSPIC33AK_SPI_I2S_TDM_DEVICE == DSPIC33AK_SPI_I2S_TDM_DEV_AK512
+#if NORA_SPI_I2S_TDM_DSPIC33A_DEVICE == NORA_SPI_I2S_TDM_DSPIC33A_DEV_AK512
     // CHSEL[7:0] values below are transcribed from the data sheet: search for
     // "Table 13-2. DMA Channel Trigger Sources" in the dsPIC33AK512MPS512
-    // Family Data Sheet (DS70005591A) -> SPInRx / SPInTx rows.
+    // Family Data Sheet (DS70005591C) -> SPInRx / SPInTx rows.
     [TDM_SPI1] =
     {
-        (volatile void *)&SPI1BUF, &SPI1CON1, &SPI1STAT, &SPI1BRG, &SPI1IMSK, 0x6u, 0x7u,
-        { &IEC2, _IEC2_SPI1RXIE_MASK, &IFS2, _IFS2_SPI1RXIF_MASK },
-        { &IEC2, _IEC2_SPI1TXIE_MASK, &IFS2, _IFS2_SPI1TXIF_MASK },
+        (volatile void *)&SPI1BUF, &SPI1CON1, &SPI1STAT, &SPI1BRG, &SPI1IMSK, NORA_DMA_TRIGGER_SPI1_RX, NORA_DMA_TRIGGER_SPI1_TX,
     },
     [TDM_SPI2] =
     {
-        (volatile void *)&SPI2BUF, &SPI2CON1, &SPI2STAT, &SPI2BRG, &SPI2IMSK, 0x8u, 0x9u,
-        { &IEC2, _IEC2_SPI2RXIE_MASK, &IFS2, _IFS2_SPI2RXIF_MASK },
-        { &IEC2, _IEC2_SPI2TXIE_MASK, &IFS2, _IFS2_SPI2TXIF_MASK },
+        (volatile void *)&SPI2BUF, &SPI2CON1, &SPI2STAT, &SPI2BRG, &SPI2IMSK, NORA_DMA_TRIGGER_SPI2_RX, NORA_DMA_TRIGGER_SPI2_TX,
     },
     [TDM_SPI3] =
     {
-        (volatile void *)&SPI3BUF, &SPI3CON1, &SPI3STAT, &SPI3BRG, &SPI3IMSK, 0xAu, 0xBu,
-        { &IEC2, _IEC2_SPI3RXIE_MASK, &IFS2, _IFS2_SPI3RXIF_MASK },
-        { &IEC2, _IEC2_SPI3TXIE_MASK, &IFS2, _IFS2_SPI3TXIF_MASK },
+        (volatile void *)&SPI3BUF, &SPI3CON1, &SPI3STAT, &SPI3BRG, &SPI3IMSK, NORA_DMA_TRIGGER_SPI3_RX, NORA_DMA_TRIGGER_SPI3_TX,
     },
     [TDM_SPI4] =
     {
-        (volatile void *)&SPI4BUF, &SPI4CON1, &SPI4STAT, &SPI4BRG, &SPI4IMSK, 0xCu, 0xDu,
-        { &IEC2, _IEC2_SPI4RXIE_MASK, &IFS2, _IFS2_SPI4RXIF_MASK },
-        { &IEC2, _IEC2_SPI4TXIE_MASK, &IFS2, _IFS2_SPI4TXIF_MASK },
+        (volatile void *)&SPI4BUF, &SPI4CON1, &SPI4STAT, &SPI4BRG, &SPI4IMSK, NORA_DMA_TRIGGER_SPI4_RX, NORA_DMA_TRIGGER_SPI4_TX,
     },
-#elif DSPIC33AK_SPI_I2S_TDM_DEVICE == DSPIC33AK_SPI_I2S_TDM_DEV_AK128
+#elif NORA_SPI_I2S_TDM_DSPIC33A_DEVICE == NORA_SPI_I2S_TDM_DSPIC33A_DEV_AK128
     // CHSEL[7:0] values below are transcribed from the data sheet: search for
     // "Table 13-2. DMA Channel Trigger Sources" in the dsPIC33AK128MC106
     // Family Data Sheet (DS70005539C) -> SPInRx / SPInTx rows.
     // (SPI1-3 only; CHSEL 0xC-0xE are Reserved -> no SPI4 on this device.)
-    // SPI1 RX/TX CPU IRQ bits straddle IEC1/IEC2 and IFS1/IFS2 on AK128.
     [TDM_SPI1] =
     {
-        (volatile void *)&SPI1BUF, &SPI1CON1, &SPI1STAT, &SPI1BRG, &SPI1IMSK, 0x6u, 0x7u,
-        { &IEC1, _IEC1_SPI1RXIE_MASK, &IFS1, _IFS1_SPI1RXIF_MASK },
-        { &IEC2, _IEC2_SPI1TXIE_MASK, &IFS2, _IFS2_SPI1TXIF_MASK },
+        (volatile void *)&SPI1BUF, &SPI1CON1, &SPI1STAT, &SPI1BRG, &SPI1IMSK, NORA_DMA_TRIGGER_SPI1_RX, NORA_DMA_TRIGGER_SPI1_TX,
     },
     [TDM_SPI2] =
     {
-        (volatile void *)&SPI2BUF, &SPI2CON1, &SPI2STAT, &SPI2BRG, &SPI2IMSK, 0x8u, 0x9u,
-        { &IEC2, _IEC2_SPI2RXIE_MASK, &IFS2, _IFS2_SPI2RXIF_MASK },
-        { &IEC2, _IEC2_SPI2TXIE_MASK, &IFS2, _IFS2_SPI2TXIF_MASK },
+        (volatile void *)&SPI2BUF, &SPI2CON1, &SPI2STAT, &SPI2BRG, &SPI2IMSK, NORA_DMA_TRIGGER_SPI2_RX, NORA_DMA_TRIGGER_SPI2_TX,
     },
     [TDM_SPI3] =
     {
-        (volatile void *)&SPI3BUF, &SPI3CON1, &SPI3STAT, &SPI3BRG, &SPI3IMSK, 0xAu, 0xBu,
-        { &IEC2, _IEC2_SPI3RXIE_MASK, &IFS2, _IFS2_SPI3RXIF_MASK },
-        { &IEC2, _IEC2_SPI3TXIE_MASK, &IFS2, _IFS2_SPI3TXIF_MASK },
+        (volatile void *)&SPI3BUF, &SPI3CON1, &SPI3STAT, &SPI3BRG, &SPI3IMSK, NORA_DMA_TRIGGER_SPI3_RX, NORA_DMA_TRIGGER_SPI3_TX,
     },
 #endif
 };
@@ -139,8 +124,8 @@ static const tdm_spi_dev_t s_spi_dev[] =
  * events disabled. Audio mode is intentionally off; the HAL implements I2S/TDM using
  * framed SPI plus DMA.
  */
-void dspic33ak_spi_i2s_tdm_hw_apply_config( tdm_spi_inst_t inst,
-                                            const dspic33ak_spi_i2s_tdm_config_t* cfg )
+void nora_spi_i2s_tdm_hw_apply_config( tdm_spi_inst_t inst,
+                                            const nora_spi_i2s_tdm_config_t* cfg )
 {
     if( !hw_inst_valid( inst ) || ( cfg == NULL ) )
     {
@@ -154,8 +139,8 @@ void dspic33ak_spi_i2s_tdm_hw_apply_config( tdm_spi_inst_t inst,
                   // note: SPI frame-sync mode, NOT Audio mode.
                   // Implement I2S/TDM with standard SPI + DMA (AUDEN = 0).
 
-    dspic33ak_spi_i2s_tdm_reg_clear(con1, DSPIC33AK_SPI_I2S_TDM_CON1_AUDEN);    // AUDEN=0 : Audio mode off
-    dspic33ak_spi_i2s_tdm_reg_set  (con1, DSPIC33AK_SPI_I2S_TDM_CON1_FRMEN);    // FRMEN=1 : framed SPI (SSx = FSYNC)
+    nora_spi_i2s_tdm_reg_clear(con1, NORA_SPI_I2S_TDM_CON1_AUDEN);    // AUDEN=0 : Audio mode off
+    nora_spi_i2s_tdm_reg_set  (con1, NORA_SPI_I2S_TDM_CON1_FRMEN);    // FRMEN=1 : framed SPI (SSx = FSYNC)
 
     // FS waveform shape -> FRMSYPW (pulse width) + fs_words (FRMCNT cadence). The public API
     // is the INTENT (fs_shape); the mapping to silicon lives here:
@@ -164,9 +149,9 @@ void dspic33ak_spi_i2s_tdm_hw_apply_config( tdm_spi_inst_t inst,
     //   FS_50PCT + TDM    : FRMSYPW=0 + a HALF-frame marker (fs_words=slots/2); CLC10 toggles
     //                       it into a 50%-duty FS on the FS pin (engaged by the core, master
     //                       only). The DMA/buffer geometry stays sized by slots_per_fs.
-    const bool fs_50pct  = ( cfg->fs_shape == DSPIC33AK_SPI_I2S_TDM_FS_50PCT );
-    const bool is_i2s    = ( cfg->format   == DSPIC33AK_SPI_I2S_TDM_FORMAT_I2S );
-    const bool is_master = ( cfg->clock_role     == DSPIC33AK_SPI_I2S_TDM_CLOCK_MASTER );
+    const bool fs_50pct  = ( cfg->fs_shape == NORA_SPI_I2S_TDM_FS_50PCT );
+    const bool is_i2s    = ( cfg->format   == NORA_SPI_I2S_TDM_FORMAT_I2S );
+    const bool is_master = ( cfg->clock_role     == NORA_SPI_I2S_TDM_CLOCK_MASTER );
     bool    frmsypw;
     uint8_t fs_words;
     if( fs_50pct && is_i2s )
@@ -184,7 +169,7 @@ void dspic33ak_spi_i2s_tdm_hw_apply_config( tdm_spi_inst_t inst,
         frmsypw  = false;                      //  the first branch: FRMSYPW=1. A TDM slave receives
         fs_words = cfg->slots_per_fs;          //  FS as an input; the CLC 50% marker is master-only,
     }                                           //  so no half-frame FRMCNT here.)
-    dspic33ak_spi_i2s_tdm_reg_set_or_clear(con1, DSPIC33AK_SPI_I2S_TDM_CON1_FRMSYPW, frmsypw);
+    nora_spi_i2s_tdm_reg_set_or_clear(con1, NORA_SPI_I2S_TDM_CON1_FRMSYPW, frmsypw);
 
     // IGNROV and IGNTUR are BOTH HARD-FORCED to 1 (not caller-selectable -- the config struct
     // deliberately omits both). If a FIFO flag becomes a critical-stop condition, it can suspend
@@ -192,8 +177,8 @@ void dspic33ak_spi_i2s_tdm_hw_apply_config( tdm_spi_inst_t inst,
     // IGNROV/IGNTUR set is therefore continuity/secondary-fault containment, not an assertion that
     // lost data is benign. The primary cause is observed directly as DMAxSTAT.OVERRUN (dov=); the
     // downstream SPIROV/SPITUR and independent FRMERR effects remain visible as rov=/tur=/frm=.
-    dspic33ak_spi_i2s_tdm_reg_set_or_clear(con1, DSPIC33AK_SPI_I2S_TDM_CON1_IGNROV, true);
-    dspic33ak_spi_i2s_tdm_reg_set_or_clear(con1, DSPIC33AK_SPI_I2S_TDM_CON1_IGNTUR, true);
+    nora_spi_i2s_tdm_reg_set_or_clear(con1, NORA_SPI_I2S_TDM_CON1_IGNROV, true);
+    nora_spi_i2s_tdm_reg_set_or_clear(con1, NORA_SPI_I2S_TDM_CON1_IGNTUR, true);
 
     // DISSDI/DISSDO/DISSCK left 0 = pins controlled by the module (already 0 after clear).
 
@@ -203,24 +188,24 @@ void dspic33ak_spi_i2s_tdm_hw_apply_config( tdm_spi_inst_t inst,
     //   0      1      0      16-bit
     //   0      0      0      8-bit
     //   (AUDEN=1 combinations select Audio mode; unused here.)
-    dspic33ak_spi_i2s_tdm_reg_set_or_clear(con1, DSPIC33AK_SPI_I2S_TDM_CON1_MODE32, cfg->word_bits == 32u);  // MODE16 stays 0
-    dspic33ak_spi_i2s_tdm_reg_set_or_clear(con1, DSPIC33AK_SPI_I2S_TDM_CON1_MCLKEN, cfg->mclk_enable);       // 1: CLKGEN9 / 0: std peripheral clock
+    nora_spi_i2s_tdm_reg_set_or_clear(con1, NORA_SPI_I2S_TDM_CON1_MODE32, cfg->word_bits == 32u);  // MODE16 stays 0
+    nora_spi_i2s_tdm_reg_set_or_clear(con1, NORA_SPI_I2S_TDM_CON1_MCLKEN, cfg->mclk_enable);       // 1: CLKGEN9 / 0: std peripheral clock
 
-    if( cfg->clock_role == DSPIC33AK_SPI_I2S_TDM_CLOCK_MASTER )
+    if( cfg->clock_role == NORA_SPI_I2S_TDM_CLOCK_MASTER )
     {
-        dspic33ak_spi_i2s_tdm_reg_set  (con1, DSPIC33AK_SPI_I2S_TDM_CON1_MSTEN);    // MSTEN=1 : Host
-        dspic33ak_spi_i2s_tdm_reg_clear(con1, DSPIC33AK_SPI_I2S_TDM_CON1_FRMSYNC);  // FRMSYNC=0 : FS output (host)
+        nora_spi_i2s_tdm_reg_set  (con1, NORA_SPI_I2S_TDM_CON1_MSTEN);    // MSTEN=1 : Host
+        nora_spi_i2s_tdm_reg_clear(con1, NORA_SPI_I2S_TDM_CON1_FRMSYNC);  // FRMSYNC=0 : FS output (host)
     }
     else
     {
         // MSTEN=0 : Client (already 0).  FRMSYNC=1 : FS input (client)
-        dspic33ak_spi_i2s_tdm_reg_set  (con1, DSPIC33AK_SPI_I2S_TDM_CON1_FRMSYNC);
+        nora_spi_i2s_tdm_reg_set  (con1, NORA_SPI_I2S_TDM_CON1_FRMSYNC);
     }
 
     // FRMPOL: 1 = FS/CS active-high, 0 = active-low. Convention: I2S active-low,
     // TDM active-high.
-    dspic33ak_spi_i2s_tdm_reg_set_or_clear( con1, DSPIC33AK_SPI_I2S_TDM_CON1_FRMPOL,
-                                            cfg->format != DSPIC33AK_SPI_I2S_TDM_FORMAT_I2S );
+    nora_spi_i2s_tdm_reg_set_or_clear( con1, NORA_SPI_I2S_TDM_CON1_FRMPOL,
+                                            cfg->format != NORA_SPI_I2S_TDM_FORMAT_I2S );
 
     // FRMCNT: FS pulse every N words (N = fs_words computed above). Encoding = log2(N):
     //   000 each word / 001 every 2 / 010 every 4 / 011 every 8 / 100 every 16 / 101 every 32.
@@ -237,11 +222,11 @@ void dspic33ak_spi_i2s_tdm_hw_apply_config( tdm_spi_inst_t inst,
     case 32u: frmcnt = 5u; break;
     default:  frmcnt = 3u; break;
     }
-    dspic33ak_spi_i2s_tdm_reg_write_field( con1, DSPIC33AK_SPI_I2S_TDM_CON1_FRMCNT_MASK,
-                                           DSPIC33AK_SPI_I2S_TDM_CON1_FRMCNT_POS, frmcnt );
+    nora_spi_i2s_tdm_reg_write_field( con1, NORA_SPI_I2S_TDM_CON1_FRMCNT_MASK,
+                                           NORA_SPI_I2S_TDM_CON1_FRMCNT_POS, frmcnt );
 
     // SPIFE: 0 = FS edge precedes first BCLK (1-bit delayed) / 1 = coincides (no delay)
-    dspic33ak_spi_i2s_tdm_reg_set_or_clear(con1, DSPIC33AK_SPI_I2S_TDM_CON1_SPIFE, cfg->fs_coincides_first_bclk);  // 1: no delay / 0: 1-bit delayed
+    nora_spi_i2s_tdm_reg_set_or_clear(con1, NORA_SPI_I2S_TDM_CON1_SPIFE, cfg->fs_coincides_first_bclk);  // 1: no delay / 0: 1-bit delayed
 
     // ---- BCLK phase: CKP / CKE ----
     // (see Figure 23-9 "SPI Master Mode Operation in 8-bit Mode" in DS61106G.)
@@ -260,15 +245,15 @@ void dspic33ak_spi_i2s_tdm_hw_apply_config( tdm_spi_inst_t inst,
     //
     //   Typical I2S (Philips): data changes on BCLK falling, sampled on rising.
     //   This driver uses CKP=1, CKE=0 (idle High; data changes on the falling edge).
-    dspic33ak_spi_i2s_tdm_reg_set_or_clear(con1, DSPIC33AK_SPI_I2S_TDM_CON1_CKP, cfg->bclk_idle_high);                 // CKP : 1=idle High
-    dspic33ak_spi_i2s_tdm_reg_set_or_clear(con1, DSPIC33AK_SPI_I2S_TDM_CON1_CKE, cfg->bclk_change_on_active_to_idle);  // CKE : 1=transmit on active->idle
+    nora_spi_i2s_tdm_reg_set_or_clear(con1, NORA_SPI_I2S_TDM_CON1_CKP, cfg->bclk_idle_high);                 // CKP : 1=idle High
+    nora_spi_i2s_tdm_reg_set_or_clear(con1, NORA_SPI_I2S_TDM_CON1_CKE, cfg->bclk_change_on_active_to_idle);  // CKE : 1=transmit on active->idle
 
     // baud rate (ignored when Client / MSTEN=0)
     *dev->brg = cfg->brg;
 
     // Keep DMA-trigger events disabled until every SPI instance has its registers
     // programmed. The caller enables events explicitly after all register config.
-    dspic33ak_spi_i2s_tdm_hw_dma_trigger_enable( inst, false );
+    nora_spi_i2s_tdm_hw_dma_trigger_enable( inst, false );
 
     // SPI CPU interrupts are unused (DMA consumes the peripheral status flags).
     hw_spi_irq_disable_clear( inst );
@@ -281,7 +266,7 @@ void dspic33ak_spi_i2s_tdm_hw_apply_config( tdm_spi_inst_t inst,
  * RX is configured first, then TX. A false return means the caller must roll back all
  * TDM DMA/SPI state because the channels may be only partially armed.
  */
-bool dspic33ak_spi_i2s_tdm_hw_dma_config( tdm_spi_inst_t inst,
+bool nora_spi_i2s_tdm_hw_dma_config( tdm_spi_inst_t inst,
                                           uint8_t  rx_dma_ch,
                                           uint8_t  tx_dma_ch,
                                           int32_t* rx_buffer,
@@ -306,7 +291,7 @@ bool dspic33ak_spi_i2s_tdm_hw_dma_config( tdm_spi_inst_t inst,
  * These are SPIxIMSK event enables, not CPU interrupt enables. The caller turns them
  * on only after every SPI instance is programmed; stop()/rollback turns them off.
  */
-void dspic33ak_spi_i2s_tdm_hw_dma_trigger_enable( tdm_spi_inst_t inst, bool enable )
+void nora_spi_i2s_tdm_hw_dma_trigger_enable( tdm_spi_inst_t inst, bool enable )
 {
     if( !hw_inst_valid( inst ) )
     {
@@ -314,10 +299,10 @@ void dspic33ak_spi_i2s_tdm_hw_dma_trigger_enable( tdm_spi_inst_t inst, bool enab
     }
 
     const tdm_spi_dev_t *dev = &s_spi_dev[inst];
-    const uint32_t mask = DSPIC33AK_SPI_I2S_TDM_IMSK_SPIRBFEN |
-                          DSPIC33AK_SPI_I2S_TDM_IMSK_SPITBEN;
+    const uint32_t mask = NORA_SPI_I2S_TDM_IMSK_SPIRBFEN |
+                          NORA_SPI_I2S_TDM_IMSK_SPITBEN;
 
-    dspic33ak_spi_i2s_tdm_reg_set_or_clear( dev->imsk, mask, enable );
+    nora_spi_i2s_tdm_reg_set_or_clear( dev->imsk, mask, enable );
 }
 
 
@@ -327,7 +312,7 @@ void dspic33ak_spi_i2s_tdm_hw_dma_trigger_enable( tdm_spi_inst_t inst, bool enab
  * The caller is responsible for ordering follower/timing legs so shared block timing
  * starts and stops cleanly.
  */
-void dspic33ak_spi_i2s_tdm_hw_module_enable( tdm_spi_inst_t inst, bool enable )
+void nora_spi_i2s_tdm_hw_module_enable( tdm_spi_inst_t inst, bool enable )
 {
     if( !hw_inst_valid( inst ) )
     {
@@ -335,7 +320,7 @@ void dspic33ak_spi_i2s_tdm_hw_module_enable( tdm_spi_inst_t inst, bool enable )
     }
 
     const tdm_spi_dev_t *dev = &s_spi_dev[inst];
-    dspic33ak_spi_i2s_tdm_reg_set_or_clear( dev->con1, DSPIC33AK_SPI_I2S_TDM_CON1_ON, enable );
+    nora_spi_i2s_tdm_reg_set_or_clear( dev->con1, NORA_SPI_I2S_TDM_CON1_ON, enable );
 }
 
 
@@ -345,17 +330,14 @@ void dspic33ak_spi_i2s_tdm_hw_module_enable( tdm_spi_inst_t inst, bool enable )
  * Used by stop()/rollback even though the CPU interrupts are disabled, preventing
  * stale peripheral flags from leaking into later debugging or future starts.
  */
-void dspic33ak_spi_i2s_tdm_hw_irq_clear_flags( tdm_spi_inst_t inst )
+void nora_spi_i2s_tdm_hw_irq_clear_flags( tdm_spi_inst_t inst )
 {
     if( !hw_inst_valid( inst ) )
     {
         return;
     }
 
-    const tdm_spi_dev_t *dev = &s_spi_dev[inst];
-
-    dspic33ak_spi_i2s_tdm_reg_clear( dev->rx_irq.if_reg, dev->rx_irq.if_mask );
-    dspic33ak_spi_i2s_tdm_reg_clear( dev->tx_irq.if_reg, dev->tx_irq.if_mask );
+    hw_spi_irq_bits_clear_flags( inst );
 }
 
 
@@ -365,15 +347,15 @@ void dspic33ak_spi_i2s_tdm_hw_irq_clear_flags( tdm_spi_inst_t inst )
  * Disables DMA-trigger event generation, masks CPU SPI IRQs, and clears the SPI ON
  * bit. It does not alter PPS/CLC routing or any saved configuration.
  */
-void dspic33ak_spi_i2s_tdm_hw_soft_stop( tdm_spi_inst_t inst )
+void nora_spi_i2s_tdm_hw_soft_stop( tdm_spi_inst_t inst )
 {
     // Stop SPI interrupt event generation used as DMA trigger source.
-    dspic33ak_spi_i2s_tdm_hw_dma_trigger_enable( inst, false );
+    nora_spi_i2s_tdm_hw_dma_trigger_enable( inst, false );
 
     // SPI CPU interrupts are unused, but mask them during teardown as well.
     hw_spi_irq_enable( inst, false );
 
-    dspic33ak_spi_i2s_tdm_hw_module_enable( inst, false );
+    nora_spi_i2s_tdm_hw_module_enable( inst, false );
 }
 
 
@@ -387,7 +369,7 @@ void dspic33ak_spi_i2s_tdm_hw_soft_stop( tdm_spi_inst_t inst )
  * condition, so it is only OBSERVED, never written. Returns the full observed mask (all three
  * bits as read, before any clear) -- callers get SPITUR's live state either way.
  */
-uint32_t dspic33ak_spi_i2s_tdm_hw_sample_ack_errflags( tdm_spi_inst_t inst )
+uint32_t nora_spi_i2s_tdm_hw_sample_ack_errflags( tdm_spi_inst_t inst )
 {
     if( !hw_inst_valid( inst ) )
     {
@@ -396,11 +378,11 @@ uint32_t dspic33ak_spi_i2s_tdm_hw_sample_ack_errflags( tdm_spi_inst_t inst )
     volatile uint32_t *stat = s_spi_dev[inst].stat;
     const uint32_t status = *stat;
     const uint32_t observed = status
-                        & ( DSPIC33AK_SPI_I2S_TDM_STAT_SPIROV
-                          | DSPIC33AK_SPI_I2S_TDM_STAT_SPITUR
-                          | DSPIC33AK_SPI_I2S_TDM_STAT_FRMERR );
-    const uint32_t sw_clearable_mask = DSPIC33AK_SPI_I2S_TDM_STAT_SPIROV
-                                      | DSPIC33AK_SPI_I2S_TDM_STAT_FRMERR;
+                        & ( NORA_SPI_I2S_TDM_STAT_SPIROV
+                          | NORA_SPI_I2S_TDM_STAT_SPITUR
+                          | NORA_SPI_I2S_TDM_STAT_FRMERR );
+    const uint32_t sw_clearable_mask = NORA_SPI_I2S_TDM_STAT_SPIROV
+                                      | NORA_SPI_I2S_TDM_STAT_FRMERR;
     const uint32_t clearable = observed & sw_clearable_mask;
     if( clearable != 0u )
     {
@@ -421,7 +403,7 @@ uint32_t dspic33ak_spi_i2s_tdm_hw_sample_ack_errflags( tdm_spi_inst_t inst )
  * instance's SSx output (_RPOUT_SS<n>). The CLC10 50%-FS module uses this to reverse-scan
  * the RPORx registers for the physical pin the board routed FS/SS to.
  */
-bool dspic33ak_spi_i2s_tdm_hw_get_ss_pps_code( tdm_spi_inst_t inst, uint8_t* code )
+bool nora_spi_i2s_tdm_hw_get_ss_pps_code( tdm_spi_inst_t inst, uint8_t* code )
 {
     if( code == NULL )
     {
@@ -438,7 +420,7 @@ bool dspic33ak_spi_i2s_tdm_hw_get_ss_pps_code( tdm_spi_inst_t inst, uint8_t* cod
 #ifdef _RPOUT_SS3
     case TDM_SPI3: *code = (uint8_t)_RPOUT_SS3; return true;
 #endif
-#if (DSPIC33AK_SPI_I2S_TDM_DEVICE == DSPIC33AK_SPI_I2S_TDM_DEV_AK512) && defined(_RPOUT_SS4)
+#if (NORA_SPI_I2S_TDM_DSPIC33A_DEVICE == NORA_SPI_I2S_TDM_DSPIC33A_DEV_AK512) && defined(_RPOUT_SS4)
     case TDM_SPI4: *code = (uint8_t)_RPOUT_SS4; return true;
 #endif
     default: break;
@@ -464,10 +446,10 @@ static bool hw_inst_valid( tdm_spi_inst_t inst )
  * Configure and enable one RX or TX DMA channel for a SPI instance.
  *
  * The caller supplies the DMA channel and buffer; the silicon facts table supplies
- * SPIxBUF and the CHSEL trigger number. RX copies SPIxBUF into the ping-pong buffer,
+ * SPIxBUF and the logical DMA trigger. RX copies SPIxBUF into the ping-pong buffer,
  * while TX copies the ping-pong buffer into SPIxBUF.
  */
-static bool hw_dma_config_channel( tdm_spi_inst_t inst, uint8_t dma_ch, int32_t *buffer, uint32_t count, bool is_rx )
+static bool hw_dma_config_channel( tdm_spi_inst_t inst, nora_dma_channel_t dma_ch, int32_t *buffer, uint32_t count, bool is_rx )
 {
     if( !hw_inst_valid( inst ) )
     {
@@ -476,16 +458,16 @@ static bool hw_dma_config_channel( tdm_spi_inst_t inst, uint8_t dma_ch, int32_t 
 
     const tdm_spi_dev_t *dev = &s_spi_dev[inst];
 
-    const dspic33ak_dma_channel_cfg_t cfg =
+    const nora_dma_channel_cfg_t cfg =
     {
         .src   = is_rx ? dev->spi_buf : (volatile void *)buffer,  // RX: SPIxBUF / TX: buffer
         .dst   = is_rx ? (volatile void *)buffer : dev->spi_buf,  // RX: buffer / TX: SPIxBUF
         .count = count,
 
-        .src_mode = is_rx ? DSPIC33AK_DMA_ADDR_FIXED     : DSPIC33AK_DMA_ADDR_INCREMENT,
-        .dst_mode = is_rx ? DSPIC33AK_DMA_ADDR_INCREMENT : DSPIC33AK_DMA_ADDR_FIXED,
-        .size     = DSPIC33AK_DMA_SIZE_WORD,             // 32-bit
-        .tr_mode  = DSPIC33AK_DMA_TRMODE_REPEAT_ONESHOT,
+        .src_mode = is_rx ? NORA_DMA_ADDR_FIXED     : NORA_DMA_ADDR_INCREMENT,
+        .dst_mode = is_rx ? NORA_DMA_ADDR_INCREMENT : NORA_DMA_ADDR_FIXED,
+        .size     = NORA_DMA_SIZE_WORD,             // 32-bit
+        .tr_mode  = NORA_DMA_TRMODE_REPEAT_ONESHOT,
 
         .reload_count = true,
         .reload_src   = !is_rx,   // TX reloads src
@@ -494,7 +476,7 @@ static bool hw_dma_config_channel( tdm_spi_inst_t inst, uint8_t dma_ch, int32_t 
         .half_int_en  = true,
         .done_int_en  = true,
 
-        .trigger_sel  = is_rx ? dev->rx_trigger : dev->tx_trigger,
+        .trigger      = is_rx ? dev->rx_trigger : dev->tx_trigger,
 
         .irq_priority_set = true,
         .irq_priority     = PRIO_TDM_DMA,
@@ -504,12 +486,12 @@ static bool hw_dma_config_channel( tdm_spi_inst_t inst, uint8_t dma_ch, int32_t 
         .irq_enable       = is_rx,
     };
 
-    if( !dspic33ak_dma_channel_config(dma_ch, &cfg) )
+    if( !nora_dma_channel_config(dma_ch, &cfg) )
     {
         TDM_DBG_PRINTF(" ERROR: DMA ch%u config failed (DMA not ready?).\n", (unsigned)dma_ch);
         return false;
     }
-    if( !dspic33ak_dma_channel_enable(dma_ch, true) )
+    if( !nora_dma_channel_enable(dma_ch, true) )
     {
         TDM_DBG_PRINTF(" ERROR: DMA ch%u enable failed (DMA not ready?).\n", (unsigned)dma_ch);
         return false;
@@ -531,10 +513,7 @@ static void hw_spi_irq_enable( tdm_spi_inst_t inst, bool enable )
         return;
     }
 
-    const tdm_spi_dev_t *dev = &s_spi_dev[inst];
-
-    dspic33ak_spi_i2s_tdm_reg_set_or_clear( dev->rx_irq.ie_reg, dev->rx_irq.ie_mask, enable );
-    dspic33ak_spi_i2s_tdm_reg_set_or_clear( dev->tx_irq.ie_reg, dev->tx_irq.ie_mask, enable );
+    hw_spi_irq_bits_enable( inst, enable );
 }
 
 
@@ -546,5 +525,83 @@ static void hw_spi_irq_enable( tdm_spi_inst_t inst, bool enable )
 static void hw_spi_irq_disable_clear( tdm_spi_inst_t inst )
 {
     hw_spi_irq_enable( inst, false );
-    dspic33ak_spi_i2s_tdm_hw_irq_clear_flags( inst );
+    nora_spi_i2s_tdm_hw_irq_clear_flags( inst );
+}
+
+
+/*
+ * CPU RX/TX interrupt flag and enable bits for one SPI instance.
+ *
+ * Written through the DFP bit aliases with literal values, so each store is a
+ * single bset.b / bclr.b.  The enable pair is an if/else rather than
+ * `_SPIxRXIE = enable` on purpose: assigning a runtime value to a bit alias
+ * compiles to a byte-wide read-modify-write of a register that other peripherals
+ * share, which is the hazard being avoided here.  `inst` is a small enum, so the
+ * switch also keeps the register and bit compile-time constant per arm.
+ */
+static void hw_spi_irq_bits_enable( tdm_spi_inst_t inst, bool enable )
+{
+    switch( inst )
+    {
+#if defined(_SPI1RXIE) && defined(_SPI1TXIE)
+    case TDM_SPI1:
+        if( enable ) { _SPI1RXIE = 1; _SPI1TXIE = 1; }
+        else         { _SPI1RXIE = 0; _SPI1TXIE = 0; }
+        break;
+#endif
+#if defined(_SPI2RXIE) && defined(_SPI2TXIE)
+    case TDM_SPI2:
+        if( enable ) { _SPI2RXIE = 1; _SPI2TXIE = 1; }
+        else         { _SPI2RXIE = 0; _SPI2TXIE = 0; }
+        break;
+#endif
+#if defined(_SPI3RXIE) && defined(_SPI3TXIE)
+    case TDM_SPI3:
+        if( enable ) { _SPI3RXIE = 1; _SPI3TXIE = 1; }
+        else         { _SPI3RXIE = 0; _SPI3TXIE = 0; }
+        break;
+#endif
+#if defined(_SPI4RXIE) && defined(_SPI4TXIE)
+    case TDM_SPI4:
+        if( enable ) { _SPI4RXIE = 1; _SPI4TXIE = 1; }
+        else         { _SPI4RXIE = 0; _SPI4TXIE = 0; }
+        break;
+#endif
+    default:
+        break;
+    }
+}
+
+
+static void hw_spi_irq_bits_clear_flags( tdm_spi_inst_t inst )
+{
+    switch( inst )
+    {
+#if defined(_SPI1RXIE) && defined(_SPI1TXIE)
+    case TDM_SPI1:
+        _SPI1RXIF = 0;
+        _SPI1TXIF = 0;
+        break;
+#endif
+#if defined(_SPI2RXIE) && defined(_SPI2TXIE)
+    case TDM_SPI2:
+        _SPI2RXIF = 0;
+        _SPI2TXIF = 0;
+        break;
+#endif
+#if defined(_SPI3RXIE) && defined(_SPI3TXIE)
+    case TDM_SPI3:
+        _SPI3RXIF = 0;
+        _SPI3TXIF = 0;
+        break;
+#endif
+#if defined(_SPI4RXIE) && defined(_SPI4TXIE)
+    case TDM_SPI4:
+        _SPI4RXIF = 0;
+        _SPI4TXIF = 0;
+        break;
+#endif
+    default:
+        break;
+    }
 }

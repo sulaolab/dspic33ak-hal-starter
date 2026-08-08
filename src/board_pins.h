@@ -10,21 +10,21 @@
  * This is the ONE place that names the board's physical pins and the RP
  * (remappable-pin) numbers used for PPS. The vendored HALs under src/hal_xxx
  * know nothing about pins or PPS; the board layer (board.c) wires peripherals to
- * these pins using the GPIO HAL plus the PPS HAL (dspic33ak_pps_route_*).
+ * these pins using the GPIO HAL plus the PPS HAL (nora_pps_route_*).
  *
  * Pin-naming rule: PPS-capable pins are identified by their RP number alone
  * (the same number used by both the GPIO HAL's RP-first API and the PPS HAL).
  * Non-PPS pins (CS, WP, RST, STBY, LEDs, switches) are named as packed pins
- * via DSPIC33AK_GPIO_PIN(port, bit).
+ * via NORA_GPIO_PIN(port, bit).
  *
  * PPS note (dsPIC33AK): routing goes through the GPIO HAL's companion PPS layer
- * (dspic33ak_pps_route_output/input), which self-brackets RPCON.IOLOCK. The
+ * (nora_pps_route_output/input), which self-brackets RPCON.IOLOCK. The
  * board only names the signal + the RP pin number; the raw RPORx/RPINRx
  * registers and peripheral function codes stay inside the PPS HAL.
  */
 
-#include "dspic33ak_gpio.h"
-#include "dspic33ak_pps.h"
+#include "nora_gpio.h"
+#include "nora_pps.h"
 
 /* ---- UART1 (console / printf @ 230400) ----
  *   U1TX = RH1 (RP114)   U1RX = RD1 (RP50)
@@ -51,9 +51,9 @@
 #define BOARD_SST26_SDO4_RP       (13u)    /* SDO4 output -> RP13 (RA12) */
 #define BOARD_SST26_SCK4_RP       (66u)    /* SCK4 output -> RP66 (RE1)  */
 
-#define BOARD_SST26_PIN_WP        DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_E,  3)
-#define BOARD_SST26_PIN_CS        DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_D, 15)
-#define BOARD_SST26_PIN_RST       DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_E,  0)
+#define BOARD_SST26_PIN_WP        NORA_GPIO_PIN(NORA_GPIO_PORT_E,  3)
+#define BOARD_SST26_PIN_CS        NORA_GPIO_PIN(NORA_GPIO_PORT_D, 15)
+#define BOARD_SST26_PIN_RST       NORA_GPIO_PIN(NORA_GPIO_PORT_E,  0)
 
 /* ---- RGB LED (PWM1/2/3 -> RP51/49/58) on the Curiosity motherboard ----
  *   Blue  = PWM1H on RP51 (RD2)
@@ -71,21 +71,21 @@
  * LEDs use packed pins here. Switches are RP-capable, so name them by RP number
  * and use the RP-first GPIO/CN APIs in board component code.
  */
-#define BOARD_LED0_PIN            DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C,  8)
-#define BOARD_LED1_PIN            DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C,  9)
-#define BOARD_LED2_PIN            DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C, 10)
-#define BOARD_LED3_PIN            DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C, 11)
-#define BOARD_LED4_PIN            DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C, 12)
-#define BOARD_LED5_PIN            DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C, 13)
-#define BOARD_LED6_PIN            DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C, 14)
-#define BOARD_LED7_PIN            DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_C, 15)
+#define BOARD_LED0_PIN            NORA_GPIO_PIN(NORA_GPIO_PORT_C,  8)
+#define BOARD_LED1_PIN            NORA_GPIO_PIN(NORA_GPIO_PORT_C,  9)
+#define BOARD_LED2_PIN            NORA_GPIO_PIN(NORA_GPIO_PORT_C, 10)
+#define BOARD_LED3_PIN            NORA_GPIO_PIN(NORA_GPIO_PORT_C, 11)
+#define BOARD_LED4_PIN            NORA_GPIO_PIN(NORA_GPIO_PORT_C, 12)
+#define BOARD_LED5_PIN            NORA_GPIO_PIN(NORA_GPIO_PORT_C, 13)
+#define BOARD_LED6_PIN            NORA_GPIO_PIN(NORA_GPIO_PORT_C, 14)
+#define BOARD_LED7_PIN            NORA_GPIO_PIN(NORA_GPIO_PORT_C, 15)
 
-#define BOARD_SW1_RP              ((dspic33ak_gpio_rp_t)84u)  /* RF3 */
-#define BOARD_SW2_RP              ((dspic33ak_gpio_rp_t)81u)  /* RF0 */
-#define BOARD_SW3_RP              ((dspic33ak_gpio_rp_t)19u)  /* RB2 */
+#define BOARD_SW1_RP              ((nora_gpio_rp_t)84u)  /* RF3 */
+#define BOARD_SW2_RP              ((nora_gpio_rp_t)81u)  /* RF0 */
+#define BOARD_SW3_RP              ((nora_gpio_rp_t)19u)  /* RB2 */
 
 /* ---- Potentiometer -> ADC5 channel 0 (AD5AN0 on RA7) ---- */
-#define BOARD_POT_PIN             DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_A, 7)
+#define BOARD_POT_PIN             NORA_GPIO_PIN(NORA_GPIO_PORT_A, 7)
 
 /* ---- CAN1 (CAN FD) -> on-board ATA6563 transceiver (bus on J21 CANH/CANL) ----
  *   C1TX = RD13 (RP62)   C1RX = RD11 (RP60)   STBY = RD14 (GPIO, low = normal)
@@ -95,7 +95,7 @@
  */
 #define BOARD_CAN1_TX_RP          (62u)    /* C1TX output -> RP62 (RD13) */
 #define BOARD_CAN1_RX_RP          (60u)    /* C1RX input  <- RP60 (RD11) */
-#define BOARD_CAN1_PIN_STBY       DSPIC33AK_GPIO_PIN(DSPIC33AK_GPIO_PORT_D, 14)
+#define BOARD_CAN1_PIN_STBY       NORA_GPIO_PIN(NORA_GPIO_PORT_D, 14)
 
 /* ---- MikroBUS-A SPI1 framed-mode (TDM8) smoke demo: self-clocked MASTER ----
  *   FS/CS   = RE5  (RP70)    BCLK/SCK = RE10 (RP75)

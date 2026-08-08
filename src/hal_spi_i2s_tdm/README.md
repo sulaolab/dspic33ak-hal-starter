@@ -1,4 +1,4 @@
-# dspic33ak_spi_i2s_tdm — SPI framed-mode I2S/TDM transport HAL
+# nora_spi_i2s_tdm — SPI framed-mode I2S/TDM transport HAL
 
 A compact, reusable SPI/I2S/TDM **transport** HAL for dsPIC33AK, carved from the upstream
 audio project. It moves audio frames over a framed SPI peripheral with DMA ping-pong and
@@ -22,7 +22,7 @@ needs.
   synthesized by **CLC10** on the FS pin (auto-detected by PPS reverse-lookup; no app/CLC
   code). A TDM slave receives FS as an input, so `fs_shape` is accepted but has no
   generated-waveform effect (still validated, and compared as a framing field within a sync
-  domain). See `dspic33ak_spi_i2s_tdm_fs_clc.{c,h}`.
+  domain). See `nora_spi_i2s_tdm_fs_clc.{c,h}`.
 - Two configure/lifecycle paths: **system** `configure_system(setups, count)` (transactional,
   all-or-nothing) + `open()` + `start_all_domains()`, or **single-instance**
   `inst_configure(inst, cfg)` + `open()` + `inst_start(inst)`. `open()` takes **no role** —
@@ -33,7 +33,7 @@ needs.
 - Per-instance SPI framed-transport health diagnostics (`SPIROV` / `SPITUR` / `FRMERR`, sampled
   once per completed RX block) — see "DMA and SPI transport-health diagnostics" below.
 - Multi-instance: the core owns a dense logical leg table. The default bank maps rows 0/1 to
-  physical SPI1/SPI2; `DSPIC33AK_TDM_BASE_ON_SPI34` explicitly maps those rows to SPI3/SPI4.
+  physical SPI1/SPI2; `NORA_TDM_BASE_ON_SPI34` explicitly maps those rows to SPI3/SPI4.
   `spi1()`...`spi4()` always mean literal physical peripherals; application-semantic legs use
   dense `inst(0)`/`inst(1)`. `conf.h` supplies DMA channels, geometry, and initial `SYNC_DOMAIN`.
   Per-leg format/role come from the runtime
@@ -46,7 +46,7 @@ needs.
 - No codec init (e.g. WM8904) — that is board/app code.
 - No general board pin routing in the core — board FS/BCLK/DATA/MCLK routing is supplied by
   the registered port hook. **Exception:** for `TDM master + FS_50PCT`, the HAL-owned CLC10
-  helper (`dspic33ak_spi_i2s_tdm_fs_clc.*`) temporarily repoints the already-routed `SSx` FS
+  helper (`nora_spi_i2s_tdm_fs_clc.*`) temporarily repoints the already-routed `SSx` FS
   pin to `CLC10OUT` (and routes `SSx`→RPV8) and restores it on `release()`.
 - No DSP — the callback owns any processing.
 - No sample-rate policy — the transport is rate-agnostic (runs at the configured BRG or
@@ -60,19 +60,19 @@ needs.
 
 ## 3. Required project config
 
-- The project MUST provide `dspic33ak_spi_i2s_tdm_conf.h` on the include path.
-- The HAL folder ships a self-contained template: `dspic33ak_spi_i2s_tdm_conf.h_example`.
+- The project MUST provide `nora_spi_i2s_tdm_conf.h` on the include path.
+- The HAL folder ships a self-contained template: `nora_spi_i2s_tdm_conf.h_example`.
 - Copy/rename the example (or supply an equivalent header) and edit the geometry, logical leg
   count, optional SPI3/4 rows or explicit SPI34 bank selection, per-instance DMA channels, and
   per-leg `SYNC_DOMAIN` defaults. `*.h_example` is never compiled.
 - The template is self-contained (no app-config dependency). A project MAY instead derive
-  the `DSPIC33AK_TDM_*` macros from its own app config (the upstream project does this in
-  `src/dspic33ak_spi_i2s_tdm_conf.h`); that is the integrator's choice and does not make
+  the `NORA_TDM_*` macros from its own app config (the upstream project does this in
+  `src/nora_spi_i2s_tdm_conf.h`); that is the integrator's choice and does not make
   the HAL core app-dependent (dependency is app → conf.h → HAL, never HAL → app).
 
 ## 4. Required sibling HALs
 
-- `dspic33ak_dma` — DMA channel setup/arming (required). Standalone repo:
+- `nora_dma` — DMA channel setup/arming (required). Standalone repo:
   [dspic33ak-hal-dma](https://github.com/sulaolab/dspic33ak-hal-dma).
 - `nora_high_res_timer` — compile/link sibling dependency for the load monitor.
   Runtime use is gated by `nora_high_res_timer_is_initialized()`; if the timer is
@@ -99,14 +99,14 @@ Topology availability differs by device:
 > I2S-native `FS_50PCT` work on both parts.
 
 The HAL `#error`s on any other device. Adding a new dsPIC33AK part means adding its
-silicon facts in the HW layer (`dspic33ak_spi_i2s_tdm_hw.{c,h}`):
+silicon facts in the HW layer (`nora_spi_i2s_tdm_hw.{c,h}`):
 
 - SPI instance count
 - `SPIxBUF` / `SPIxCON1` / `SPIxBRG` / `SPIxIMSK` / `SPIxSTAT` pointers
 - DMA trigger CHSEL values
 - CPU IRQ `IEC`/`IFS` masks
 
-The vendor part macro is confined to one `DSPIC33AK_SPI_I2S_TDM_DEVICE` adapter
+The vendor part macro is confined to one `NORA_SPI_I2S_TDM_DSPIC33A_DEVICE` adapter
 (opaque-tag derivation); app/HW code selects on that, not on the raw `__dsPIC33AK*__`.
 
 ## 6. DMA and SPI transport-health diagnostics
@@ -123,12 +123,12 @@ fields. This prevents a FIFO flag from critical-stopping the SPI leg and obscuri
 transport evidence. It does not make data loss benign, so the DMA and SPI diagnostics remain
 publicly visible.
 
-`dspic33ak_spi_i2s_tdm_hw_sample_ack_errflags(inst)` samples `SPIxSTAT` once per completed RX
+`nora_spi_i2s_tdm_hw_sample_ack_errflags(inst)` samples `SPIxSTAT` once per completed RX
 block (`SPIROV | SPITUR | FRMERR`) and is the HAL's single ack point for the two
 software-clearable bits, `SPIROV`/`FRMERR` (a W0C-safe write of only the software-clearable mask
 with the observed bits zeroed — never a replay of the whole status word, so a previously
 unobserved clearable bit asserted after the snapshot is preserved). `SPITUR` self-clears only in hardware
-(`SPIEN=0`), so it is only ever observed. `dspic33ak_spi_i2s_tdm_diag_note_errflags()` folds the
+(`SPIEN=0`), so it is only ever observed. `nora_spi_i2s_tdm_diag_note_errflags()` folds the
 mask into four per-instance, per-RX-block counters read via `get_status()`:
 `err_rov_block_count` / `err_tur_block_count` / `err_frm_block_count` /
 `frmerr_consecutive_blocks`. See the root README for the full ownership contract and counter
@@ -136,10 +136,10 @@ semantics.
 
 ## 7. Interrupt ownership
 
-- `DSPIC33AK_TDM_DEFINE_DMA_VECTORS=1` (default): the HAL defines the RX DMA interrupt
+- `NORA_TDM_DEFINE_DMA_VECTORS=1` (default): the HAL defines the RX DMA interrupt
   vectors itself (turnkey). Nothing else to wire.
-- `DSPIC33AK_TDM_DEFINE_DMA_VECTORS=0`: the HAL defines no vectors; the integrator owns the
-  IVT and calls `dspic33ak_spi_i2s_tdm_inst_rx_isr(inst)` from their own `_DMA<rx>Interrupt`
+- `NORA_TDM_DEFINE_DMA_VECTORS=0`: the HAL defines no vectors; the integrator owns the
+  IVT and calls `nora_spi_i2s_tdm_inst_rx_isr(inst)` from their own `_DMA<rx>Interrupt`
   for each instance.
 
 TX is interrupt-less (no TX interrupt is enabled by the transport).

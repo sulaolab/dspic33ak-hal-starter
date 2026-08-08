@@ -1,12 +1,12 @@
-#ifndef DSPIC33AK_SPI_I2S_TDM_CONF_H
-#define DSPIC33AK_SPI_I2S_TDM_CONF_H
+#ifndef NORA_SPI_I2S_TDM_CONF_H
+#define NORA_SPI_I2S_TDM_CONF_H
 
 //===========================================================
-// dspic33ak_spi_i2s_tdm_conf.h  --  dspic33ak-hal-starter PROJECT config (compiled)
+// nora_spi_i2s_tdm_conf.h  --  dspic33ak-hal-starter PROJECT config (compiled)
 //
 // The starter's project-supplied SPI/I2S/TDM HAL config, copied from the HAL's
-// dspic33ak_spi_i2s_tdm_conf.h_example template and kept here in src/ on the include path
-// (the HAL core does #include "dspic33ak_spi_i2s_tdm_conf.h"; this src/ copy is found, the
+// nora_spi_i2s_tdm_conf.h_example template and kept here in src/ on the include path
+// (the HAL core does #include "nora_spi_i2s_tdm_conf.h"; this src/ copy is found, the
 // template in hal_spi_i2s_tdm/ never is -- different extension). It is self-contained: NO
 // app-layer dependency. For the starter's codec-less SPI1 TDM8 master smoke demo the
 // example defaults already fit -- a single SPI1 TDM8 stream, DMA0/1, HAL-owned RX vector.
@@ -20,7 +20,7 @@
 // Dependency direction: app code MAY read these macros (app -> HAL); the HAL MUST NOT
 // read app config (HAL -> app is forbidden). If your project also derives these values
 // in its own config, keep the two as independent owners and assert their CONSISTENCY on
-// the APP side (compare your APP_* against the DSPIC33AK_TDM_* here and #error on a
+// the APP side (compare your APP_* against the NORA_TDM_* here and #error on a
 // mismatch). The HAL does not police the app, and vice versa.
 //
 // Each setting is -D-overridable (#ifndef-guarded). This project config defaults to a
@@ -28,11 +28,11 @@
 // below for I2S (2 slots), a different block size, or additional transport legs.
 //
 // Compile-time integration settings:
-//   DSPIC33AK_TDM_SLOTS_PER_FS   slots per frame-sync: TDM8 = 8, I2S = 2.
-//   DSPIC33AK_TDM_BLOCK_FRAMES   frames per ping/pong half (DMA block size).
-//   DSPIC33AK_TDM_USE_SPI2      1 = second logical transport row is built.
-//   DSPIC33AK_TDM_USE_SPI3/4    1 = additional physical SPI3/SPI4 rows are built (AK512 only).
-//   DSPIC33AK_TDM_BASE_ON_SPI34 1 = remap logical rows 0/1 from SPI1/2 to SPI3/4 (AK512 only).
+//   NORA_TDM_SLOTS_PER_FS   slots per frame-sync: TDM8 = 8, I2S = 2.
+//   NORA_TDM_BLOCK_FRAMES   frames per ping/pong half (DMA block size).
+//   NORA_TDM_USE_SPI2      1 = second logical transport row is built.
+//   NORA_TDM_USE_SPI3/4    1 = additional physical SPI3/SPI4 rows are built (AK512 only).
+//   NORA_TDM_BASE_ON_SPI34 1 = remap logical rows 0/1 from SPI1/2 to SPI3/4 (AK512 only).
 // AK128 has no SPI4 or DMA6/7, so paired SPI3/4 and four-leg modes are unavailable.
 // (Sample rate is NOT a setting here -- the transport is rate-agnostic; the product's
 // supported-rate policy lives in the app layer, not the HAL.)
@@ -47,34 +47,34 @@
 // live HERE (or via -D), NOT in app_config.h -- the HAL core does not include app config.
 //
 // TDM8 is the default smoke-demo geometry. TDM16 can be enabled as a hidden/experimental
-// framing check (DSPIC33AK_TDM_USE_TDM16 = 1, here or via -D): it increases BCLK and DMA
+// framing check (NORA_TDM_USE_TDM16 = 1, here or via -D): it increases BCLK and DMA
 // traffic substantially and is intended for scope-level investigation, not as a public
 // starter-board feature. Keep TDM8 as the normal default.
-// (For I2S use 2 slots: define DSPIC33AK_TDM_SLOTS_PER_FS=2 directly via -D.)
-#ifndef DSPIC33AK_TDM_USE_TDM16
-#define DSPIC33AK_TDM_USE_TDM16       0     // 0 = TDM8 (default) ; 1 = TDM16 (hidden experimental)
+// (For I2S use 2 slots: define NORA_TDM_SLOTS_PER_FS=2 directly via -D.)
+#ifndef NORA_TDM_USE_TDM16
+#define NORA_TDM_USE_TDM16       0     // 0 = TDM8 (default) ; 1 = TDM16 (hidden experimental)
 #endif
-#ifndef DSPIC33AK_TDM_SLOTS_PER_FS
-#  if DSPIC33AK_TDM_USE_TDM16
-#    define DSPIC33AK_TDM_SLOTS_PER_FS 16   // TDM16 (hidden experimental geometry)
+#ifndef NORA_TDM_SLOTS_PER_FS
+#  if NORA_TDM_USE_TDM16
+#    define NORA_TDM_SLOTS_PER_FS 16   // TDM16 (hidden experimental geometry)
 #  else
-#    define DSPIC33AK_TDM_SLOTS_PER_FS 8    // TDM8 (default)
+#    define NORA_TDM_SLOTS_PER_FS 8    // TDM8 (default)
 #  endif
 #endif
-#ifndef DSPIC33AK_TDM_BLOCK_FRAMES
-#define DSPIC33AK_TDM_BLOCK_FRAMES    32    // frames per ping/pong half
+#ifndef NORA_TDM_BLOCK_FRAMES
+#define NORA_TDM_BLOCK_FRAMES    32    // frames per ping/pong half
 #endif
-#ifndef DSPIC33AK_TDM_USE_SPI2
-#define DSPIC33AK_TDM_USE_SPI2        0     // single SPI Audio transport by default
+#ifndef NORA_TDM_USE_SPI2
+#define NORA_TDM_USE_SPI2        0     // single SPI Audio transport by default
 #endif
-#ifndef DSPIC33AK_TDM_USE_SPI3
-#define DSPIC33AK_TDM_USE_SPI3        0     // no additional SPI3 row by default
+#ifndef NORA_TDM_USE_SPI3
+#define NORA_TDM_USE_SPI3        0     // no additional SPI3 row by default
 #endif
-#ifndef DSPIC33AK_TDM_USE_SPI4
-#define DSPIC33AK_TDM_USE_SPI4        0     // no additional SPI4 row by default
+#ifndef NORA_TDM_USE_SPI4
+#define NORA_TDM_USE_SPI4        0     // no additional SPI4 row by default
 #endif
-#ifndef DSPIC33AK_TDM_BASE_ON_SPI34
-#define DSPIC33AK_TDM_BASE_ON_SPI34   0     // default logical bank is physical SPI1/SPI2
+#ifndef NORA_TDM_BASE_ON_SPI34
+#define NORA_TDM_BASE_ON_SPI34   0     // default logical bank is physical SPI1/SPI2
 #endif
 
 //===========================================================
@@ -89,29 +89,29 @@
 // build on the _Static_assert; a duplicate channel (RX==TX on a leg, or shared across legs) is
 // rejected at runtime by the topology validation (ERR_TOPOLOGY) before open()/start().
 //===========================================================
-#ifndef DSPIC33AK_TDM_SPI1_RX_DMA
-#define DSPIC33AK_TDM_SPI1_RX_DMA   0
+#ifndef NORA_TDM_SPI1_RX_DMA
+#define NORA_TDM_SPI1_RX_DMA   0
 #endif
-#ifndef DSPIC33AK_TDM_SPI1_TX_DMA
-#define DSPIC33AK_TDM_SPI1_TX_DMA   1
+#ifndef NORA_TDM_SPI1_TX_DMA
+#define NORA_TDM_SPI1_TX_DMA   1
 #endif
-#ifndef DSPIC33AK_TDM_SPI2_RX_DMA
-#define DSPIC33AK_TDM_SPI2_RX_DMA   2
+#ifndef NORA_TDM_SPI2_RX_DMA
+#define NORA_TDM_SPI2_RX_DMA   2
 #endif
-#ifndef DSPIC33AK_TDM_SPI2_TX_DMA
-#define DSPIC33AK_TDM_SPI2_TX_DMA   3
+#ifndef NORA_TDM_SPI2_TX_DMA
+#define NORA_TDM_SPI2_TX_DMA   3
 #endif
-#ifndef DSPIC33AK_TDM_SPI3_RX_DMA
-#define DSPIC33AK_TDM_SPI3_RX_DMA   4
+#ifndef NORA_TDM_SPI3_RX_DMA
+#define NORA_TDM_SPI3_RX_DMA   4
 #endif
-#ifndef DSPIC33AK_TDM_SPI3_TX_DMA
-#define DSPIC33AK_TDM_SPI3_TX_DMA   5
+#ifndef NORA_TDM_SPI3_TX_DMA
+#define NORA_TDM_SPI3_TX_DMA   5
 #endif
-#ifndef DSPIC33AK_TDM_SPI4_RX_DMA
-#define DSPIC33AK_TDM_SPI4_RX_DMA   6
+#ifndef NORA_TDM_SPI4_RX_DMA
+#define NORA_TDM_SPI4_RX_DMA   6
 #endif
-#ifndef DSPIC33AK_TDM_SPI4_TX_DMA
-#define DSPIC33AK_TDM_SPI4_TX_DMA   7
+#ifndef NORA_TDM_SPI4_TX_DMA
+#define NORA_TDM_SPI4_TX_DMA   7
 #endif
 
 
@@ -119,11 +119,11 @@
 // DMA interrupt-vector ownership.
 //   1 (default) : TURNKEY -- the HAL DEFINES the _DMA<rx>Interrupt vectors itself.
 //   0           : the HAL defines NO vectors. The integrator owns the IVT and calls
-//                 dspic33ak_spi_i2s_tdm_inst_rx_isr(spiN()) from their own
+//                 nora_spi_i2s_tdm_inst_rx_isr(spiN()) from their own
 //                 _DMA<rx>Interrupt for each instance's RX channel.
 //===========================================================
-#ifndef DSPIC33AK_TDM_DEFINE_DMA_VECTORS
-#define DSPIC33AK_TDM_DEFINE_DMA_VECTORS   1
+#ifndef NORA_TDM_DEFINE_DMA_VECTORS
+#define NORA_TDM_DEFINE_DMA_VECTORS   1
 #endif
 
 
@@ -132,12 +132,12 @@
 //
 // The transport core defines its leg enum, per-instance ping-pong buffers, the
 // s_spi_legs[] table, and the explicit _DMA<rx>Interrupt vectors directly in C, keyed off
-// the per-instance channel #defines above (DSPIC33AK_TDM_SPIn_RX/TX_DMA) and the geometry
-// macros (DSPIC33AK_TDM_SLOTS_PER_FS / _BLOCK_FRAMES). By default, logical rows 0/1 map
-// to physical SPI1/SPI2. DSPIC33AK_TDM_BASE_ON_SPI34 explicitly remaps those same two rows
-// to SPI3/SPI4; DSPIC33AK_TDM_USE_SPI3/4 instead add physical SPI3/SPI4 rows after SPI1/SPI2.
+// the per-instance channel #defines above (NORA_TDM_SPIn_RX/TX_DMA) and the geometry
+// macros (NORA_TDM_SLOTS_PER_FS / _BLOCK_FRAMES). By default, logical rows 0/1 map
+// to physical SPI1/SPI2. NORA_TDM_BASE_ON_SPI34 explicitly remaps those same two rows
+// to SPI3/SPI4; NORA_TDM_USE_SPI3/4 instead add physical SPI3/SPI4 rows after SPI1/SPI2.
 // The per-leg clock role and (rate-agnostic) stream shape are set at runtime by the
-// integrator's config (dspic33ak_spi_i2s_tdm_configure_system() / _inst_configure()),
+// integrator's config (nora_spi_i2s_tdm_configure_system() / _inst_configure()),
 // not here.
 //===========================================================
 
@@ -147,78 +147,78 @@
 // BCLK/FS -- but this is NOT full independence (source-readiness is engine-wide/primary-gated;
 // CLC10 + the clock port are shared). NOT the clock role.
 // Starter smoke is SPI1-only by default; additional values are used only when those rows are built.
-#ifndef DSPIC33AK_TDM_SPI1_SYNC_DOMAIN
-#define DSPIC33AK_TDM_SPI1_SYNC_DOMAIN   (0)
+#ifndef NORA_TDM_SPI1_SYNC_DOMAIN
+#define NORA_TDM_SPI1_SYNC_DOMAIN   (0)
 #endif
-#ifndef DSPIC33AK_TDM_SPI2_SYNC_DOMAIN
-#define DSPIC33AK_TDM_SPI2_SYNC_DOMAIN   (0)
+#ifndef NORA_TDM_SPI2_SYNC_DOMAIN
+#define NORA_TDM_SPI2_SYNC_DOMAIN   (0)
 #endif
-#ifndef DSPIC33AK_TDM_SPI3_SYNC_DOMAIN
-#define DSPIC33AK_TDM_SPI3_SYNC_DOMAIN   (2)
+#ifndef NORA_TDM_SPI3_SYNC_DOMAIN
+#define NORA_TDM_SPI3_SYNC_DOMAIN   (2)
 #endif
-#ifndef DSPIC33AK_TDM_SPI4_SYNC_DOMAIN
-#define DSPIC33AK_TDM_SPI4_SYNC_DOMAIN   (3)
+#ifndef NORA_TDM_SPI4_SYNC_DOMAIN
+#define NORA_TDM_SPI4_SYNC_DOMAIN   (3)
 #endif
 
 // sync_domain must be 0..31 (start_all_domains()'s dedup/rollback mask range). Reject negatives
 // too: a negative literal would cast to a large uint8_t at runtime.
-#if ((DSPIC33AK_TDM_SPI1_SYNC_DOMAIN) < 0) || ((DSPIC33AK_TDM_SPI1_SYNC_DOMAIN) >= 32)
-#error "DSPIC33AK_TDM_SPI1_SYNC_DOMAIN must be in 0..31."
+#if ((NORA_TDM_SPI1_SYNC_DOMAIN) < 0) || ((NORA_TDM_SPI1_SYNC_DOMAIN) >= 32)
+#error "NORA_TDM_SPI1_SYNC_DOMAIN must be in 0..31."
 #endif
-#if DSPIC33AK_TDM_USE_SPI2 && (((DSPIC33AK_TDM_SPI2_SYNC_DOMAIN) < 0) || ((DSPIC33AK_TDM_SPI2_SYNC_DOMAIN) >= 32))
-#error "DSPIC33AK_TDM_SPI2_SYNC_DOMAIN must be in 0..31."
+#if NORA_TDM_USE_SPI2 && (((NORA_TDM_SPI2_SYNC_DOMAIN) < 0) || ((NORA_TDM_SPI2_SYNC_DOMAIN) >= 32))
+#error "NORA_TDM_SPI2_SYNC_DOMAIN must be in 0..31."
 #endif
-#if DSPIC33AK_TDM_USE_SPI3 && (((DSPIC33AK_TDM_SPI3_SYNC_DOMAIN) < 0) || ((DSPIC33AK_TDM_SPI3_SYNC_DOMAIN) >= 32))
-#error "DSPIC33AK_TDM_SPI3_SYNC_DOMAIN must be in 0..31."
+#if NORA_TDM_USE_SPI3 && (((NORA_TDM_SPI3_SYNC_DOMAIN) < 0) || ((NORA_TDM_SPI3_SYNC_DOMAIN) >= 32))
+#error "NORA_TDM_SPI3_SYNC_DOMAIN must be in 0..31."
 #endif
-#if DSPIC33AK_TDM_USE_SPI4 && (((DSPIC33AK_TDM_SPI4_SYNC_DOMAIN) < 0) || ((DSPIC33AK_TDM_SPI4_SYNC_DOMAIN) >= 32))
-#error "DSPIC33AK_TDM_SPI4_SYNC_DOMAIN must be in 0..31."
-#endif
-
-
-#if (DSPIC33AK_TDM_SLOTS_PER_FS <= 0)
-#error "DSPIC33AK_TDM_SLOTS_PER_FS must be positive."
+#if NORA_TDM_USE_SPI4 && (((NORA_TDM_SPI4_SYNC_DOMAIN) < 0) || ((NORA_TDM_SPI4_SYNC_DOMAIN) >= 32))
+#error "NORA_TDM_SPI4_SYNC_DOMAIN must be in 0..31."
 #endif
 
-#if (DSPIC33AK_TDM_SLOTS_PER_FS > 255)
-#error "DSPIC33AK_TDM_SLOTS_PER_FS must fit in uint8_t."
+
+#if (NORA_TDM_SLOTS_PER_FS <= 0)
+#error "NORA_TDM_SLOTS_PER_FS must be positive."
 #endif
 
-#if (DSPIC33AK_TDM_BLOCK_FRAMES <= 0)
-#error "DSPIC33AK_TDM_BLOCK_FRAMES must be positive."
+#if (NORA_TDM_SLOTS_PER_FS > 255)
+#error "NORA_TDM_SLOTS_PER_FS must fit in uint8_t."
 #endif
 
-#if (DSPIC33AK_TDM_BLOCK_FRAMES > 65535)
-#error "DSPIC33AK_TDM_BLOCK_FRAMES must fit in uint16_t."
+#if (NORA_TDM_BLOCK_FRAMES <= 0)
+#error "NORA_TDM_BLOCK_FRAMES must be positive."
 #endif
 
-#if ((DSPIC33AK_TDM_USE_SPI2 != 0) && (DSPIC33AK_TDM_USE_SPI2 != 1))
-#error "DSPIC33AK_TDM_USE_SPI2 must be 0 or 1."
+#if (NORA_TDM_BLOCK_FRAMES > 65535)
+#error "NORA_TDM_BLOCK_FRAMES must fit in uint16_t."
 #endif
-#if ((DSPIC33AK_TDM_USE_SPI3 != 0) && (DSPIC33AK_TDM_USE_SPI3 != 1))
-#error "DSPIC33AK_TDM_USE_SPI3 must be 0 or 1."
+
+#if ((NORA_TDM_USE_SPI2 != 0) && (NORA_TDM_USE_SPI2 != 1))
+#error "NORA_TDM_USE_SPI2 must be 0 or 1."
 #endif
-#if ((DSPIC33AK_TDM_USE_SPI4 != 0) && (DSPIC33AK_TDM_USE_SPI4 != 1))
-#error "DSPIC33AK_TDM_USE_SPI4 must be 0 or 1."
+#if ((NORA_TDM_USE_SPI3 != 0) && (NORA_TDM_USE_SPI3 != 1))
+#error "NORA_TDM_USE_SPI3 must be 0 or 1."
 #endif
-#if ((DSPIC33AK_TDM_BASE_ON_SPI34 != 0) && (DSPIC33AK_TDM_BASE_ON_SPI34 != 1))
-#error "DSPIC33AK_TDM_BASE_ON_SPI34 must be 0 or 1."
+#if ((NORA_TDM_USE_SPI4 != 0) && (NORA_TDM_USE_SPI4 != 1))
+#error "NORA_TDM_USE_SPI4 must be 0 or 1."
 #endif
-#if (DSPIC33AK_TDM_USE_SPI3 != DSPIC33AK_TDM_USE_SPI4)
+#if ((NORA_TDM_BASE_ON_SPI34 != 0) && (NORA_TDM_BASE_ON_SPI34 != 1))
+#error "NORA_TDM_BASE_ON_SPI34 must be 0 or 1."
+#endif
+#if (NORA_TDM_USE_SPI3 != NORA_TDM_USE_SPI4)
 #error "The SPI3/SPI4 expansion requires SPI3 and SPI4 together."
 #endif
-#if DSPIC33AK_TDM_BASE_ON_SPI34 && !DSPIC33AK_TDM_USE_SPI2
-#error "The SPI34 test bank requires two logical rows (DSPIC33AK_TDM_USE_SPI2=1)."
+#if NORA_TDM_BASE_ON_SPI34 && !NORA_TDM_USE_SPI2
+#error "The SPI34 test bank requires two logical rows (NORA_TDM_USE_SPI2=1)."
 #endif
-#if DSPIC33AK_TDM_BASE_ON_SPI34 && (DSPIC33AK_TDM_USE_SPI3 || DSPIC33AK_TDM_USE_SPI4)
+#if NORA_TDM_BASE_ON_SPI34 && (NORA_TDM_USE_SPI3 || NORA_TDM_USE_SPI4)
 #error "SPI34 test-bank mode and simultaneous four-leg mode are mutually exclusive."
 #endif
-#if DSPIC33AK_TDM_USE_SPI3 && !DSPIC33AK_TDM_USE_SPI2
+#if NORA_TDM_USE_SPI3 && !NORA_TDM_USE_SPI2
 #error "SPI3/SPI4 expansion currently requires the existing SPI1/SPI2 pair."
 #endif
 
-#if (DSPIC33AK_TDM_SLOTS_PER_FS > (2147483647 / (2 * DSPIC33AK_TDM_BLOCK_FRAMES)))
+#if (NORA_TDM_SLOTS_PER_FS > (2147483647 / (2 * NORA_TDM_BLOCK_FRAMES)))
 #error "SPI/I2S/TDM DMA buffer geometry overflows the static buffer element count."
 #endif
 
-#endif // DSPIC33AK_SPI_I2S_TDM_CONF_H
+#endif // NORA_SPI_I2S_TDM_CONF_H

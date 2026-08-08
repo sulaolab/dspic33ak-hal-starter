@@ -409,9 +409,9 @@ src/
                         logical PLL / CLKGEN programming through core,
                         device, and register-adaptation layers
   hal_gpio/             vendored GPIO+PPS HAL family:
-                        dspic33ak_gpio.*    GPIO electrical attributes
-                        dspic33ak_pps.*     peripheral signal routing (PPS)
-                        dspic33ak_gpio_event.*  CN change-notification events
+                        nora_gpio.*    GPIO electrical attributes
+                        nora_pps.*     peripheral signal routing (PPS)
+                        nora_gpio_event.*  CN change-notification events
   hal_uart/             vendored UART HAL
   hal_spi/              vendored SPI HAL (blocking master; SST26 flash on SPI4)
   hal_i2c/              vendored I2C HAL
@@ -425,7 +425,7 @@ src/
   hal_spi_i2s_tdm/      vendored SPI framed-mode I2S/TDM transport HAL
                         (DMA ping-pong + per-instance block callback; board-free
                         via a port hook). See its own README.md.
-  dspic33ak_spi_i2s_tdm_conf.h  project-supplied (self-contained) config for the
+  nora_spi_i2s_tdm_conf.h  project-supplied (self-contained) config for the
                         TDM HAL: single SPI1 TDM8 stream, DMA0/1. It is kept
                         near the top of src/ so it is easy to find in MPLAB X.
   app/                  bus validation samples: i2c_scan, i2c_loopback,
@@ -461,8 +461,8 @@ starter project.
 **GPIO / PPS architecture:** the board layer owns the board-specific pin
 assignments (which signal goes to which RP on this PCB). GPIO electrical
 configuration (direction, pull, analog, open-drain) is handled by
-`dspic33ak_gpio.*`; generic PPS signal routing is handled by the companion
-`dspic33ak_pps.*` layer. Both are in `src/hal_gpio/`. The board layer
+`nora_gpio.*`; generic PPS signal routing is handled by the companion
+`nora_pps.*` layer. Both are in `src/hal_gpio/`. The board layer
 (`board.c` / `board_pins.h`) wires them together, using the RP number as the
 single identifier for both GPIO config and PPS routing on PPS-capable pins.
 

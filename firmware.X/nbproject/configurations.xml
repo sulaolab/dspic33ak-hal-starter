@@ -67,12 +67,12 @@
         <itemPath>../src/hal_clock/dspic33ak_clock_reg.h</itemPath>
       </logicalFolder>
       <logicalFolder name="f20" displayName="hal_dma" projectFiles="true">
-        <itemPath>../src/hal_dma/dspic33ak_dma.c</itemPath>
+        <itemPath>../src/hal_dma/nora_dma_dspic33a.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f3" displayName="hal_gpio" projectFiles="true">
-        <itemPath>../src/hal_gpio/dspic33ak_gpio.c</itemPath>
-        <itemPath>../src/hal_gpio/dspic33ak_gpio_event.c</itemPath>
-        <itemPath>../src/hal_gpio/dspic33ak_pps.c</itemPath>
+        <itemPath>../src/hal_gpio/nora_gpio_dspic33a.c</itemPath>
+        <itemPath>../src/hal_gpio/nora_gpio_event_dspic33a.c</itemPath>
+        <itemPath>../src/hal_gpio/nora_pps_dspic33a.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f10" displayName="hal_i2c" projectFiles="true">
         <itemPath>../src/hal_i2c/dspic33ak_i2c_common.c</itemPath>
@@ -88,10 +88,10 @@
         <itemPath>../src/hal_spi/nora_spi_dspic33a.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f21" displayName="hal_spi_i2s_tdm" projectFiles="true">
-        <itemPath>../src/hal_spi_i2s_tdm/dspic33ak_spi_i2s_tdm.c</itemPath>
-        <itemPath>../src/hal_spi_i2s_tdm/dspic33ak_spi_i2s_tdm_hw.c</itemPath>
-        <itemPath>../src/hal_spi_i2s_tdm/dspic33ak_spi_i2s_tdm_fs_clc.c</itemPath>
-        <itemPath>../src/hal_spi_i2s_tdm/dspic33ak_spi_i2s_tdm_diag.c</itemPath>
+        <itemPath>../src/hal_spi_i2s_tdm/nora_spi_i2s_tdm_dspic33a.c</itemPath>
+        <itemPath>../src/hal_spi_i2s_tdm/nora_spi_i2s_tdm_dspic33a_hw.c</itemPath>
+        <itemPath>../src/hal_spi_i2s_tdm/nora_spi_i2s_tdm_dspic33a_fs_clc.c</itemPath>
+        <itemPath>../src/hal_spi_i2s_tdm/nora_spi_i2s_tdm_dspic33a_diag.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f7" displayName="hal_timer" projectFiles="true">
         <itemPath>../src/hal_timer/nora_tick_timer_dspic33a.c</itemPath>
@@ -105,7 +105,7 @@
       <logicalFolder name="f8" displayName="hal_udid" projectFiles="true">
         <itemPath>../src/hal_udid/nora_udid_dspic33a.c</itemPath>
       </logicalFolder>
-      <itemPath>../src/dspic33ak_spi_i2s_tdm_conf.h</itemPath>
+      <itemPath>../src/nora_spi_i2s_tdm_conf.h</itemPath>
       <itemPath>../src/board.c</itemPath>
       <itemPath>../src/main.c</itemPath>
     </logicalFolder>

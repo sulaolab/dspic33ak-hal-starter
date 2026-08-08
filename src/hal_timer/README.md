@@ -9,7 +9,7 @@ This directory contains reusable dsPIC33AK timer services:
   - Provides `dspic33ak_tick_timer_*()` APIs.
 - `nora_high_res_timer_dspic33a.c / nora_high_res_timer.h`
   - Timer2-based free-running high-resolution counter.
-  - Provides `dspic33ak_high_res_timer_*()` APIs.
+  - Provides `nora_high_res_timer_*()` APIs.
 
 The HAL does not own clock-tree setup and does not define interrupt vectors.
 Applications provide the timer input clocks through configuration structures and

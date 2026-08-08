@@ -15,7 +15,7 @@
 
 #include "board.h"
 #include "board_pins.h"
-#include "dspic33ak_gpio.h"
+#include "nora_gpio.h"
 #include "rgb_pot.h"
 
 /* PWM generator period (Q4 format, as the PG period register expects). Off the
@@ -84,11 +84,11 @@ static void pwm_rgb_set(uint8_t ch, uint8_t duty)
 static void adc_pot_init(void)
 {
     /* RA7 is analog for the pot. */
-    static const dspic33ak_gpio_config_t pot_cfg = {
-        .dir = DSPIC33AK_GPIO_DIR_INPUT, .pull = DSPIC33AK_GPIO_PULL_NONE,
+    static const nora_gpio_config_t pot_cfg = {
+        .dir = NORA_GPIO_DIR_INPUT, .pull = NORA_GPIO_PULL_NONE,
         .analog = true, .open_drain = false, .initial_high = false,
     };
-    (void)dspic33ak_gpio_config(BOARD_POT_PIN, &pot_cfg);
+    (void)nora_gpio_config(BOARD_POT_PIN, &pot_cfg);
 
     AD5CON       = 0x00480000UL;   /* ADC clock/config (module off) */
     AD5CONbits.ON = 1;
