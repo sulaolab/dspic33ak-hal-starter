@@ -1,12 +1,12 @@
 /**
- * @file    dspic33ak_canfd_common.c
+ * @file    nora_canfd_common_dspic33a.c
  * @brief   dsPIC33AK CAN FD HAL - shared primitives implementation.
  */
-#include "dspic33ak_canfd_common.h"
-#include "dspic33ak_canfd_device.h"
+#include "nora_canfd_common.h"
+#include "nora_canfd_device.h"
 
 /* Only module-level state: the current mode per instance. */
-static dspic33ak_canfd_mode_t g_mode[DSPIC33AK_CANFD_INST_COUNT];
+static nora_canfd_mode_t g_mode[NORA_CANFD_INST_COUNT];
 
 /* Bit-timing field limits (actual segment counts, before the -1 encoding). */
 typedef struct {
@@ -18,25 +18,25 @@ typedef struct {
 static const bt_limits_t k_nominal_limits = { 2u, 256u, 1u, 128u, 128u };
 static const bt_limits_t k_data_limits    = { 1u,  32u, 1u,  16u,  16u };
 
-bool dspic33ak_canfd_inst_is_valid(dspic33ak_canfd_instance_t inst)
+bool nora_canfd_inst_is_valid(nora_canfd_instance_t inst)
 {
-    return (unsigned)inst < (unsigned)DSPIC33AK_CANFD_INST_COUNT;
+    return (unsigned)inst < (unsigned)NORA_CANFD_INST_COUNT;
 }
 
-dspic33ak_canfd_status_t dspic33ak_canfd_get_regs(dspic33ak_canfd_instance_t inst,
-                                                  const dspic33ak_canfd_regs_t **regs)
+nora_canfd_status_t nora_canfd_get_regs(nora_canfd_instance_t inst,
+                                                  const nora_canfd_regs_t **regs)
 {
-    const dspic33ak_canfd_device_t *dev;
+    const nora_canfd_device_t *dev;
 
-    if (!dspic33ak_canfd_inst_is_valid(inst) || regs == NULL) {
-        return DSPIC33AK_CANFD_ERR_INVALID_ARG;
+    if (!nora_canfd_inst_is_valid(inst) || regs == NULL) {
+        return NORA_CANFD_ERR_INVALID_ARG;
     }
-    dev = dspic33ak_canfd_get_device(inst);
+    dev = nora_canfd_get_device(inst);
     if (dev == NULL) {
-        return DSPIC33AK_CANFD_ERR_NOT_PRESENT;
+        return NORA_CANFD_ERR_NOT_PRESENT;
     }
     *regs = &dev->regs;
-    return DSPIC33AK_CANFD_OK;
+    return NORA_CANFD_OK;
 }
 
 /*
@@ -90,7 +90,7 @@ static bool solve_phase(uint32_t fcan_hz, uint32_t bps, uint8_t sample_pct,
     return false;
 }
 
-dspic33ak_canfd_status_t dspic33ak_canfd_calc_bit_timing(uint32_t fcan_hz,
+nora_canfd_status_t nora_canfd_calc_bit_timing(uint32_t fcan_hz,
                                                          uint32_t nominal_bps,
                                                          uint32_t data_bps,
                                                          uint8_t  sample_pct,
@@ -103,20 +103,20 @@ dspic33ak_canfd_status_t dspic33ak_canfd_calc_bit_timing(uint32_t fcan_hz,
 
     if (nbtcfg == NULL || dbtcfg == NULL || tdc == NULL ||
         sample_pct == 0u || sample_pct >= 100u) {
-        return DSPIC33AK_CANFD_ERR_INVALID_ARG;
+        return NORA_CANFD_ERR_INVALID_ARG;
     }
 
     if (!solve_phase(fcan_hz, nominal_bps, sample_pct, &k_nominal_limits,
-                     DSPIC33AK_CANFD_NBTCFG_SJW_POS, DSPIC33AK_CANFD_NBTCFG_TSEG2_POS,
-                     DSPIC33AK_CANFD_NBTCFG_TSEG1_POS, DSPIC33AK_CANFD_NBTCFG_BRP_POS,
+                     NORA_CANFD_NBTCFG_SJW_POS, NORA_CANFD_NBTCFG_TSEG2_POS,
+                     NORA_CANFD_NBTCFG_TSEG1_POS, NORA_CANFD_NBTCFG_BRP_POS,
                      nbtcfg, NULL, NULL)) {
-        return DSPIC33AK_CANFD_ERR_INVALID_ARG;
+        return NORA_CANFD_ERR_INVALID_ARG;
     }
     if (!solve_phase(fcan_hz, data_bps, sample_pct, &k_data_limits,
-                     DSPIC33AK_CANFD_DBTCFG_SJW_POS, DSPIC33AK_CANFD_DBTCFG_TSEG2_POS,
-                     DSPIC33AK_CANFD_DBTCFG_TSEG1_POS, DSPIC33AK_CANFD_DBTCFG_BRP_POS,
+                     NORA_CANFD_DBTCFG_SJW_POS, NORA_CANFD_DBTCFG_TSEG2_POS,
+                     NORA_CANFD_DBTCFG_TSEG1_POS, NORA_CANFD_DBTCFG_BRP_POS,
                      dbtcfg, &dtseg1_actual, &dbrp_actual)) {
-        return DSPIC33AK_CANFD_ERR_INVALID_ARG;
+        return NORA_CANFD_ERR_INVALID_ARG;
     }
 
     /* Auto TDC; SSP offset = DBRP * DTSEG1 (datasheet recommendation for the
@@ -124,35 +124,35 @@ dspic33ak_canfd_status_t dspic33ak_canfd_calc_bit_timing(uint32_t fcan_hz,
     {
         uint32_t tdco = (uint32_t)dbrp_actual * (uint32_t)dtseg1_actual;
         if (tdco > 0x7Fu) tdco = 0x7Fu;
-        *tdc = ((uint32_t)DSPIC33AK_CANFD_TDC_TDCMOD_AUTO << DSPIC33AK_CANFD_TDC_TDCMOD_POS)
-             | (tdco << DSPIC33AK_CANFD_TDC_TDCO_POS);
+        *tdc = ((uint32_t)NORA_CANFD_TDC_TDCMOD_AUTO << NORA_CANFD_TDC_TDCMOD_POS)
+             | (tdco << NORA_CANFD_TDC_TDCO_POS);
     }
-    return DSPIC33AK_CANFD_OK;
+    return NORA_CANFD_OK;
 }
 
-void dspic33ak_canfd_set_mode(dspic33ak_canfd_instance_t inst, dspic33ak_canfd_mode_t mode)
+void nora_canfd_set_mode(nora_canfd_instance_t inst, nora_canfd_mode_t mode)
 {
-    if (dspic33ak_canfd_inst_is_valid(inst)) {
+    if (nora_canfd_inst_is_valid(inst)) {
         g_mode[inst] = mode;
     }
 }
 
-dspic33ak_canfd_mode_t dspic33ak_canfd_get_mode(dspic33ak_canfd_instance_t inst)
+nora_canfd_mode_t nora_canfd_get_mode(nora_canfd_instance_t inst)
 {
-    if (!dspic33ak_canfd_inst_is_valid(inst)) {
-        return DSPIC33AK_CANFD_MODE_NONE;
+    if (!nora_canfd_inst_is_valid(inst)) {
+        return NORA_CANFD_MODE_NONE;
     }
     return g_mode[inst];
 }
 
 /* ---- shared queries declared in the public header ---- */
 
-bool dspic33ak_canfd_is_present(dspic33ak_canfd_instance_t inst)
+bool nora_canfd_is_present(nora_canfd_instance_t inst)
 {
-    return dspic33ak_canfd_instance_is_present(inst);
+    return nora_canfd_instance_is_present(inst);
 }
 
-bool dspic33ak_canfd_is_initialized(dspic33ak_canfd_instance_t inst)
+bool nora_canfd_is_initialized(nora_canfd_instance_t inst)
 {
-    return dspic33ak_canfd_get_mode(inst) != DSPIC33AK_CANFD_MODE_NONE;
+    return nora_canfd_get_mode(inst) != NORA_CANFD_MODE_NONE;
 }

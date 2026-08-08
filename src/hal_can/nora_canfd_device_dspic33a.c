@@ -1,19 +1,19 @@
 /**
- * @file    dspic33ak_canfd_device.c
+ * @file    nora_canfd_device_dspic33a.c
  * @brief   dsPIC33AK CAN FD HAL - instance -> register map (the only file that
  *          names raw C1.../C2... SFR symbols). Entries compile in only when the
  *          part defines the registers.
  */
 #include <xc.h>
-#include "dspic33ak_canfd_device.h"
+#include "nora_canfd_device.h"
 
 /* Cast each SFR lvalue to a 32-bit register pointer. The DFP exposes the
  * plain register name (e.g. C1CON) as a volatile uint32_t lvalue. */
 #define CANREG(name) ((volatile uint32_t *)&(name))
 
-static const dspic33ak_canfd_device_t g_canfd_devices[DSPIC33AK_CANFD_INST_COUNT] = {
+static const nora_canfd_device_t g_canfd_devices[NORA_CANFD_INST_COUNT] = {
 #if defined(C1CON)
-    [DSPIC33AK_CANFD_INST_1] = {
+    [NORA_CANFD_INST_1] = {
         .present = true,
         .regs = {
             .CON      = CANREG(C1CON),
@@ -35,11 +35,11 @@ static const dspic33ak_canfd_device_t g_canfd_devices[DSPIC33AK_CANFD_INST_COUNT
         },
     },
 #else
-    [DSPIC33AK_CANFD_INST_1] = { .present = false },
+    [NORA_CANFD_INST_1] = { .present = false },
 #endif
 
 #if defined(C2CON)
-    [DSPIC33AK_CANFD_INST_2] = {
+    [NORA_CANFD_INST_2] = {
         .present = true,
         .regs = {
             .CON      = CANREG(C2CON),
@@ -61,13 +61,13 @@ static const dspic33ak_canfd_device_t g_canfd_devices[DSPIC33AK_CANFD_INST_COUNT
         },
     },
 #else
-    [DSPIC33AK_CANFD_INST_2] = { .present = false },
+    [NORA_CANFD_INST_2] = { .present = false },
 #endif
 };
 
-const dspic33ak_canfd_device_t *dspic33ak_canfd_get_device(dspic33ak_canfd_instance_t inst)
+const nora_canfd_device_t *nora_canfd_get_device(nora_canfd_instance_t inst)
 {
-    if ((unsigned)inst >= (unsigned)DSPIC33AK_CANFD_INST_COUNT) {
+    if ((unsigned)inst >= (unsigned)NORA_CANFD_INST_COUNT) {
         return NULL;
     }
     if (!g_canfd_devices[inst].present) {
@@ -76,34 +76,34 @@ const dspic33ak_canfd_device_t *dspic33ak_canfd_get_device(dspic33ak_canfd_insta
     return &g_canfd_devices[inst];
 }
 
-bool dspic33ak_canfd_instance_is_present(dspic33ak_canfd_instance_t inst)
+bool nora_canfd_instance_is_present(nora_canfd_instance_t inst)
 {
-    return dspic33ak_canfd_get_device(inst) != NULL;
+    return nora_canfd_get_device(inst) != NULL;
 }
 
-dspic33ak_canfd_status_t dspic33ak_canfd_module_enable(
-    dspic33ak_canfd_instance_t inst,
+nora_canfd_status_t nora_canfd_module_enable(
+    nora_canfd_instance_t inst,
     bool enable)
 {
-    if ((unsigned)inst >= (unsigned)DSPIC33AK_CANFD_INST_COUNT) {
-        return DSPIC33AK_CANFD_ERR_INVALID_ARG;
+    if ((unsigned)inst >= (unsigned)NORA_CANFD_INST_COUNT) {
+        return NORA_CANFD_ERR_INVALID_ARG;
     }
-    if (dspic33ak_canfd_get_device(inst) == NULL) {
-        return DSPIC33AK_CANFD_ERR_NOT_PRESENT;
+    if (nora_canfd_get_device(inst) == NULL) {
+        return NORA_CANFD_ERR_NOT_PRESENT;
     }
 
     switch (inst) {
-    case DSPIC33AK_CANFD_INST_1:
+    case NORA_CANFD_INST_1:
 #if defined(_C1MD)
         _C1MD = enable ? 0u : 1u;
-        return DSPIC33AK_CANFD_OK;
+        return NORA_CANFD_OK;
 #else
         break;
 #endif
-    case DSPIC33AK_CANFD_INST_2:
+    case NORA_CANFD_INST_2:
 #if defined(_C2MD)
         _C2MD = enable ? 0u : 1u;
-        return DSPIC33AK_CANFD_OK;
+        return NORA_CANFD_OK;
 #else
         break;
 #endif
@@ -111,5 +111,5 @@ dspic33ak_canfd_status_t dspic33ak_canfd_module_enable(
         break;
     }
 
-    return DSPIC33AK_CANFD_ERR_UNSUPPORTED;
+    return NORA_CANFD_ERR_UNSUPPORTED;
 }

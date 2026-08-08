@@ -19,15 +19,15 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#include "dspic33ak_canfd_node.h"
-#include "dspic33ak_canfd_isr.h"   /* dspic33ak_canfd_get_status() */
+#include "nora_canfd_node.h"
+#include "nora_canfd_isr.h"   /* nora_canfd_get_status() */
 #include "nora_tick_timer.h"
 #include "starter_clock.h"
 
 /* Caller-owned CAN message RAM (TX queue + RX FIFO 1), 4-byte aligned, sized by
- * the HAL's compile-time geometry constant (= dspic33ak_canfd_msg_ram_size()).
+ * the HAL's compile-time geometry constant (= nora_canfd_msg_ram_size()).
  * File scope so the boot self-test and the per-beat tick share one region. */
-static uint32_t can1_msg_ram[DSPIC33AK_CANFD_MSG_RAM_WORDS] __attribute__((aligned(4)));
+static uint32_t can1_msg_ram[NORA_CANFD_MSG_RAM_WORDS] __attribute__((aligned(4)));
 static bool     can_ready = false;
 
 #define CAN_LOOPBACK_ID   0x123u
@@ -57,9 +57,9 @@ static bool     can_ready = false;
 #endif
 
 /* Bring CAN1 up in `mode` (the board layer has already done clock/PPS/power). */
-static bool can_bringup(dspic33ak_canfd_mode_t mode)
+static bool can_bringup(nora_canfd_mode_t mode)
 {
-    dspic33ak_canfd_config_t cfg = {0};
+    nora_canfd_config_t cfg = {0};
 
     cfg.can_clk_hz   = STARTER_CLOCK_CAN_FCAN_HZ;   /* FCAN from starter_clock_can_init() */
     cfg.nominal_bps  = 500000u;
@@ -72,12 +72,12 @@ static bool can_bringup(dspic33ak_canfd_mode_t mode)
     cfg.msg_ram      = can1_msg_ram;
     cfg.msg_ram_size = (uint16_t)sizeof(can1_msg_ram);
 
-    can_ready = (dspic33ak_canfd_init(DSPIC33AK_CANFD_INST_1, &cfg) == DSPIC33AK_CANFD_OK);
+    can_ready = (nora_canfd_init(NORA_CANFD_INST_1, &cfg) == NORA_CANFD_OK);
     return can_ready;
 }
 
 /* Fill an 8/64-byte demo frame, payload seeded by `seed`. */
-static void build_frame(uint8_t seed, dspic33ak_canfd_frame_t *tx)
+static void build_frame(uint8_t seed, nora_canfd_frame_t *tx)
 {
     uint8_t i;
     tx->id  = CAN_LOOPBACK_ID;
@@ -91,7 +91,7 @@ static void build_frame(uint8_t seed, dspic33ak_canfd_frame_t *tx)
 
 /* Print one frame as " <[CAN1 Tx] ..." / " >[CAN1 Rx] ..." (leading space to
  * align with the I2C demo lines). */
-static void can_log_frame(char dir, const char *tag, const dspic33ak_canfd_frame_t *f)
+static void can_log_frame(char dir, const char *tag, const nora_canfd_frame_t *f)
 {
     uint8_t i;
     printf(" %c[CAN1 %s] id=0x%03lX len=%u data=", dir, tag,
@@ -102,7 +102,7 @@ static void can_log_frame(char dir, const char *tag, const dspic33ak_canfd_frame
     printf("\n");
 }
 
-static const char *bus_state_str(const dspic33ak_canfd_bus_status_t *s)
+static const char *bus_state_str(const nora_canfd_bus_status_t *s)
 {
     if (s->bus_off)       return "bus-off";
     if (s->error_passive) return "error-passive";
@@ -112,19 +112,19 @@ static const char *bus_state_str(const dspic33ak_canfd_bus_status_t *s)
 
 bool can_loopback_selftest(void)
 {
-    dspic33ak_canfd_frame_t tx = {0};
-    dspic33ak_canfd_frame_t rx = {0};
+    nora_canfd_frame_t tx = {0};
+    nora_canfd_frame_t rx = {0};
     bool ok = false;
     uint8_t i;
 
     /* Self-contained HAL check: INTERNAL loopback self-ACKs and self-receives, so
      * it passes on a bare board with no bus, transceiver or partner. */
-    if (!can_bringup(DSPIC33AK_CANFD_MODE_INTERNAL_LOOPBACK)) {
+    if (!can_bringup(NORA_CANFD_MODE_INTERNAL_LOOPBACK)) {
         return false;
     }
     build_frame(0xA0u, &tx);
-    if ((dspic33ak_canfd_transmit(DSPIC33AK_CANFD_INST_1, &tx) == DSPIC33AK_CANFD_OK) &&
-        (dspic33ak_canfd_receive(DSPIC33AK_CANFD_INST_1, &rx) == DSPIC33AK_CANFD_OK) &&
+    if ((nora_canfd_transmit(NORA_CANFD_INST_1, &tx) == NORA_CANFD_OK) &&
+        (nora_canfd_receive(NORA_CANFD_INST_1, &rx) == NORA_CANFD_OK) &&
         (rx.id == tx.id) && (rx.len == tx.len)) {
         ok = true;
         for (i = 0u; i < tx.len; i++) {
@@ -136,15 +136,15 @@ bool can_loopback_selftest(void)
      * alone, it goes error-passive and retransmits (a visible burst); see the tick.
      * Fold the live bring-up into the result so a failed arm (which would leave
      * can_loopback_tick() a no-op) is reported rather than showing a false PASS. */
-    bool live_ok = can_bringup(DSPIC33AK_CANFD_MODE_NORMAL_FD);
+    bool live_ok = can_bringup(NORA_CANFD_MODE_NORMAL_FD);
     return ok && live_ok;
 }
 
 void can_loopback_tick(uint32_t beat)
 {
-    dspic33ak_canfd_frame_t tx = {0};
-    dspic33ak_canfd_frame_t rx = {0};
-    dspic33ak_canfd_bus_status_t st;
+    nora_canfd_frame_t tx = {0};
+    nora_canfd_frame_t rx = {0};
+    nora_canfd_bus_status_t st;
 
     if (!can_ready) {
         return;
@@ -153,15 +153,15 @@ void can_loopback_tick(uint32_t beat)
     /* A lone node parks at error-passive (the CAN spec keeps it out of bus-off on
      * ACK-only errors) and keeps bursting, so this rarely fires; it is a defensive
      * recovery in case a real bus fault ever does drive the controller bus-off. */
-    if ((dspic33ak_canfd_get_status(DSPIC33AK_CANFD_INST_1, &st) == DSPIC33AK_CANFD_OK)
+    if ((nora_canfd_get_status(NORA_CANFD_INST_1, &st) == NORA_CANFD_OK)
         && st.bus_off) {
         printf(" [CAN1] bus-off -> re-init\n");
-        (void)can_bringup(DSPIC33AK_CANFD_MODE_NORMAL_FD);
+        (void)can_bringup(NORA_CANFD_MODE_NORMAL_FD);
     }
 
     /* Transmit one frame on the real bus (drives CANH/CANL via the transceiver). */
     build_frame((uint8_t)beat, &tx);
-    if (dspic33ak_canfd_transmit(DSPIC33AK_CANFD_INST_1, &tx) == DSPIC33AK_CANFD_OK) {
+    if (nora_canfd_transmit(NORA_CANFD_INST_1, &tx) == NORA_CANFD_OK) {
         can_log_frame('<', "Tx", &tx);
     } else {
         printf(" <[CAN1 Tx] transmit queue full / timeout\n");
@@ -169,14 +169,14 @@ void can_loopback_tick(uint32_t beat)
 
     /* Bus health: TEC stays 0 when a partner ACKs; it climbs (warning ->
      * error-passive -> bus-off) when transmitting alone. */
-    if (dspic33ak_canfd_get_status(DSPIC33AK_CANFD_INST_1, &st) == DSPIC33AK_CANFD_OK) {
+    if (nora_canfd_get_status(NORA_CANFD_INST_1, &st) == NORA_CANFD_OK) {
         printf(" [CAN1] state=%s TEC=%u REC=%u\n",
                bus_state_str(&st), (unsigned)st.tx_err_count, (unsigned)st.rx_err_count);
     }
 
     /* If a partner echoed a frame back, show it (nothing arrives when alone). */
-    if (dspic33ak_canfd_rx_available(DSPIC33AK_CANFD_INST_1)) {
-        if (dspic33ak_canfd_receive(DSPIC33AK_CANFD_INST_1, &rx) == DSPIC33AK_CANFD_OK) {
+    if (nora_canfd_rx_available(NORA_CANFD_INST_1)) {
+        if (nora_canfd_receive(NORA_CANFD_INST_1, &rx) == NORA_CANFD_OK) {
             can_log_frame('>', "Rx", &rx);
         }
     }

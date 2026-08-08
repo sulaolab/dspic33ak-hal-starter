@@ -8,7 +8,7 @@
  * The CLKGEN clock routing is done separately in starter_clock_init().
  */
 
-#include "dspic33ak_canfd.h"
+#include "nora_canfd.h"
 #include "nora_gpio.h"
 #include "nora_pps.h"
 #include "board_pins.h"
@@ -66,7 +66,7 @@ bool board_uart2_pins_init(void)
 bool board_can1_pins_init(void)
 {
     /* Enable the CAN1 module before HAL init. */
-    if (dspic33ak_canfd_module_enable(DSPIC33AK_CANFD_INST_1, true) != DSPIC33AK_CANFD_OK)
+    if (nora_canfd_module_enable(NORA_CANFD_INST_1, true) != NORA_CANFD_OK)
         return false;
 
     /* C1TX: idle-high output (CAN recessive state is high). */

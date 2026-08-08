@@ -172,6 +172,7 @@ them — but once generated they persist across builds and they carry the
 | step 4 (clock) | 91,920 | +556 |
 | step 5 (i2c) | 92,316 | +396 |
 | step 6 (uart) | 92,108 | -208 |
+| step 7 (can) | 92,596 | +488 |
 
 The +7,248 B is Sonora's richer TDM module: `sumprof_*` / `tdmsum_*` ISR-load
 profiling and the extra diag paths are part of its public API and are compiled
@@ -243,6 +244,56 @@ reg-macro reach-through, §11b's CLKGEN relocation) — none of which a symbol
 diff surfaces.
 
 Sizes also do not move monotonically: uart came in 208 bytes **smaller**.
+
+## 11d. can was the opposite mistake: one predicted delta, three real ones (step 7)
+
+§3 predicted exactly one CAN delta (`clear_rx_overflow`) and §11c concluded that
+`can` was "the only real one" of the three. Both statements were about the wrong
+thing. The identifier-level check passes perfectly — all **28** identifiers the
+starter's consumers name map by plain prefix swap, zero unmapped — and yet there
+were three deltas, because two of them are **behavioural, behind an unchanged
+name**:
+
+1. **`clear_rx_overflow` missing** (predicted). Ported upstream per the owner's
+   decision: sonora `feat/canfd-clear-rx-overflow` `c26ecb0` adds
+   `nora_canfd_clear_rx_overflow()` *and* an `rx_overflow` field on
+   `nora_canfd_bus_status_t` — the function alone would have been useless, since
+   a polling caller could not see the sticky flag either.
+2. **`isr_enable()` arity.** Starter: `isr_enable(inst, cb, ud, prio)`, a
+   deliberate one-call RX setup that registers the FIFO-draining callback
+   itself. NORA: `isr_set_callback(inst, cb, ud)` + `isr_enable(inst, prio)`.
+   NORA is the direction of truth, so the four call sites were split rather
+   than the API restored. Mechanical, but invisible to a symbol diff: **the
+   name and the spelling are identical, only the signature moved.**
+3. **`isr_enable()` enabled the transmit CPU line.** The starter deliberately
+   arms only the RX and general lines and does not define `_C1TXInterrupt`;
+   `can_rx_isr_selftest.c` *asserts* `_C1TXIE == 0` after `isr_enable()` as one
+   of the four things it proves on hardware. Sonora's `irq_line_enable()` set
+   `_CxTXIP`/`_CxTXIE` unconditionally, which would have failed that assertion —
+   and sonora's own header documents that its TX path is unvalidated and traps.
+   Fixed upstream (`427e406`) rather than by relaxing the test: the TX CPU line
+   now follows its module source, armed by `tx_start()` and disarmed by
+   `tx_abort()` and the TX_COMPLETE one-shot. The same commit makes
+   `priority == 0` select a new `NORA_CANFD_ISR_DEFAULT_PRIORITY` (4) instead of
+   returning `ERR_INVALID_ARG`, which is what the starter documented and what
+   its self-test passes. No sonora consumer references `nora_canfd_*` today, so
+   neither change alters behaviour in the mothership.
+
+The lesson generalises past this migration: §11c's cheap check (consumer
+identifiers ∩ new public header) predicts **call-site edits**, and it is right
+about those. It cannot see a changed signature behind an unchanged name, and it
+cannot see a changed register write behind an unchanged function. On `can` the
+identifier check was 28/28 clean and the module still could not be dropped in.
+The only thing that catches deltas of class 2 is the compiler; the only thing
+that catches class 3 is reading the backend, or a hardware test that happens to
+assert on it — which this starter, unusually, has.
+
+Two sonora commits are therefore prerequisites of this step and are **not yet
+pushed**: `c26ecb0` and `427e406` on `feat/canfd-clear-rx-overflow`, in the
+worktree `_wt_nora_canfd_ovf` (a separate worktree because the mothership's main
+tree carries another session's uncommitted edits). Until they land in the
+mothership, this starter's `src/hal_can/` is *not* reproducible from sonora
+`main`.
 
 ## 12. Sonora-side residues noticed while vendoring
 

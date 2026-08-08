@@ -3,7 +3,7 @@
  * ---------------------
  * Single-board self-test for the CAN FD RX interrupt path (no bus, transceiver
  * or partner needed). It brings CAN1 up in INTERNAL loopback, arms the RX ISR
- * with dspic33ak_canfd_isr_enable(), and proves four things on one board:
+ * with nora_canfd_isr_enable(), and proves four things on one board:
  *
  *   1) the RX callback is invoked when a frame arrives,
  *   2) the frame can be read (in the callback / after it) via receive(),
