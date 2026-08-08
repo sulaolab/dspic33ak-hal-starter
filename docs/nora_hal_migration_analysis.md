@@ -419,7 +419,27 @@ It runs where the test already has interrupts off (the phase-2 overflow setup)
 and checks both the return code and `_C1TXIE` itself — a return code alone would
 not prove the register was left alone. A refused `tx_start()` queues no frame, so
 the overflow phase is unaffected. Cost: 87,692 → 88,324 B (+632, guard + test).
-**Not yet run on hardware** — the previous acceptance run (§11e) predates it.
+
+**Hardware: PASS (2026-08-09, `2d7f2d1`, `APP_BUILD_STARTER_DEFAULT`, 88,324 B,
+B-XTAL jumper, PKOB4 `020085204RYN000057`).** Clean `-Full` build, provisioned
+bundle `PASS`, flashed and reset; console read through the `sonora_monitor` HTTP
+bridge (COM12 @230400 — no COM port opened directly):
+
+```
+ CAN1 RX-ISR self-test:
+   callback fired     : yes
+   frame content      : match
+   RX overflow        : detected (status=yes, callback=yes; 4/24 frames held)
+   TX interrupt line  : disabled (as required)
+   tx_start when off  : refused, line still off
+ CAN1 RX-ISR self-check: PASS.
+```
+
+The rest of the banner matches §11e (HRT self-check PASS, SST26 JEDEC good +
+sector verify OK, I2C scan finds 0x1A, SW3 CN event line present, TDM1 smoke
+running with `miss=0`). The I2C loopback still reports `I2C3 Rd size=0` and a
+zero read on the I2C2 side — the pre-existing waiver, unchanged by this branch
+and still without positive confirmation of the slave data path.
 
 The reviewer's other two points: the `NORA_TDM_SUMPROF=0` path is now built and
 linked clean on the sonora side as well (the mothership's own conf stays at 1, and
