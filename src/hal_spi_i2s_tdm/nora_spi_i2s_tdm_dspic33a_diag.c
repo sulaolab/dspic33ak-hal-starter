@@ -347,7 +347,9 @@ void nora_spi_i2s_tdm_diag_read_counts( const nora_spi_i2s_tdm_diag_t* d,
 // The hot-path enter/exit/advance/close are static inline in the header; only the
 // foreground configure/reset/snapshot and the shared instance live here. See the header
 // for the full concurrency/measurement contract. These do NO masking (callers mask).
+// Compiled only when NORA_TDM_SUMPROF is 1 (see nora_spi_i2s_tdm_conf.h).
 //===========================================================
+#if NORA_TDM_SUMPROF
 
 nora_spi_i2s_tdm_dspic33a_sumprof_state_t
     g_nora_spi_i2s_tdm_dspic33a_sumprof_state = {
@@ -403,3 +405,5 @@ void nora_spi_i2s_tdm_dspic33a_sumprof_snapshot( nora_spi_i2s_tdm_tdmsum_t* out,
         g_nora_spi_i2s_tdm_dspic33a_sumprof_state.saturated_count = 0u;
     }
 }
+
+#endif // NORA_TDM_SUMPROF

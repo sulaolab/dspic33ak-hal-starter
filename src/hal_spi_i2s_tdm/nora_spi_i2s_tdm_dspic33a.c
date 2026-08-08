@@ -1950,7 +1950,11 @@ bool nora_spi_i2s_tdm_get_status( nora_spi_i2s_tdm_status_t* status, bool clear_
 // non-atomic against them on this 16-bit core, so each wrapper masks EVERY configured leg's RX
 // DMA IE around the profiler call (the same bracket the per-leg readers use, generalised to all
 // legs). The raw profiler ops do no masking themselves.
+//
+// The whole group -- wrappers, all-leg masking helpers, and the ISR enter/exit hooks below --
+// is compiled only when NORA_TDM_SUMPROF is 1 (see nora_spi_i2s_tdm_conf.h).
 //===========================================================
+#if NORA_TDM_SUMPROF
 
 // Disable every configured leg's RX DMA IE, saving prior enables into `bak[]` (indexed by leg).
 static inline void tdm_all_rx_ie_disable( bool bak[TDM_SPI_LEG_COUNT] )
@@ -2007,6 +2011,8 @@ bool nora_spi_i2s_tdm_tdmsum_get( nora_spi_i2s_tdm_tdmsum_t* out, bool clear_pea
 
     return out->initialized;
 }
+
+#endif // NORA_TDM_SUMPROF
 
 
 //===========================================================
@@ -2563,12 +2569,16 @@ static inline __attribute__((always_inline)) void tdm_rx_block(
     // Engine-wide TDMsum union hook. Measured over the SAME wall-time as the per-leg monitor
     // below (bracketing it), so TDM1 and TDM2 add into one common-window occupancy. Gated on
     // the same high-res-timer availability as the per-leg monitor; sum_meas is stable across
-    // this ISR so enter/exit stay balanced on every return path.
+    // this ISR so enter/exit stay balanced on every return path. Compiled out entirely (hook,
+    // timer read and all) when NORA_TDM_SUMPROF is 0 -- the hooks cost ISR cycles on every
+    // block whether or not anyone ever calls _tdmsum_get().
+#if NORA_TDM_SUMPROF
     const bool sum_meas = nora_high_res_timer_is_initialized();
     if( sum_meas )
     {
         nora_spi_i2s_tdm_dspic33a_sumprof_enter( nora_high_res_timer_get_count() );
     }
+#endif
 
     nora_spi_i2s_tdm_diag_isr_begin( &inst->diag );
 
@@ -2597,10 +2607,12 @@ static inline __attribute__((always_inline)) void tdm_rx_block(
     if( src_ptr == NULL )
     {
         nora_spi_i2s_tdm_diag_isr_end( &inst->diag );
+#if NORA_TDM_SUMPROF
         if( sum_meas )
         {
             nora_spi_i2s_tdm_dspic33a_sumprof_exit( nora_high_res_timer_get_count() );
         }
+#endif
         return;
     }
     tdm_get_dest_ptr( nora_dma_read_src_hot( (nora_dma_channel_t)tx_ch ), inst->tx_buffer, half_pos, &dst_ptr );
@@ -2611,10 +2623,12 @@ static inline __attribute__((always_inline)) void tdm_rx_block(
         // hand the callback a NULL dst -- the public contract is that dst is always valid
         // when block_cb runs. (Mirrors the src_ptr guard above.)
         nora_spi_i2s_tdm_diag_isr_end( &inst->diag );
+#if NORA_TDM_SUMPROF
         if( sum_meas )
         {
             nora_spi_i2s_tdm_dspic33a_sumprof_exit( nora_high_res_timer_get_count() );
         }
+#endif
         return;
     }
 
@@ -2631,10 +2645,12 @@ static inline __attribute__((always_inline)) void tdm_rx_block(
     }
 
     nora_spi_i2s_tdm_diag_isr_end( &inst->diag );
+#if NORA_TDM_SUMPROF
     if( sum_meas )
     {
         nora_spi_i2s_tdm_dspic33a_sumprof_exit( nora_high_res_timer_get_count() );
     }
+#endif
 }
 
 

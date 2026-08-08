@@ -40,6 +40,13 @@
 #include <stdbool.h>
 #include "nora_spi_i2s_tdm_conf.h"   // HAL compile-time config (geometry/topology); exposes NORA_TDM_* to consumers
 
+// NORA_TDM_SUMPROF gates code OUT, so an absent macro would evaluate to 0 in the #if below and
+// silently drop the profiler from a project whose conf.h predates it. Demand it explicitly:
+// copy the block from nora_spi_i2s_tdm_conf.h_example (default 1 = previous behaviour).
+#ifndef NORA_TDM_SUMPROF
+#error "nora_spi_i2s_tdm_conf.h must define NORA_TDM_SUMPROF (0 or 1) -- see nora_spi_i2s_tdm_conf.h_example."
+#endif
+
 
 //===========================================================
 // Definition
@@ -521,10 +528,16 @@ extern bool nora_spi_i2s_tdm_inst_get_status( nora_spi_i2s_tdm_inst_t* inst,
 // it once the deadline is known and again whenever it changes (rate change / new stream epoch).
 // _tdmsum_reset() re-bases the grid and clears depth/peaks but KEEPS the window length (use on
 // stop/resume). _tdmsum_get() snapshots the peak/saturation, clearing them when clear_peak.
+//
+// Declared only when NORA_TDM_SUMPROF is 1 (the default). With 0 the profiler, its ISR hooks
+// and these three entry points are not compiled -- a reference then fails at compile time
+// rather than silently returning a never-updated zero snapshot.
+#if NORA_TDM_SUMPROF
 extern void nora_spi_i2s_tdm_tdmsum_configure( uint32_t window_period_ticks );
 extern void nora_spi_i2s_tdm_tdmsum_reset( void );
 extern bool nora_spi_i2s_tdm_tdmsum_get( nora_spi_i2s_tdm_tdmsum_t* out,
                                               bool clear_peak );
+#endif
 
 
 // Last-error diagnostic. The bool-returning calls (set_port / open / close / inst_configure /

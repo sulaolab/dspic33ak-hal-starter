@@ -173,15 +173,14 @@ them — but once generated they persist across builds and they carry the
 | step 5 (i2c) | 92,316 | +396 |
 | step 6 (uart) | 92,108 | -208 |
 | step 7 (can) | 92,596 | +488 |
+| step 8 (TDMsum gate, `NORA_TDM_SUMPROF=0`) | **87,692** | **-4,904** |
 
 The +7,248 B is Sonora's richer TDM module: `sumprof_*` / `tdmsum_*` ISR-load
-profiling and the extra diag paths are part of its public API and are compiled
-unconditionally (only `ENA_TDM_DBG` blocks are gated). Nothing in the starter
-calls them. This is HAL capability, not starter functionality, so it does not
-contradict the "no new features" decision — but it is a real 7 kB. Options if
-that matters: accept it; enable `--gc-sections` *with* per-function sections in
-the project (they only work together); or gate the profiling behind a conf
-macro upstream in Sonora.
+profiling and the extra diag paths are part of its public API and were compiled
+unconditionally (only `ENA_TDM_DBG` blocks were gated). Options considered:
+accept it; enable `--gc-sections` *with* per-function sections; or gate the
+profiling behind a conf macro upstream in Sonora. The last one was chosen — see
+§11f, which also corrects what this paragraph originally claimed.
 
 ## 11b. Clock: CLKGEN left the portable header (step 4, measured)
 
@@ -339,6 +338,52 @@ an all-zero master read. `clock_hal_integration.md` §"Caveats" already records
 the identical mismatch on this same board (matching PKOB4 serial and UDID) and
 waives it as "loopback board unavailable" — i.e. it predates the NORA work. The
 waiver carries over unchanged; it remains a genuine future fixture-based check.
+
+## 11f. The TDMsum profiler was not dead code — it ran in the ISR (correction + fix)
+
+§11 originally said of `sumprof_*` / `tdmsum_*`: *"Nothing in the starter calls
+them."* **That was wrong**, and wrong in the direction that matters. The four
+call sites are inside `tdm_rx_block()` in `nora_spi_i2s_tdm_dspic33a.c` — the
+TDM RX-block ISR — bracketing every block:
+
+```c
+const bool sum_meas = nora_high_res_timer_is_initialized();
+if( sum_meas ) { nora_spi_i2s_tdm_dspic33a_sumprof_enter( nora_high_res_timer_get_count() ); }
+```
+
+The only gate was high-res-timer availability, which the starter satisfies. So
+the starter was paying **ROM for the profiler and ISR cycles on every block**
+for a measurement no code in the repo ever read. The mistake came from checking
+for *consumer* references (the app layer) and concluding "unused", when the
+caller was the HAL's own ISR — the same class of error as §11d: an
+identifier-level check answers a question about call sites, not about behaviour.
+
+Fixed **upstream in Sonora**, per the owner's ruling, as a new compile-time
+config macro `NORA_TDM_SUMPROF` (`nora_spi_i2s_tdm_conf.h`, 0/1, `#ifndef`-
+guarded, **default 1** so the mothership is unaffected). At 0 the following are
+not compiled at all: the profiler state + inline hooks in
+`nora_spi_i2s_tdm_dspic33a_diag_fast.h`, its three out-of-line bodies in
+`..._diag.c`, the four ISR call sites, the three public `nora_spi_i2s_tdm_tdmsum_*`
+entry points (declaration and definition), and their all-leg RX-DMA-IE masking
+helpers. Sonora's own `audio_transport.c` TDMsum telemetry line is gated to
+match, so the mothership still builds with 0.
+
+Two details worth keeping:
+
+- **The declaration is gated too**, not just the body. A reference then fails at
+  compile time instead of silently returning a zero snapshot that never updates.
+- **A missing macro cannot be allowed to mean 0.** `NORA_TDM_SUMPROF` gates code
+  *out*, so an older project `conf.h` that predates the macro would silently
+  lose the profiler. `nora_spi_i2s_tdm.h` therefore `#error`s if it is undefined
+  after including the conf header.
+
+Measured: the starter sets 0 and drops **92,596 → 87,692 B (−4,904)**. Since
+`--gc-sections` leaves merged `.const` strings behind even when it discards a
+function, physical exclusion is the only way to measure this honestly — the gate
+*is* the measurement. The per-leg monitor
+(`nora_spi_i2s_tdm_inst_get_load()`) is untouched and still reports the
+starter's single-leg occupancy, so no visible capability was lost. The ISR-cycle
+saving was not measured on hardware.
 
 ## 12. Sonora-side residues noticed while vendoring
 

@@ -27,6 +27,8 @@ void nora_spi_i2s_tdm_diag_check_deadline_hot(
     uint8_t                  channel,
     nora_dma_status_t        status );
 
+#if NORA_TDM_SUMPROF
+
 // Bounds the per-call window-advance loop. Steady state advances 0-1 windows per ISR edge;
 // after a long stopped gap the grid is re-based rather than walking every empty window.
 #define NORA_SPI_I2S_TDM_DSPIC33A_SUMPROF_MAX_CATCHUP  (4u)
@@ -148,5 +150,7 @@ void nora_spi_i2s_tdm_dspic33a_sumprof_configure( uint32_t now,
 void nora_spi_i2s_tdm_dspic33a_sumprof_reset( uint32_t now );
 void nora_spi_i2s_tdm_dspic33a_sumprof_snapshot( nora_spi_i2s_tdm_tdmsum_t* out,
                                                     bool clear_peak );
+
+#endif // NORA_TDM_SUMPROF
 
 #endif // NORA_SPI_I2S_TDM_DSPIC33A_DIAG_FAST_H

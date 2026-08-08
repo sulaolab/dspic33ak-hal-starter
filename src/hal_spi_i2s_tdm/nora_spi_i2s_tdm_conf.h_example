@@ -121,6 +121,26 @@
 
 
 //===========================================================
+// Engine-wide TDMsum occupancy profiler (nora_spi_i2s_tdm_tdmsum_*).
+//   1 (default) : the RX-block ISR brackets itself with the sumprof enter/exit hooks, so
+//                 _tdmsum_get() reports peak busy time summed over ALL legs in one common
+//                 window. This is how a multi-leg engine's true CPU occupancy is measured
+//                 (the per-leg monitor cannot see legs overlapping each other).
+//   0           : the hooks, their state and the three _tdmsum_* entry points are not
+//                 compiled at all. Saves both ROM and per-block ISR cycles. The per-leg
+//                 load monitor (nora_spi_i2s_tdm_inst_get_load()) is unaffected.
+//
+// Set this to 0 in a single-leg project, or any project that never calls _tdmsum_get():
+// the hooks are NOT free just because nothing reads the result. They run on every RX block
+// whenever the high-res timer is initialized, and a consumer that leaves them at 1 without
+// calling _tdmsum_get() pays for a measurement it never looks at.
+//===========================================================
+#ifndef NORA_TDM_SUMPROF
+#define NORA_TDM_SUMPROF   1
+#endif
+
+
+//===========================================================
 // Instance count + physical assignment.
 //
 // The transport core defines its leg enum, per-instance ping-pong buffers, the
@@ -198,6 +218,9 @@
 #endif
 #if ((NORA_TDM_BASE_ON_SPI34 != 0) && (NORA_TDM_BASE_ON_SPI34 != 1))
 #error "NORA_TDM_BASE_ON_SPI34 must be 0 or 1."
+#endif
+#if ((NORA_TDM_SUMPROF != 0) && (NORA_TDM_SUMPROF != 1))
+#error "NORA_TDM_SUMPROF must be 0 or 1."
 #endif
 #if (NORA_TDM_USE_SPI3 != NORA_TDM_USE_SPI4)
 #error "The SPI3/SPI4 expansion requires SPI3 and SPI4 together."
