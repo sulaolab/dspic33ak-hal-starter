@@ -308,7 +308,7 @@ bridge (COM12 @230400); the monitor was already running and was left running.
 | HRT self-check | PASS (`d1=79856 d10=999998`) |
 | SST26 | JEDEC `BF 26 12` good; sector verify @0x000000 OK |
 | I2C scan | 1 device, ACK at 0x1A |
-| I2C loopback | runs; data path mismatched — **pre-existing waiver**, see below |
+| I2C loopback | runs; reads back zero — **not wirable on this board**, see below |
 | CAN1 RX-ISR self-test | **PASS**, all four criteria |
 | CAN1 FD 500k/2M | live on the bus, HAL self-check PASS |
 | TDM8 smoke (MikroBUS-A) | `exp_fs~48kHz exp_bclk~12500kHz miss=0` over 22,917 blocks |
@@ -332,12 +332,18 @@ TX CPU line to `tx_start()`.
 the documented no-ACK-partner behaviour on a single node, not a fault; the
 firmware prints the explanation itself.
 
-**I2C loopback is not a regression from this migration.** README's expected
-output is `>[I2C3 Rd] size=8 1122334455667788`; this setup reports `size=0` and
-an all-zero master read. `clock_hal_integration.md` §"Caveats" already records
-the identical mismatch on this same board (matching PKOB4 serial and UDID) and
-waives it as "loopback board unavailable" — i.e. it predates the NORA work. The
-waiver carries over unchanged; it remains a genuine future fixture-based check.
+**I2C loopback cannot be confirmed on this board at all** (owner, 2026-08-09).
+README's expected output is `>[I2C3 Rd] size=8 1122334455667788`; this setup
+reports `size=0` and an all-zero master read. That is the *expected* result here:
+this motherboard is modified so that I2C1/I2C2 are split off to drive CODEC-A and
+CODEC-B, so the I2C2-master ↔ I2C3-slave loop the demo wants is not wired and
+cannot be. `clock_hal_integration.md` §"Caveats" records the identical result on
+this same board (matching PKOB4 serial and UDID), so it also predates the NORA
+work and is not a regression from this migration.
+
+So this is not a pending fixture-based check to schedule on *this* board — it is
+out of scope for it. Positive confirmation of the I2C slave data path needs a
+board whose I2C2/I2C3 pins are free.
 
 ## 11f. The TDMsum profiler was not dead code — it ran in the ISR (correction + fix)
 
@@ -438,8 +444,9 @@ bridge (COM12 @230400 — no COM port opened directly):
 The rest of the banner matches §11e (HRT self-check PASS, SST26 JEDEC good +
 sector verify OK, I2C scan finds 0x1A, SW3 CN event line present, TDM1 smoke
 running with `miss=0`). The I2C loopback still reports `I2C3 Rd size=0` and a
-zero read on the I2C2 side — the pre-existing waiver, unchanged by this branch
-and still without positive confirmation of the slave data path.
+zero read on the I2C2 side, which is the expected result on this board — its
+I2C1/I2C2 are wired to CODEC-A/CODEC-B, so the loop is absent by construction
+(see §11e). Positive confirmation of the slave data path needs a different board.
 
 The reviewer's other two points: the `NORA_TDM_SUMPROF=0` path is now built and
 linked clean on the sonora side as well (the mothership's own conf stays at 1, and
