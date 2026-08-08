@@ -10,7 +10,7 @@
 #include "fw_update.h"
 #include "fw_uca.h"
 #include "nora_nvm.h"
-#include "dspic33ak_uart.h"
+#include "nora_uart.h"
 
 //-----------------------------------------------------------
 // Encode / decode.
@@ -60,7 +60,7 @@ uint16_t fw_btseq_read_seq(uint32_t word_adr)
 static void fw_drain_uart1(void)
 {
     uint32_t guard = 0u;
-    while ( !dspic33ak_uart_tx_done(DSPIC33AK_UART_INST_1) && (guard < 2000000u) )
+    while ( !nora_uart_tx_done(NORA_UART_INST_1) && (guard < 2000000u) )
     {
         guard++;
     }

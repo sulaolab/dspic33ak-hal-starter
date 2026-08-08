@@ -171,6 +171,7 @@ them — but once generated they persist across builds and they carry the
 | step 3 (dma/gpio + spi_i2s_tdm) | 91,364 | **+7,248** |
 | step 4 (clock) | 91,920 | +556 |
 | step 5 (i2c) | 92,316 | +396 |
+| step 6 (uart) | 92,108 | -208 |
 
 The +7,248 B is Sonora's richer TDM module: `sumprof_*` / `tdmsum_*` ISR-load
 profiling and the extra diag paths are part of its public API and are compiled
@@ -210,6 +211,38 @@ File-name mapping (starter → NORA): `dspic33ak_clock.c` → `nora_clock_dspic3
 `docs/clock_hal_integration.md` was left untouched on purpose: it is a
 historical import record (blob SHA-1s, "removed legacy files"), so renaming
 identifiers inside it would falsify the record rather than update a document.
+
+## 11c. §3's "three real deltas" was wrong about i2c and uart (steps 5-6)
+
+Two of the three predicted semantic deltas did not exist at the consumer
+boundary, and the reason is the same in both cases: **the names that moved
+were HAL-internal, so replacing the module carried them along.** The §3 method
+compared *all* exported identifiers of the old module against the new one,
+which conflates "this name changed" with "a caller has to change".
+
+- **i2c** — the `reg_irq_*` → `device_*_irq_*` change is entirely inside the
+  register/device layer. All three public headers (`nora_i2c.h`,
+  `nora_i2c_master.h`, `nora_i2c_slave.h`) are byte-identical to the starter's
+  modulo the prefix, slave ISR entry points included. Zero call-site edits.
+- **uart** — of the 32 identifiers the starter's consumers actually name, 31
+  map by prefix swap and all 31 live in `nora_uart.h`; the 32nd is the
+  `..._rx_isr_ring.h` **filename**. The 24 names that picked up the
+  `dspic33a` tag are the ring/reg/device/async internals, which no consumer
+  called. One real edit: `nora_uart_rx_irq_handler()` moved *out* of the ring
+  header *into* `nora_uart.h`, which left `src/console/uart_irq.c`'s include of
+  the backend ring header dead, so it was dropped.
+
+The check that would have predicted this correctly is not a header diff at all:
+intersect **the identifiers consumers actually reference** with the new
+module's public header. That is the set in §4, not the set in §3. Both
+measurements are cheap; only the second one predicts work.
+
+So of the three predicted deltas only **can**'s `clear_rx_overflow` is real,
+and the genuine surprises came from elsewhere entirely (§9's struct field and
+reg-macro reach-through, §11b's CLKGEN relocation) — none of which a symbol
+diff surfaces.
+
+Sizes also do not move monotonically: uart came in 208 bytes **smaller**.
 
 ## 12. Sonora-side residues noticed while vendoring
 

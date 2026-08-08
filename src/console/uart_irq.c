@@ -6,15 +6,14 @@
 
 #include <xc.h>
 
-#include "dspic33ak_uart.h"
-#include "dspic33ak_uart_rx_isr_ring.h"
+#include "nora_uart.h"
 
 void __attribute__((interrupt, context)) _U1RXInterrupt(void)
 {
-    dspic33ak_uart_rx_irq_handler(DSPIC33AK_UART_INST_1);
+    nora_uart_rx_irq_handler(NORA_UART_INST_1);
 }
 
 void __attribute__((interrupt, context)) _U1TXInterrupt(void)
 {
-    dspic33ak_uart_tx_irq_handler(DSPIC33AK_UART_INST_1);
+    nora_uart_tx_irq_handler(NORA_UART_INST_1);
 }

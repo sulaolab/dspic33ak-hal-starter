@@ -74,7 +74,7 @@ dspic33ak_canfd_status_t dspic33ak_canfd_init(dspic33ak_canfd_instance_t inst,
  * drops the instance to Config, writes NBTCFG/DBTCFG/TDC computed from the given
  * clock and bit rates, then restores the previous operating mode. @p can_clk_hz
  * is the live FCAN (the caller owns the clock, as for init); @p sample_pct 0 =>
- * default 80%. Mirrors nora_i2c_set_bus_speed / dspic33ak_uart_set_baudrate
+ * default 80%. Mirrors nora_i2c_set_bus_speed / nora_uart_set_baudrate
  * so a CMSIS-Driver CAN SetBitrate maps straight onto it.
  */
 dspic33ak_canfd_status_t dspic33ak_canfd_set_bitrate(dspic33ak_canfd_instance_t inst,

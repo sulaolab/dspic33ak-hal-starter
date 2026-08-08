@@ -5,7 +5,7 @@
 #include <stddef.h>
 #include <string.h>
 
-#include "dspic33ak_uart.h"
+#include "nora_uart.h"
 #include "nora_tick_timer.h"
 #include "fw_update.h"
 #include "fw_btseq.h"
@@ -16,7 +16,7 @@
 #include "tdm_smoke.h"
 #endif
 
-#define COMMAND_UART               DSPIC33AK_UART_INST_1
+#define COMMAND_UART               NORA_UART_INST_1
 #define COMMAND_LINE_CAPACITY      32u
 #define COMMAND_MAX_BYTES_PER_POLL 96u
 #define RAW_FILE_IDLE_MS           500u
@@ -30,7 +30,7 @@ static uint32_t s_raw_last_ms;
 
 static void echo_byte(uint8_t c)
 {
-    (void)dspic33ak_uart_write_byte(COMMAND_UART, c);
+    (void)nora_uart_write_byte(COMMAND_UART, c);
 }
 
 static void echo_newline(void)
@@ -367,8 +367,8 @@ void fw_command_poll(void)
     bool received = false;
 
     while ((count < COMMAND_MAX_BYTES_PER_POLL) &&
-           dspic33ak_uart_rx_ready(COMMAND_UART)) {
-        if (dspic33ak_uart_read_byte(COMMAND_UART, &data) != DSPIC33AK_UART_OK) {
+           nora_uart_rx_ready(COMMAND_UART)) {
+        if (nora_uart_read_byte(COMMAND_UART, &data) != NORA_UART_OK) {
             break;
         }
         count++;
@@ -383,7 +383,7 @@ void fw_command_poll(void)
 
     if (s_raw_discard && !received &&
         ((uint32_t)(nora_tick_timer_get_ms() - s_raw_last_ms) >= RAW_FILE_IDLE_MS)) {
-        dspic33ak_uart_rx_flush(COMMAND_UART);
+        nora_uart_rx_flush(COMMAND_UART);
         s_raw_discard = false;
         s_last_was_cr = false;
         printf("Plain file input cleared. Ready for *fua5.\r\n");

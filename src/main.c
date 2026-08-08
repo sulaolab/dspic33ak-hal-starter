@@ -18,7 +18,7 @@
 #include "starter_clock.h"
 #include "nora_tick_timer.h"
 #include "nora_high_res_timer.h"
-#include "dspic33ak_uart.h"
+#include "nora_uart.h"
 #include "nora_nvm.h"
 #include "nora_udid.h"
 #include "nora_i2c_master.h"
@@ -64,28 +64,28 @@ static uint8_t s_console_uart_rx_ring[256u];
  *
  * Two stages are recorded separately so the observation covers the whole path:
  *   - g_uart{1,2}_pins_init_ok : PPS/pin routing (board_uartN_pins_init()).
- *   - g_uart{1,2}_init_status  : HAL peripheral init (dspic33ak_uart_init()).
+ *   - g_uart{1,2}_init_status  : HAL peripheral init (nora_uart_init()).
  * A wrong PPS config leaves pins_init_ok == false even when init_status == OK
  * (the peripheral comes up but its output is misrouted), so both must be read.
  */
 volatile bool g_uart1_pins_init_ok = false;
 volatile bool g_uart2_pins_init_ok = false;
-volatile dspic33ak_uart_status_t g_uart1_init_status = DSPIC33AK_UART_OK;
-volatile dspic33ak_uart_status_t g_uart2_init_status = DSPIC33AK_UART_OK;
+volatile nora_uart_status_t g_uart1_init_status = NORA_UART_OK;
+volatile nora_uart_status_t g_uart2_init_status = NORA_UART_OK;
 
 static void console_uart_init(void)
 {
-    const dspic33ak_uart_config_t cfg = {
+    const nora_uart_config_t cfg = {
         .uart_clk_hz = STARTER_CLOCK_SYS_HZ,   /* CLKGEN8 <- PLL1, divide-by-1 */
         .baudrate    = 230400u,
         .timeout_ms  = 0u,
         .get_ms      = NULL,
         .data_bits   = 8u,
         .stop_bits   = 1u,
-        .parity      = DSPIC33AK_UART_PARITY_NONE,
+        .parity      = NORA_UART_PARITY_NONE,
         .enable_tx   = true,
         .enable_rx   = true,
-        .rx_mode     = DSPIC33AK_UART_RX_MODE_ISR_RING,
+        .rx_mode     = NORA_UART_RX_MODE_ISR_RING,
         .rx_ring_buffer = s_console_uart_rx_ring,
         .rx_ring_buffer_size = sizeof(s_console_uart_rx_ring),
         .rx_irq_priority = 5u,
@@ -95,17 +95,17 @@ static void console_uart_init(void)
     /* UART2: PKOB4 "USB Serial Device" output mirror. Firmware-update commands
      * and XMODEM intentionally use UART1 only, so RX is disabled here: a beginner
      * can never arm on one COM port and accidentally send the image to another. */
-    const dspic33ak_uart_config_t cfg2 = {
+    const nora_uart_config_t cfg2 = {
         .uart_clk_hz = STARTER_CLOCK_SYS_HZ,   /* CLKGEN8 <- PLL1, divide-by-1 */
         .baudrate    = 230400u,
         .timeout_ms  = 0u,
         .get_ms      = NULL,
         .data_bits   = 8u,
         .stop_bits   = 1u,
-        .parity      = DSPIC33AK_UART_PARITY_NONE,
+        .parity      = NORA_UART_PARITY_NONE,
         .enable_tx   = true,
         .enable_rx   = false,
-        .rx_mode     = DSPIC33AK_UART_RX_MODE_POLLING,
+        .rx_mode     = NORA_UART_RX_MODE_POLLING,
         .rx_ring_buffer = NULL,
         .rx_ring_buffer_size = 0u,
         .rx_irq_priority = 0u,
@@ -116,10 +116,10 @@ static void console_uart_init(void)
      * (a wrong PPS config shows as garbled / no output, a useful debug signal),
      * but record the pin result so the failure is visible in the debugger. */
     g_uart1_pins_init_ok = board_uart1_pins_init();
-    g_uart1_init_status  = dspic33ak_uart_init(DSPIC33AK_UART_INST_1, &cfg);
+    g_uart1_init_status  = nora_uart_init(NORA_UART_INST_1, &cfg);
 
     g_uart2_pins_init_ok = board_uart2_pins_init();
-    g_uart2_init_status  = dspic33ak_uart_init(DSPIC33AK_UART_INST_2, &cfg2);
+    g_uart2_init_status  = nora_uart_init(NORA_UART_INST_2, &cfg2);
 }
 
 static void term_init_safe(void)

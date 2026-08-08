@@ -6,9 +6,9 @@
 #include <string.h>
 
 #include "nora_tick_timer.h"
-#include "dspic33ak_uart.h"
+#include "nora_uart.h"
 
-#define UART_ASYNC_INST              DSPIC33AK_UART_INST_1
+#define UART_ASYNC_INST              NORA_UART_INST_1
 #define UART_ASYNC_TX_EVENT_TIMEOUT_MS   1000u
 #define UART_ASYNC_TX_DONE_TIMEOUT_MS    1000u
 #define UART_ASYNC_RX_TIMEOUT_MS        10000u
@@ -20,7 +20,7 @@ typedef struct {
     bool tx_done_ok;
     bool tx_not_busy_ok;
     bool tx_timeout;
-    dspic33ak_uart_status_t tx_start_status;
+    nora_uart_status_t tx_start_status;
     size_t tx_count;
     size_t tx_expected;
 
@@ -29,8 +29,8 @@ typedef struct {
     bool rx_abort_not_busy_ok;
     bool rx_abort_no_complete_ok;
     bool rx_abort_count_ok;
-    dspic33ak_uart_status_t rx_abort_start_status;
-    dspic33ak_uart_status_t rx_abort_status;
+    nora_uart_status_t rx_abort_start_status;
+    nora_uart_status_t rx_abort_status;
     size_t rx_abort_count;
     size_t rx_abort_len;
 
@@ -40,7 +40,7 @@ typedef struct {
     bool rx_not_busy_ok;
     bool rx_data_ok;
     bool rx_timeout;
-    dspic33ak_uart_status_t rx_start_status;
+    nora_uart_status_t rx_start_status;
     size_t rx_count;
 } uart_async_selftest_result_t;
 
@@ -55,7 +55,7 @@ static const uint8_t s_tx_message[] =
 static const uint8_t s_rx_expected[] = { 'R', 'X', 'O', 'K' };
 
 static void uart_async_event_callback(
-    dspic33ak_uart_instance_t inst,
+    nora_uart_instance_t inst,
     uint32_t events,
     void *user_data)
 {
@@ -104,7 +104,7 @@ static bool wait_for_tx_done(uint32_t timeout_ms)
 {
     const uint32_t start_ms = nora_tick_timer_get_ms();
 
-    while (!dspic33ak_uart_tx_done(UART_ASYNC_INST)) {
+    while (!nora_uart_tx_done(UART_ASYNC_INST)) {
         if (elapsed_ms(start_ms, timeout_ms)) {
             return false;
         }
@@ -114,16 +114,16 @@ static bool wait_for_tx_done(uint32_t timeout_ms)
 
 static void tx_cleanup(void)
 {
-    (void)dspic33ak_uart_tx_abort(UART_ASYNC_INST);
+    (void)nora_uart_tx_abort(UART_ASYNC_INST);
     (void)wait_for_tx_done(UART_ASYNC_TX_DONE_TIMEOUT_MS);
 }
 
 static void selftest_cleanup(void)
 {
     tx_cleanup();
-    (void)dspic33ak_uart_rx_abort(UART_ASYNC_INST);
-    (void)dspic33ak_uart_set_callback(UART_ASYNC_INST, NULL, NULL);
-    dspic33ak_uart_rx_flush(UART_ASYNC_INST);
+    (void)nora_uart_rx_abort(UART_ASYNC_INST);
+    (void)nora_uart_set_callback(UART_ASYNC_INST, NULL, NULL);
+    nora_uart_rx_flush(UART_ASYNC_INST);
 }
 
 static const char *pass_fail(bool pass)
@@ -148,15 +148,15 @@ static void run_tx_test(uart_async_selftest_result_t *result)
 
     event_state_clear();
     result->tx_start_status =
-        dspic33ak_uart_tx_start(UART_ASYNC_INST, s_tx_message, result->tx_expected);
-    result->tx_start_ok = (result->tx_start_status == DSPIC33AK_UART_OK);
+        nora_uart_tx_start(UART_ASYNC_INST, s_tx_message, result->tx_expected);
+    result->tx_start_ok = (result->tx_start_status == NORA_UART_OK);
     if (!result->tx_start_ok) {
         tx_cleanup();
         return;
     }
 
     result->tx_send_complete_ok =
-        wait_for_event(DSPIC33AK_UART_EVENT_SEND_COMPLETE,
+        wait_for_event(NORA_UART_EVENT_SEND_COMPLETE,
                        UART_ASYNC_TX_EVENT_TIMEOUT_MS);
     result->tx_timeout = !result->tx_send_complete_ok;
     if (!result->tx_send_complete_ok) {
@@ -164,9 +164,9 @@ static void run_tx_test(uart_async_selftest_result_t *result)
         return;
     }
 
-    result->tx_count = dspic33ak_uart_tx_count_get(UART_ASYNC_INST);
+    result->tx_count = nora_uart_tx_count_get(UART_ASYNC_INST);
     result->tx_count_ok = (result->tx_count == result->tx_expected);
-    result->tx_not_busy_ok = !dspic33ak_uart_tx_is_busy(UART_ASYNC_INST);
+    result->tx_not_busy_ok = !nora_uart_tx_is_busy(UART_ASYNC_INST);
     result->tx_done_ok = wait_for_tx_done(UART_ASYNC_TX_DONE_TIMEOUT_MS);
 }
 
@@ -179,18 +179,18 @@ static void run_rx_abort_test(uart_async_selftest_result_t *result)
 
     event_state_clear();
     result->rx_abort_start_status =
-        dspic33ak_uart_rx_start_clean(UART_ASYNC_INST,
+        nora_uart_rx_start_clean(UART_ASYNC_INST,
                                       rx_abort_buffer,
                                       sizeof(rx_abort_buffer));
     result->rx_abort_start_ok =
-        (result->rx_abort_start_status == DSPIC33AK_UART_OK);
+        (result->rx_abort_start_status == NORA_UART_OK);
 
-    result->rx_abort_status = dspic33ak_uart_rx_abort(UART_ASYNC_INST);
-    result->rx_abort_ok = (result->rx_abort_status == DSPIC33AK_UART_OK);
-    result->rx_abort_not_busy_ok = !dspic33ak_uart_rx_is_busy(UART_ASYNC_INST);
+    result->rx_abort_status = nora_uart_rx_abort(UART_ASYNC_INST);
+    result->rx_abort_ok = (result->rx_abort_status == NORA_UART_OK);
+    result->rx_abort_not_busy_ok = !nora_uart_rx_is_busy(UART_ASYNC_INST);
     result->rx_abort_no_complete_ok =
-        ((s_uart_async_events & DSPIC33AK_UART_EVENT_RX_COMPLETE) == 0u);
-    result->rx_abort_count = dspic33ak_uart_rx_count_get(UART_ASYNC_INST);
+        ((s_uart_async_events & NORA_UART_EVENT_RX_COMPLETE) == 0u);
+    result->rx_abort_count = nora_uart_rx_count_get(UART_ASYNC_INST);
     result->rx_abort_count_ok = (result->rx_abort_count <= result->rx_abort_len);
 }
 
@@ -205,23 +205,23 @@ static void run_rx_interactive_test(uart_async_selftest_result_t *result)
 
     event_state_clear();
     result->rx_start_status =
-        dspic33ak_uart_rx_start_clean(UART_ASYNC_INST, rx_buffer, sizeof(rx_buffer));
-    result->rx_start_ok = (result->rx_start_status == DSPIC33AK_UART_OK);
+        nora_uart_rx_start_clean(UART_ASYNC_INST, rx_buffer, sizeof(rx_buffer));
+    result->rx_start_ok = (result->rx_start_status == NORA_UART_OK);
     if (!result->rx_start_ok) {
         return;
     }
 
     result->rx_complete_ok =
-        wait_for_event(DSPIC33AK_UART_EVENT_RX_COMPLETE, UART_ASYNC_RX_TIMEOUT_MS);
+        wait_for_event(NORA_UART_EVENT_RX_COMPLETE, UART_ASYNC_RX_TIMEOUT_MS);
     result->rx_timeout = !result->rx_complete_ok;
     if (!result->rx_complete_ok) {
-        (void)dspic33ak_uart_rx_abort(UART_ASYNC_INST);
+        (void)nora_uart_rx_abort(UART_ASYNC_INST);
         return;
     }
 
-    result->rx_count = dspic33ak_uart_rx_count_get(UART_ASYNC_INST);
+    result->rx_count = nora_uart_rx_count_get(UART_ASYNC_INST);
     result->rx_count_ok = (result->rx_count == sizeof(s_rx_expected));
-    result->rx_not_busy_ok = !dspic33ak_uart_rx_is_busy(UART_ASYNC_INST);
+    result->rx_not_busy_ok = !nora_uart_rx_is_busy(UART_ASYNC_INST);
     result->rx_data_ok =
         (memcmp(rx_buffer, s_rx_expected, sizeof(s_rx_expected)) == 0);
 }
@@ -305,9 +305,9 @@ bool uart_async_selftest_run(void)
     printf(" UART async self-test\n");
 
     callback_ok =
-        (dspic33ak_uart_set_callback(UART_ASYNC_INST,
+        (nora_uart_set_callback(UART_ASYNC_INST,
                                      uart_async_event_callback,
-                                     NULL) == DSPIC33AK_UART_OK);
+                                     NULL) == NORA_UART_OK);
     if (!callback_ok) {
         printf(" Callback registration: FAIL\n");
         selftest_cleanup();

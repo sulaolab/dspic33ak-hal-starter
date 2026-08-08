@@ -11,7 +11,7 @@
 // ACK/NAKs, and hands each validated data block to a caller-supplied sink. It
 // knows nothing about flash -- the sink decides what to do with the bytes.
 //
-// It talks to UART1 (the console) directly via the dspic33ak_uart HAL and takes
+// It talks to UART1 (the console) directly via the nora_uart HAL and takes
 // over the RX path for the duration of the transfer, so the cooperative console
 // pump (app_uart_process) must NOT be running concurrently. The caller invokes
 // this from inside a console verb and returns to the normal pump afterwards.

@@ -99,9 +99,9 @@
         <itemPath>../src/hal_timer/nora_high_res_timer_dspic33a.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f5" displayName="hal_uart" projectFiles="true">
-        <itemPath>../src/hal_uart/dspic33ak_uart.c</itemPath>
-        <itemPath>../src/hal_uart/dspic33ak_uart_device.c</itemPath>
-        <itemPath>../src/hal_uart/dspic33ak_uart_rx_isr_ring.c</itemPath>
+        <itemPath>../src/hal_uart/nora_uart_dspic33a.c</itemPath>
+        <itemPath>../src/hal_uart/nora_uart_dspic33a_device.c</itemPath>
+        <itemPath>../src/hal_uart/nora_uart_dspic33a_rx_isr_ring.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f8" displayName="hal_udid" projectFiles="true">
         <itemPath>../src/hal_udid/nora_udid_dspic33a.c</itemPath>

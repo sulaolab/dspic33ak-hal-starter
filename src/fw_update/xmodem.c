@@ -3,13 +3,13 @@
 //===========================================================
 
 #include "xmodem.h"
-#include "dspic33ak_uart.h"
+#include "nora_uart.h"
 #include "nora_tick_timer.h"
 
 //-----------------------------------------------------------
 // Wire constants
 //-----------------------------------------------------------
-#define XMODEM_UART         DSPIC33AK_UART_INST_1   // console UART
+#define XMODEM_UART         NORA_UART_INST_1   // console UART
 
 #define XM_SOH              0x01u   // 128-byte data block follows
 #define XM_STX              0x02u   // 1024-byte data block follows
@@ -71,7 +71,7 @@ uint16_t xmodem_crc16( const uint8_t* data, uint16_t len )
 //-----------------------------------------------------------
 static void xm_send( uint8_t b )
 {
-    (void)dspic33ak_uart_write_byte( XMODEM_UART, b );
+    (void)nora_uart_write_byte( XMODEM_UART, b );
 }
 
 // Read one byte, waiting up to timeout_ms. true = got a byte, false = timeout.
@@ -80,7 +80,7 @@ static bool xm_read( uint8_t* b, uint32_t timeout_ms )
     uint32_t start = nora_tick_timer_get_ms();
     for ( ;; )
     {
-        if ( dspic33ak_uart_read_byte( XMODEM_UART, b ) == DSPIC33AK_UART_OK )
+        if ( nora_uart_read_byte( XMODEM_UART, b ) == NORA_UART_OK )
         {
             return true;
         }
@@ -127,7 +127,7 @@ xmodem_status_t xmodem_receive( xmodem_sink_fn sink, void* ctx, uint32_t* bytes_
         return XMODEM_ERR_SINK;
     }
 
-    dspic33ak_uart_rx_flush( XMODEM_UART );
+    nora_uart_rx_flush( XMODEM_UART );
 
     // Handshake: kick the sender with 'C' (CRC mode) until the first header
     // arrives. CRC only -- no checksum-mode fallback.
