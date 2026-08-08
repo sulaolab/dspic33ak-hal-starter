@@ -3,7 +3,8 @@
 
 #include <stdint.h>
 
-#include "dspic33ak_clock.h"
+#include "nora_clock.h"
+#include "nora_clock_dspic33a.h"   /* nora_clock_dspic33a_clkgen_t */
 
 /*
  * Internal dsPIC33AK register programming layer.
@@ -33,12 +34,12 @@ typedef struct {
     uint16_t fracdiv;
 } dspic33ak_clock_reg_clkgen_config_t;
 
-dspic33ak_clock_status_t dspic33ak_clock_reg_pll_configure(
-    dspic33ak_clock_pll_t pll,
+nora_clock_status_t dspic33ak_clock_reg_pll_configure(
+    nora_clock_pll_t pll,
     const dspic33ak_clock_reg_pll_config_t *config);
 
-dspic33ak_clock_status_t dspic33ak_clock_reg_clkgen_configure(
-    dspic33ak_clock_clkgen_t clkgen,
+nora_clock_status_t dspic33ak_clock_reg_clkgen_configure(
+    nora_clock_dspic33a_clkgen_t clkgen,
     const dspic33ak_clock_reg_clkgen_config_t *config);
 
 #ifdef __cplusplus

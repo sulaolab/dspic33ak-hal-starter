@@ -1,10 +1,10 @@
-#ifndef DSPIC33AK_CLOCK_DEVICE_H
-#define DSPIC33AK_CLOCK_DEVICE_H
+#ifndef NORA_CLOCK_DEVICE_H
+#define NORA_CLOCK_DEVICE_H
 
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "dspic33ak_clock.h"
+#include "nora_clock.h"
 
 /*
  * Internal dsPIC33AK device adaptation.
@@ -20,16 +20,16 @@
 extern "C" {
 #endif
 
-bool dspic33ak_clock_device_encode_pll_source(
-    dspic33ak_clock_source_t source,
+bool nora_clock_device_encode_pll_source(
+    nora_clock_source_t source,
     uint16_t *value);
 
-bool dspic33ak_clock_device_encode_clkgen_source(
-    dspic33ak_clock_source_t source,
+bool nora_clock_device_encode_clkgen_source(
+    nora_clock_source_t source,
     uint16_t *value);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* DSPIC33AK_CLOCK_DEVICE_H */
+#endif /* NORA_CLOCK_DEVICE_H */

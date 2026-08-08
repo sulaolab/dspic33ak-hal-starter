@@ -155,8 +155,10 @@ and reg-macro reach-through.
 ## 10. Build-flow gotcha
 
 `buildtools/build.ps1` regenerates `firmware.X/nbproject/Makefile-*.mk` only
-with `-Full` (or when the makefile is missing). Those generated makefiles are
-tracked, and they carry the *source file list*. So after every
+with `-Full` (or when the makefile is missing). Those makefiles are gitignored
+(`.gitignore:13`), so a clone never has them and the first build generates
+them — but once generated they persist across builds and they carry the
+*source file list*. So after every
 `configurations.xml` edit the build must be `build.ps1 -Full`; a bare
 `build.ps1` fails with `No rule to make target '../src/.../<old name>.c'`.
 
@@ -167,6 +169,7 @@ tracked, and they carry the *source file list*. So after every
 | base (`7d12e42`) | 84,116 | — |
 | step 1 (spi/timer/nvm/udid) | 84,116 | 0 |
 | step 3 (dma/gpio + spi_i2s_tdm) | 91,364 | **+7,248** |
+| step 4 (clock) | 91,920 | +556 |
 
 The +7,248 B is Sonora's richer TDM module: `sumprof_*` / `tdmsum_*` ISR-load
 profiling and the extra diag paths are part of its public API and are compiled
@@ -176,6 +179,36 @@ contradict the "no new features" decision — but it is a real 7 kB. Options if
 that matters: accept it; enable `--gc-sections` *with* per-function sections in
 the project (they only work together); or gate the profiling behind a conf
 macro upstream in Sonora.
+
+## 11b. Clock: CLKGEN left the portable header (step 4, measured)
+
+The §3 row "one renamed entry point" understated it. NORA **moved the whole
+CLKGEN surface out of `nora_clock.h` into `nora_clock_dspic33a.h`** — the enum,
+the config struct and the call — on the grounds that CLKGEN is a dsPIC33A block
+with no CK counterpart, so a portable header could not honour it. Concretely:
+
+| starter | NORA |
+|---|---|
+| `dspic33ak_clock_clkgen_t` | `nora_clock_dspic33a_clkgen_t` (+ `CLKGEN_13`, the CCP time base) |
+| `dspic33ak_clock_clkgen_config_t` | `nora_clock_dspic33a_clkgen_config_t` (fields unchanged: `source`, `divide_by`) |
+| `dspic33ak_clock_clkgen_configure()` | `nora_clock_dspic33a_clkgen_configure()` |
+| — | `nora_clock_switch_source()`, `nora_clock_get_fosc_hz()`, `nora_clock_get_fcy_hz()` |
+| `DSPIC33AK_CLOCK_ERR_TIMEOUT` (one value) | + 10 specific `..._ERR_*_TIMEOUT` / `..._READBACK` values |
+
+`nora_clock_pll_config_t` and the source/PLL enums are unchanged, so
+`starter_clock_init()`'s PLL1 call is a pure prefix swap. The only structural
+edit in the consumer is the second include: `src/clock/starter_clock.c` now
+includes `nora_clock_dspic33a.h` as well, which is correct by NORA's own rule —
+it is board bring-up code, and it now says so at the call site.
+
+File-name mapping (starter → NORA): `dspic33ak_clock.c` → `nora_clock_dspic33a.c`,
+`dspic33ak_clock_device.c` → `nora_clock_device_dspic33a.c`,
+`dspic33ak_clock_reg.*` → `nora_clock_dspic33a_reg.*`, plus the new
+`nora_clock_dspic33a.h`. Seven files where the starter had six.
+
+`docs/clock_hal_integration.md` was left untouched on purpose: it is a
+historical import record (blob SHA-1s, "removed legacy files"), so renaming
+identifiers inside it would falsify the record rather than update a document.
 
 ## 12. Sonora-side residues noticed while vendoring
 

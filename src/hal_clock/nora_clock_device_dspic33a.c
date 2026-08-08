@@ -1,4 +1,4 @@
-#include "dspic33ak_clock_device.h"
+#include "nora_clock_device.h"
 
 /*
  * Device adaptation layer.
@@ -12,8 +12,8 @@
 /* -------------------------------------------------------------------------- */
 /* Encode PLL input source                                                    */
 /* -------------------------------------------------------------------------- */
-bool dspic33ak_clock_device_encode_pll_source(
-    dspic33ak_clock_source_t source,
+bool nora_clock_device_encode_pll_source(
+    nora_clock_source_t source,
     uint16_t *value)
 {
     if (value == 0) {
@@ -21,19 +21,19 @@ bool dspic33ak_clock_device_encode_pll_source(
     }
 
     switch (source) {
-    case DSPIC33AK_CLOCK_SOURCE_FRC:
+    case NORA_CLOCK_SOURCE_FRC:
         *value = 1u;
         return true;
-    case DSPIC33AK_CLOCK_SOURCE_BFRC:
+    case NORA_CLOCK_SOURCE_BFRC:
         *value = 2u;
         return true;
-    case DSPIC33AK_CLOCK_SOURCE_PRIMARY:
+    case NORA_CLOCK_SOURCE_PRIMARY:
         *value = 3u;
         return true;
-    case DSPIC33AK_CLOCK_SOURCE_REFI1:
+    case NORA_CLOCK_SOURCE_REFI1:
         *value = 9u;
         return true;
-    case DSPIC33AK_CLOCK_SOURCE_REFI2:
+    case NORA_CLOCK_SOURCE_REFI2:
         *value = 10u;
         return true;
     default:
@@ -44,8 +44,8 @@ bool dspic33ak_clock_device_encode_pll_source(
 /* -------------------------------------------------------------------------- */
 /* Encode CLKGEN input source                                                 */
 /* -------------------------------------------------------------------------- */
-bool dspic33ak_clock_device_encode_clkgen_source(
-    dspic33ak_clock_source_t source,
+bool nora_clock_device_encode_clkgen_source(
+    nora_clock_source_t source,
     uint16_t *value)
 {
     if (value == 0) {
@@ -53,34 +53,34 @@ bool dspic33ak_clock_device_encode_clkgen_source(
     }
 
     switch (source) {
-    case DSPIC33AK_CLOCK_SOURCE_FRC:
+    case NORA_CLOCK_SOURCE_FRC:
         *value = 1u;
         return true;
-    case DSPIC33AK_CLOCK_SOURCE_BFRC:
+    case NORA_CLOCK_SOURCE_BFRC:
         *value = 2u;
         return true;
-    case DSPIC33AK_CLOCK_SOURCE_PRIMARY:
+    case NORA_CLOCK_SOURCE_PRIMARY:
         *value = 3u;
         return true;
-    case DSPIC33AK_CLOCK_SOURCE_LPRC:
+    case NORA_CLOCK_SOURCE_LPRC:
         *value = 4u;
         return true;
-    case DSPIC33AK_CLOCK_SOURCE_PLL1:
+    case NORA_CLOCK_SOURCE_PLL1:
         *value = 5u;
         return true;
-    case DSPIC33AK_CLOCK_SOURCE_PLL2:
+    case NORA_CLOCK_SOURCE_PLL2:
         *value = 6u;
         return true;
-    case DSPIC33AK_CLOCK_SOURCE_PLL1_VCO_FRACDIV:
+    case NORA_CLOCK_SOURCE_PLL1_VCO_FRACDIV:
         *value = 7u;
         return true;
-    case DSPIC33AK_CLOCK_SOURCE_PLL2_VCO_FRACDIV:
+    case NORA_CLOCK_SOURCE_PLL2_VCO_FRACDIV:
         *value = 8u;
         return true;
-    case DSPIC33AK_CLOCK_SOURCE_REFI1:
+    case NORA_CLOCK_SOURCE_REFI1:
         *value = 9u;
         return true;
-    case DSPIC33AK_CLOCK_SOURCE_REFI2:
+    case NORA_CLOCK_SOURCE_REFI2:
         *value = 10u;
         return true;
     default:

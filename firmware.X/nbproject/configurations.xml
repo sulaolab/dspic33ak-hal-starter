@@ -59,12 +59,13 @@
         <itemPath>../src/hal_can/dspic33ak_canfd_isr.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f22" displayName="hal_clock" projectFiles="true">
-        <itemPath>../src/hal_clock/dspic33ak_clock.c</itemPath>
-        <itemPath>../src/hal_clock/dspic33ak_clock_device.c</itemPath>
-        <itemPath>../src/hal_clock/dspic33ak_clock_device.h</itemPath>
-        <itemPath>../src/hal_clock/dspic33ak_clock.h</itemPath>
-        <itemPath>../src/hal_clock/dspic33ak_clock_reg.c</itemPath>
-        <itemPath>../src/hal_clock/dspic33ak_clock_reg.h</itemPath>
+        <itemPath>../src/hal_clock/nora_clock.h</itemPath>
+        <itemPath>../src/hal_clock/nora_clock_device.h</itemPath>
+        <itemPath>../src/hal_clock/nora_clock_device_dspic33a.c</itemPath>
+        <itemPath>../src/hal_clock/nora_clock_dspic33a.c</itemPath>
+        <itemPath>../src/hal_clock/nora_clock_dspic33a.h</itemPath>
+        <itemPath>../src/hal_clock/nora_clock_dspic33a_reg.c</itemPath>
+        <itemPath>../src/hal_clock/nora_clock_dspic33a_reg.h</itemPath>
       </logicalFolder>
       <logicalFolder name="f20" displayName="hal_dma" projectFiles="true">
         <itemPath>../src/hal_dma/nora_dma_dspic33a.c</itemPath>
