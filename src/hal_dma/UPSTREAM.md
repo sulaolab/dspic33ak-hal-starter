@@ -1,10 +1,15 @@
-# Upstream HAL Source
+# Provenance
 
-This directory vendors the dsPIC33AK DMA HAL from:
+**The vendoring direction is reversed.** This directory used to be a vendored copy of
+the standalone DMA HAL repository; since the NORA-HAL migration it is the other way
+round:
 
-- Repository: https://github.com/sulaolab/dspic33ak-hal-dma
-- Branch: main
-- Source directory: src/
-- Upstream commit: 30e9bf943af51853fda90293b6fb9adeefb26290
+    upstream audio project  ->  this starter  ->  https://github.com/sulaolab/nora-hal-dspic33ak-dma
 
-Apply reusable DMA changes upstream first, then refresh this validated starter snapshot.
+These bytes come from the audio project that runs the code on silicon, and the
+standalone repository is a **published snapshot** of this directory: its `src/` is
+verified blob-identical to this folder, not the reverse.
+
+A reusable DMA change therefore belongs in the upstream project first and reaches this
+starter by re-sync; publication follows from here. A fix made only in the standalone
+repository would be a fork of validated code.

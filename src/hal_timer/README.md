@@ -6,7 +6,7 @@ This directory contains reusable dsPIC33AK timer services:
 
 - `nora_tick_timer_dspic33ak.c / nora_tick_timer.h`
   - Timer1-based 1 ms monotonic tick source.
-  - Provides `dspic33ak_tick_timer_*()` APIs.
+  - Provides `nora_tick_timer_*()` APIs.
 - `nora_high_res_timer_dspic33ak.c / nora_high_res_timer.h`
   - Timer2-based free-running high-resolution counter.
   - Provides `nora_high_res_timer_*()` APIs.
