@@ -894,3 +894,39 @@ load-bearing for the tick timer. Finding the same shape in a module the pilot ne
 is evidence that P3 is a NORA-wide question rather than a Timer artefact. No change is made
 here: P3 has not been adopted as a rule.
 
+## 16. The three trees are not isomorphic (2026-08-09)
+
+Phrases like "compare against all ten snapshots" or "the whole fleet is byte-identical" are
+false at the edges, and quietly so. Measured module inventory:
+
+* **sonora** (`src/hal_*`, 15): adc, can, ccp_input_capture, clock, dma, gpio, i2c,
+  noinit_ram, nvm, reset, spi, spi_i2s_tdm, timer, uart, udid
+* **starter** (`src/hal_*`, 11): can, clock, dma, gpio, i2c, nvm, spi, spi_i2s_tdm, timer,
+  uart, udid
+* **snapshots** (10 repos): can, ccp-input-capture, clock, dma, gpio, i2c, spi,
+  spi-i2s-tdm, timer, uart
+
+Four relations, not one:
+
+| class | modules | count | comparable pairs |
+|---|---|---|---|
+| **full chain** sonora → starter → snapshot | can, clock, dma, gpio, i2c, spi, spi_i2s_tdm, timer, uart | 9 | both pairs |
+| **no starter link** — snapshot's upstream is sonora `main` **directly** | ccp_input_capture | 1 | sonora ⇄ snapshot only; starter pair is `N/A (topology)` |
+| **no snapshot** — vendored into starter, never published standalone | nvm, udid | 2 | sonora ⇄ starter only; snapshot pair is `N/A (topology)` |
+| **sonora-only** — never vendored | adc, noinit_ram, reset | 3 | neither pair exists |
+
+15 = 9 + 1 + 2 + 3, 11 = 9 + 2, 10 = 9 + 1. The counts cross-check.
+
+Consequences to carry into the final verification:
+
+1. The blob census must be a **relation matrix over existing pairs**, with the four
+   `N/A (topology)` cells stated rather than omitted. A missing row produces no diff line,
+   which is §14's second blind-spot mechanism — an omission that looks like agreement.
+2. `ccp_input_capture` fixes go **sonora → snapshot**, skipping starter. A habit of
+   "upstream means starter" is wrong for exactly this one module.
+3. `nvm` and `udid` have **no published snapshot to keep in step**, so they are the two
+   modules where a starter-side edit cannot break byte identity with a snapshot — and also
+   the two whose public headers carry the P3-shaped silicon prose found in §15.
+4. adc, noinit_ram and reset are outside this migration entirely. They are not evidence of
+   incompleteness.
+
