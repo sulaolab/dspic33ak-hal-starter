@@ -755,8 +755,45 @@ does. `nora_pps_dspic33ak.c`'s "dsPIC33A guards RPCON via the PAC" and
 
 `hal_nvm` and `hal_udid` are the two NORA-ised modules with **no standalone repository**,
 so the standalone-side review never looked at them. They were checked here for the first
-time — and needed nothing. That is the argument for running the greps in this repository
-too rather than assuming the snapshot review covered the fleet.
+time. The `dsPIC33A` / `Nora` sweep required no corrections in either module. A later
+full prose-and-API review of the same two did find more, in `hal_nvm` only:
+
+* `nora_nvm.h`'s banner named the module `nora_nvm.{c,h}`, which is not a real pair —
+  the files are `nora_nvm.h` and `nora_nvm_dspic33ak.c`. Exactly the blind spot above:
+  the old banner said `dspic33ak_nvm.{c,h}`, which *was* a real pair, so the namespace
+  substitution produced a plausible-looking dead reference. Fixed.
+* The public functions are `NORA_NVM_PageErase()`, `NORA_NVM_ReadWord()`, … —
+  function-like UPPER-CASE names inherited from `DSPIC33AK_NVM_*`, which §1 reserves
+  for compile-time identifiers. This is §9's third blind spot class arriving as a
+  finding rather than a prediction, and §12 already recorded it as a Sonora-side
+  residue. Not fixed here — see below for the measured cost.
+* `hal_udid` needed nothing on either pass. Its public API is already
+  `nora_udid_read()` / `nora_udid_is_plausible()`.
+
+So the grep sweep was necessary and not sufficient: two of the three findings in these
+modules are things a grep for `dsPIC33A` or `Nora` cannot express. That is the argument
+for running the full review in this repository rather than assuming the snapshot review
+covered the fleet.
+
+### The `NORA_NVM_*` casing question, measured
+
+Renaming the twelve NVM functions to `nora_nvm_page_erase()` and so on is not contained
+to this starter. Measured 2026-08-09:
+
+| tree | branch | files touched |
+|---|---|---|
+| `dspic33ak-hal-starter` | `refactor/nora-hal` | 7 (`fw_update/`, `console/fw_command.c`, `main.c`, the HAL pair) |
+| `dsp-sonora-mothership` | `main` | 4 |
+| `dsp-sonora-dual-partition` | `main` | 10 |
+
+Two of the three are production `main` branches, and the dual-partition tree has a
+**diverged** NVM: its backend is `nora_nvm_dspic33a.c` (a `_dspic33a` tag, which §1a
+rules out) and it carries two functions the other two trees do not,
+`NORA_NVM_CacheInvalidate()` and `NORA_NVM_CacheState()`, from the read-after-program
+displacing-read work. So the rename is a three-repository change with a merge question
+attached, not a starter-local cleanup, and doing it here alone would leave `hal_nvm`
+permanently non-identical across the fleet — the opposite of what §14's convergence
+plan is for. Deferred as an explicit decision, not an oversight.
 
 ### Direction of this wave, and what it costs
 

@@ -2,8 +2,8 @@
 #define NORA_NVM_H
 
 //===========================================================
-// nora_nvm.{c,h} -- Run-Time Self-Programming (RTSP) driver for the
-// dsPIC33AK512MPS512 internal Flash program memory.
+// nora_nvm.h / nora_nvm_dspic33ak.c -- Run-Time Self-Programming (RTSP) driver
+// for the dsPIC33AK512MPS512 internal Flash program memory.
 //
 // This is the low-level flash program/erase/read primitive used by the serial
 // self-flash LiveUpdate feature. It is deliberately application-agnostic: it

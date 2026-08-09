@@ -157,8 +157,10 @@ This pairs with the standalone HALs:
 This starter also currently vendors integration HAL folders such as `hal_clock`,
 `hal_dma`, and the `hal_gpio_event` change-notification layer inside
 `hal_gpio`. The starter's active HAL surface therefore includes Clock,
-GPIO/PPS/CN events, UART, SPI, I2C, CAN FD, Timer, DMA, and SPI framed-mode
-I2S/TDM.
+GPIO/PPS/CN events, UART, SPI, I2C, CAN FD, Timer, DMA, SPI framed-mode I2S/TDM,
+NVM/RTSP, and the local UDID helper. `docs/source_layout.md` classifies these:
+NVM is a reusable HAL used by the firmware updater; UDID is a local helper used by
+the boot banner, not a standalone public HAL.
 
 Reusable HAL implementations are vendored as validated snapshots under matching
 `src/hal_xxx/` directories so the complete project builds without external
