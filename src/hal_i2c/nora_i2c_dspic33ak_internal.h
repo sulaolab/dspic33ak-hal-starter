@@ -9,10 +9,10 @@ extern "C" {
 #endif
 
 /*
- * Internal dsPIC33A helpers shared by the master and slave engines.
+ * Internal dsPIC33AK helpers shared by the master and slave engines.
  *
  * This header is not part of the NORA I2C public API. It resolves a logical
- * instance to the dsPIC33A register table, computes the backend timing
+ * instance to the dsPIC33AK register table, computes the backend timing
  * divider, and owns shared role/lifecycle state. Application and board code
  * must include only nora_i2c.h, nora_i2c_master.h, and/or nora_i2c_slave.h.
  */

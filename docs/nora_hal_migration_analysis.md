@@ -687,8 +687,10 @@ Remaining:
   the two that had one were inverted.
 - §11's "zero-delta modules" line still counts gpio/pps as zero while §9's table
   records `+2` for it; one clarifying line would settle which is meant.
-- Upstream (Sonora, then re-sync — deliberately not patched in the snapshots,
-  which must stay byte-identical): "Internal dsPIC33A helpers" in the i2c NORA
+- Upstream (Sonora, then re-sync). **Superseded on 2026-08-09 for the comment items:**
+  the naming residues below were fixed standalone-first and reflected into this
+  starter, so `starter == standalone` holds and *both* now differ from Sonora until
+  Sonora is patched. See §14. The items were: "Internal dsPIC33A helpers" in the i2c NORA
   headers, "dsPIC33A DMA hot-path helpers" / "Only the dsPIC33A backend" in
   `nora_dma_dspic33ak_fast.h`, `nora_spi_i2s_tdm_dspic33ak_diag_fast.h`'s
   "dsPIC33A-private" opening, and a garbled leftover comment fragment in
@@ -710,3 +712,67 @@ Remaining:
   - SPDX regression: `SPDX-FileCopyrightText: 2026 SulaoLab` was dropped from the
     files that carried it, and `nora_ccp_input_capture_dspic33ak_fast.h` carries no
     SPDX line at all.
+
+## 14. The naming sweep the verification methods could not see (2026-08-09)
+
+A documentation review after step 6 found a class of error that **neither** of this
+migration's two verification methods detects. Both are structurally blind to it, which is
+the part worth keeping:
+
+* **§9's header-symbol comparison** compares exported *identifiers*. Prose — comments,
+  folder READMEs, `#error` strings — is not an identifier, so none of it is in scope.
+* **Task B step 3's reverse-normalisation** rewrites `nora_*` back to `dspic33ak_*` and
+  diffs against the pre-rename blob. A naming error in prose reverse-normalises to the
+  *correct* pre-rename spelling, so the diff is empty. `nora_<mod>_hw.{c,h}` becomes
+  `dspic33ak_<mod>_hw.{c,h}` — which is what the file really was called — while the file
+  today is `nora_<mod>_dspic33ak_hw.{c,h}`. Both sides of that diff are naming, so
+  **naming is exactly what it cannot check**. The same cancellation hides `Nora` vs
+  `NORA` and `dsPIC33A` vs `dsPIC33AK`.
+
+A third shape needs neither method to be wrong, only incomplete: a Files table that
+**omits** a file the refresh added produces no diff line at all (ccp-input-capture's
+`nora_ccp_input_capture_dspic33ak_fast.h`).
+
+What actually detects them, and is now the check to run after any namespace sweep:
+
+1. Resolve every `nora_*.{c,h}` **mentioned in prose** against the real contents of the
+   folder; a mention with no matching file is a dead reference.
+2. Compare each folder README against the module's root README — divergence means one of
+   them is a generation behind. `hal_spi_i2s_tdm/README.md` still told a reader to extend
+   a per-device `IEC`/`IFS` mask table that the DFP-bit-alias change had deleted.
+3. Grep `dsPIC33A(?![K/])` and `Nora`, then read every hit. Most hits are correct:
+   `dsPIC33A` is right whenever the sentence is about the **core** — unified/linear
+   address space, no PSV/table-read, no NVMKEY (the PAC replaces it), the 128-bit Flash
+   word. It is wrong only when the sentence is about **this backend**. The `dsPIC33A/h/`
+   DFP include paths are literal directory names and never change.
+
+Applied here, that gave 37 `dsPIC33A` and 14 `Nora` hits across 27 files under `src/`.
+**Nine were left alone as correct**: all of `hal_nvm` (5) and `hal_udid` (3) are
+core-architecture statements, plus `nora_gpio_dspic33ak_reg.h`, which already says "the
+dsPIC33AK (dsPIC33A core) GPIO SFRs" and states the distinction better than the rule
+does. `nora_pps_dspic33ak.c`'s "dsPIC33A guards RPCON via the PAC" and
+`nora_spi_dspic33ak.c`'s "the Microchip dsPIC33A headers" are also correct as written.
+
+`hal_nvm` and `hal_udid` are the two NORA-ised modules with **no standalone repository**,
+so the standalone-side review never looked at them. They were checked here for the first
+time — and needed nothing. That is the argument for running the greps in this repository
+too rather than assuming the snapshot review covered the fleet.
+
+### Direction of this wave, and what it costs
+
+Every other fix in this migration flowed Sonora → starter → standalone. This one ran
+**backwards** by explicit decision: standalone first (ten `refactor/nora-hal` branches
+pushed 2026-08-09), then reflected here, with Sonora last. Two consequences to hold on to
+until Sonora is patched:
+
+* The 21 files changed here were **copied from the standalone tree**, not re-edited, after
+  verifying each starter file still matched the standalone *pre-fix* blob. So
+  `starter == standalone` is byte-exact by construction, not by re-derivation.
+* `Sonora == starter` is therefore **broken on purpose** for those 21 files, and the
+  snapshot READMEs carry an explicit "one exception" note saying so. When Sonora is
+  patched and re-vendored, that note and each `docs/nora_migration.md`
+  "ahead of upstream" section become history and need rewriting to "resolved".
+
+Since ccp-input-capture has no `src/hal_ccp_input_capture/` here, its two corrected files
+have no starter counterpart and go straight from the snapshot to Sonora.
+

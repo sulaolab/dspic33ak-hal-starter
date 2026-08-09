@@ -10,7 +10,7 @@
 extern "C" {
 #endif
 
-/* Internal dsPIC33A I2C controller inventory. Not part of the public API. */
+/* Internal dsPIC33AK I2C controller inventory. Not part of the public API. */
 typedef struct {
     bool present;
     nora_i2c_regs_t regs;

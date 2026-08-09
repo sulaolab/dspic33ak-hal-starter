@@ -7,10 +7,10 @@
 #include "nora_clock.h"
 
 /*
- * dsPIC33A-only part of the Clock HAL: the CLKGEN blocks.
+ * dsPIC33AK-only part of the Clock HAL: the CLKGEN blocks.
  *
  * WHY THIS HEADER EXISTS
- *   CLKGEN is not a clock concept, it is a dsPIC33A BLOCK. The AK clock tree is a
+ *   CLKGEN is not a clock concept, it is a dsPIC33AK BLOCK. The AK clock tree is a
  *   fan-out: two PLLs feed a set of numbered CLKGEN generators, each with its own
  *   source select and divider, and each feeding a different consumer (CLKGEN1 is
  *   the CPU's, CLKGEN13 is the CCP/SCCP time base, ...). dsPIC33C/CK has no such

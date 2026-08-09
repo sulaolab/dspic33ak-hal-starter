@@ -20,7 +20,7 @@
  * in this header is an XC-DSC / DFP register type.
  *
  * WHAT IS **NOT** HERE, AND WHY
- *   The CLKGEN blocks moved to nora_clock_dspic33ak.h.  CLKGEN is a dsPIC33A
+ *   The CLKGEN blocks moved to nora_clock_dspic33ak.h.  CLKGEN is a dsPIC33AK
  *   block, not a clock concept: CK has no such thing (one system PLL switched by
  *   OSCCON.OSWEN, plus per-peripheral selects), so there is no CK implementation
  *   of those calls to write.  Keeping them here made this header read as portable

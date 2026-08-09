@@ -20,7 +20,7 @@
  */
 
 /*
- * One interrupt source (event / RX / TX). The dsPIC33A I2C peripheral has three
+ * One interrupt source (event / RX / TX). The dsPIC33AK I2C peripheral has three
  * separate interrupts. The flag (IFSx) and enable (IECx) bits share the same
  * Only data/config registers are described here.  The event/RX/TX interrupt
  * flag and enable bits are NOT: they live in IFSx/IECx, which every peripheral

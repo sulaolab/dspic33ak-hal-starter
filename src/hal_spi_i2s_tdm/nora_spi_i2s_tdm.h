@@ -2,7 +2,7 @@
 #define NORA_SPI_I2S_TDM_H
 
 //===========================================================
-// nora_spi_i2s_tdm.h = the public native SPI/I2S/TDM transport contract. Its dsPIC33A
+// nora_spi_i2s_tdm.h = the public native SPI/I2S/TDM transport contract. Its dsPIC33AK
 // implementation lives in nora_spi_i2s_tdm_dspic33ak.*. The same source is published standalone
 // and vendored into the starter project and the CMSIS-SAI driver.
 // It does: SPI framed-mode (I2S/TDM) setup, DMA + ping-pong buffers, block callback,
@@ -24,7 +24,7 @@
 // inst(i) accessors address logical rows, while spiN() searches the table for literal physical
 // SPIn. conf.h also supplies geometry (SLOTS_PER_FS / BLOCK_FRAMES) and initial SYNC_DOMAIN seeds.
 // The core's leg enum, buffers, leg table, and _DMA<rx>Interrupt vectors are explicit C keyed off
-// those build facts (no generator macro). Supported-device limitation: the dsPIC33A backend
+// those build facts (no generator macro). Supported-device limitation: the dsPIC33AK backend
 // currently has silicon facts for AK512 and AK128 only; other parts need their facts added.
 // Known sibling-HAL dependencies: nora_dma (required),
 // and the load monitor's use of the NORA high-resolution timer public API (nora_high_res_timer_*,
@@ -137,7 +137,7 @@ typedef enum {
 //                - TDM (>=4 slots), MASTER: the SPI emits a 1-BCLK half-frame marker
 //                  (FRMSYPW=0, FRMCNT=slots_per_fs/2) that CLC10 toggles into a 50%-duty FS
 //                  on the same FS pin. The HAL owns CLC10 + virtual pin RPV8 (see
-//                  nora_spi_i2s_tdm_fs_clc.*).
+//                  nora_spi_i2s_tdm_dspic33ak_fs_clc.*).
 //                - TDM SLAVE: FS is an INPUT, so fs_shape is accepted but has no
 //                  generated-waveform effect (treated as normal slave framing). The CLC10
 //                  50%-duty FS is generated only in master mode.

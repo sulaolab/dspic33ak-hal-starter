@@ -15,12 +15,12 @@
 // <stdio.h> -- it orchestrates instances and runs the block ISR, delegating register
 // pokes to hw.* and diagnostics to diag.*.
 #include "nora_dma.h"
-#include "nora_dma_dspic33ak_fast.h"  // dsPIC33A ISR/source-read fast path
+#include "nora_dma_dspic33ak_fast.h"  // dsPIC33AK ISR/source-read fast path
 #include "nora_spi_i2s_tdm.h"
 #include "nora_spi_i2s_tdm_dspic33ak_hw.h"      // silicon layer: tdm_spi_inst_t + register/DMA ops
 #include "nora_spi_i2s_tdm_dspic33ak_fs_clc.h"  // CLC10 50%-FS generator (TDM master + FS_50PCT)
 #include "nora_spi_i2s_tdm_diag.h"               // public counters and load snapshots
-#include "nora_spi_i2s_tdm_dspic33ak_diag_fast.h" // dsPIC33A TDMsum ISR fast path
+#include "nora_spi_i2s_tdm_dspic33ak_diag_fast.h" // dsPIC33AK TDMsum ISR fast path
 #include "nora_high_res_timer.h"      // free-running counter: TDMsum 'now' samples for configure/reset
 
 
@@ -67,7 +67,7 @@
 //===========================================================
 
 // tdm_spi_inst_t (physical SPI instances) + the silicon device-facts table live in the
-// silicon layer (nora_spi_i2s_tdm_hw.*). The transport core indexes its own leg
+// silicon layer (nora_spi_i2s_tdm_dspic33ak_hw.*). The transport core indexes its own leg
 // table with the leg-index enum below and stores the physical SPI in each leg's spi_inst.
 //
 // Explicit dense leg-index enum: one TDM_SPI_LEG_<name> per descriptor row, in table order,
@@ -267,7 +267,7 @@ static int32_t    Rx_SPI4[ 2 * TDM_LEG_HALF_WORDS(NORA_TDM_SLOTS_PER_FS, NORA_TD
 //
 // The DEVICE FACTS table (s_spi_dev[]: SPIxBUF/CON1/BRG/IMSK + DMA trigger CHSELs +
 // CPU IRQ bits, indexed by tdm_spi_inst_t) lives in the silicon layer
-// (nora_spi_i2s_tdm_hw.*). Here the transport core keeps only its DRIVER
+// (nora_spi_i2s_tdm_dspic33ak_hw.*). Here the transport core keeps only its DRIVER
 // ALLOCATION: s_spi_legs[], one physical SPI leg per row with the SPI instance, RX/TX
 // DMA channels, owned ping-pong buffers, and current logical config. start() passes
 // each leg's spi_inst + DMA channels/buffers down to the hw_* ops.

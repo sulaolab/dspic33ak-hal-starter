@@ -9,7 +9,7 @@
 #include <stddef.h>                   // NULL
 #include "nora_high_res_timer.h"     // NORA high-resolution timer API (runtime-gated)
 #include "nora_dma.h"
-#include "nora_dma_dspic33ak_fast.h"  // dsPIC33A ISR diagnostic fast path
+#include "nora_dma_dspic33ak_fast.h"  // dsPIC33AK ISR diagnostic fast path
 #include "nora_spi_i2s_tdm_dspic33ak_reg.h" // NORA_SPI_I2S_TDM_STAT_* masks (note_errflags)
 
 

@@ -21,11 +21,11 @@ Include only the role headers required by the caller:
 - `nora_i2c_slave.h` — 7-bit callback-driven slave API and ISR delegates
 
 These headers use only NORA types. They do not include compiler device headers,
-SFR names, or dsPIC33A register definitions.
+SFR names, or dsPIC33AK register definitions.
 
 ## Backend boundary
 
-The current implementation is the dsPIC33A backend:
+The current implementation is the dsPIC33AK backend:
 
 - `nora_i2c_dspic33ak_master.c`
 - `nora_i2c_dspic33ak_slave.c`

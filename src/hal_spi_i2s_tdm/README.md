@@ -22,7 +22,7 @@ needs.
   synthesized by **CLC10** on the FS pin (auto-detected by PPS reverse-lookup; no app/CLC
   code). A TDM slave receives FS as an input, so `fs_shape` is accepted but has no
   generated-waveform effect (still validated, and compared as a framing field within a sync
-  domain). See `nora_spi_i2s_tdm_fs_clc.{c,h}`.
+  domain). See `nora_spi_i2s_tdm_dspic33ak_fs_clc.{c,h}`.
 - Two configure/lifecycle paths: **system** `configure_system(setups, count)` (transactional,
   all-or-nothing) + `open()` + `start_all_domains()`, or **single-instance**
   `inst_configure(inst, cfg)` + `open()` + `inst_start(inst)`. `open()` takes **no role** —
@@ -46,8 +46,8 @@ needs.
 - No codec init (e.g. WM8904) — that is board/app code.
 - No general board pin routing in the core — board FS/BCLK/DATA/MCLK routing is supplied by
   the registered port hook. **Exception:** for `TDM master + FS_50PCT`, the HAL-owned CLC10
-  helper (`nora_spi_i2s_tdm_fs_clc.*`) temporarily repoints the already-routed `SSx` FS
-  pin to `CLC10OUT` (and routes `SSx`→RPV8) and restores it on `release()`.
+  helper (`nora_spi_i2s_tdm_dspic33ak_fs_clc.*`) temporarily repoints the already-routed
+  `SSx` FS pin to `CLC10OUT` (and routes `SSx`→RPV8) and restores it on `release()`.
 - No DSP — the callback owns any processing.
 - No sample-rate policy — the transport is rate-agnostic (runs at the configured BRG or
   the incoming external clock); the supported-rate set is an app concern.
@@ -99,12 +99,15 @@ Topology availability differs by device:
 > I2S-native `FS_50PCT` work on both parts.
 
 The HAL `#error`s on any other device. Adding a new dsPIC33AK part means adding its
-silicon facts in the HW layer (`nora_spi_i2s_tdm_hw.{c,h}`):
+silicon facts in the HW layer (`nora_spi_i2s_tdm_dspic33ak_hw.{c,h}`):
 
 - SPI instance count
 - `SPIxBUF` / `SPIxCON1` / `SPIxBRG` / `SPIxIMSK` / `SPIxSTAT` pointers
-- DMA trigger CHSEL values
-- CPU IRQ `IEC`/`IFS` masks
+- DMA trigger values (as `nora_dma_trigger_t`)
+
+CPU IRQ enable/flag bits are **no longer** part of that list: they go through the DFP's
+`_DMAxIE` / `_DMAxIF` bit aliases, so there is no per-device `IEC`/`IFS` mask table to
+extend (see "Interrupt ownership").
 
 The vendor part macro is confined to one `NORA_SPI_I2S_TDM_DSPIC33AK_DEVICE` adapter
 (opaque-tag derivation); app/HW code selects on that, not on the raw `__dsPIC33AK*__`.

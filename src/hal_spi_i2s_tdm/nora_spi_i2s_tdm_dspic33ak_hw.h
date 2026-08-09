@@ -2,7 +2,7 @@
 #define NORA_SPI_I2S_TDM_DSPIC33AK_HW_H
 
 //===========================================================
-// nora_spi_i2s_tdm_hw.{c,h} = the SILICON layer of the SPI/I2S/TDM HAL, kept
+// nora_spi_i2s_tdm_dspic33ak_hw.{c,h} = the SILICON layer of the SPI/I2S/TDM HAL, kept
 // separate from the transport core. hw.c owns the data-sheet device-facts table
 // (s_spi_dev[]: SPIxBUF/CON1/BRG/IMSK pointers, logical DMA triggers, CPU IRQ bits, with
 // the AK512/AK128 #if) and every function that programs one physical SPI peripheral in
@@ -20,7 +20,7 @@
 #include <stdbool.h>
 #include "nora_spi_i2s_tdm.h"   // nora_spi_i2s_tdm_config_t / _role_t
 
-// Device identity is a dsPIC33A backend concern. Keep compiler part macros out of the
+// Device identity is a dsPIC33AK backend concern. Keep compiler part macros out of the
 // public transport contract; this adapter is the one place that maps them to backend tags.
 // Tag values are arbitrary: compare with == only (never order / arithmetic).
 #define NORA_SPI_I2S_TDM_DSPIC33AK_DEV_AK512   (1)
@@ -33,7 +33,7 @@
   #define NORA_SPI_I2S_TDM_DSPIC33AK_DEVICE \
       NORA_SPI_I2S_TDM_DSPIC33AK_DEV_AK128
 #else
-  #error "Unsupported device -- the dsPIC33A SPI/I2S/TDM backend expects __dsPIC33AK512MPS512__ or __dsPIC33AK128MC106__."
+  #error "Unsupported device -- the dsPIC33AK SPI/I2S/TDM backend expects __dsPIC33AK512MPS512__ or __dsPIC33AK128MC106__."
 #endif
 
 

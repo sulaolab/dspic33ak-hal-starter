@@ -1,7 +1,7 @@
 #ifndef NORA_SPI_I2S_TDM_DSPIC33AK_DIAG_FAST_H
 #define NORA_SPI_I2S_TDM_DSPIC33AK_DIAG_FAST_H
 
-// dsPIC33A-private TDMsum profiler state and ISR fast path. This header is intentionally
+// dsPIC33AK-private TDMsum profiler state and ISR fast path. This header is intentionally
 // separate from nora_spi_i2s_tdm_diag.h: portable consumers see diagnostics snapshots only,
 // never this mutable implementation state.
 

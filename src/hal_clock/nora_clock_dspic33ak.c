@@ -157,7 +157,7 @@ uint32_t nora_clock_get_fcy_hz(void)
 }
 
 /* -------------------------------------------------------------------------- */
-/* Configure CLKGEN from a logical clock request (dsPIC33A-only face)         */
+/* Configure CLKGEN from a logical clock request (dsPIC33AK-only face)         */
 /* -------------------------------------------------------------------------- */
 nora_clock_status_t
 nora_clock_dspic33ak_clkgen_configure(
