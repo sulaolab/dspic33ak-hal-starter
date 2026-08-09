@@ -140,19 +140,24 @@ sulaolab/dspic33ak-hal-starter   (MPLAB X project, 11 HAL modules)
 nora-hal-dspic33ak-timer         (published snapshot, read-only role)
 ```
 
-**Diff status: none.** All five `src/hal_timer/` files are byte-identical across the three
-trees (`git hash-object`):
+**Diff status: none.** All five module files are byte-identical across the three trees.
+Measured with `git rev-parse HEAD:<path>`, sonora and starter at `src/hal_timer/<file>`,
+snapshot with the module flattened into `src/` (and the module README at `src/README.md`):
 
 | File | blob |
 |---|---|
-| `README.md` | `5188de7a` |
-| `nora_high_res_timer.h` | `963f739e` |
-| `nora_high_res_timer_dspic33ak.c` | `10f865f4` |
-| `nora_tick_timer.h` | `07057be8` |
-| `nora_tick_timer_dspic33ak.c` | `d5cf2a24` |
+| `README.md` (snapshot: `src/README.md`) | `d5cf2a24` |
+| `nora_tick_timer.h` | `5188de7a` |
+| `nora_tick_timer_dspic33ak.c` | `963f739e` |
+| `nora_high_res_timer.h` | `10f865f4` |
+| `nora_high_res_timer_dspic33ak.c` | `07057be8` |
 
-The snapshot additionally carries `docs/`, `src/README.md`, `LICENSE`, `.gitattributes`,
-`.gitignore` — snapshot packaging, not HAL content.
+The same five blobs are present at starter `4af7049` (before this review's doc commit),
+which is the mechanical confirmation that the review changed no HAL content.
+
+The snapshot additionally carries a **top-level** `README.md` (`13571b44`, snapshot
+packaging — not the module README above), plus `docs/`, `LICENSE`, `.gitattributes`,
+`.gitignore`.
 
 Consequence for Phase 3: **any change must be made sonora → starter → standalone**, in that
 order, or the byte-identity invariant breaks and the snapshot becomes a fork.
