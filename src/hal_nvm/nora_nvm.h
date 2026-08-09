@@ -77,7 +77,7 @@ typedef enum
     NORA_NVM_OK = 0,          // operation completed, WRERR == 0
     NORA_NVM_ERR_ARG,         // NULL pointer or misaligned address
     NORA_NVM_ERR_LOCKED,      // NVMCON.LOCK is set (one-way, until reset)
-    NORA_NVM_ERR_WRERR,       // hardware reported WRERR (see WREC via LastWrec)
+    NORA_NVM_ERR_WRERR,       // hardware reported WRERR (see WREC via nora_nvm_last_wrec)
     NORA_NVM_ERR_VERIFY,      // read-back did not match the source data
     NORA_NVM_ERR_ECC,         // NVM CRC preflight found a Flash ECC DED error
     NORA_NVM_ERR_CRC_ENGINE   // NVM CRC address/security/other engine error
@@ -86,47 +86,47 @@ typedef enum
 //----------------------------------------------------------------
 // Alignment predicates (pure, no hardware access).
 //----------------------------------------------------------------
-static inline bool NORA_NVM_IsWordAligned(uint32_t addr) { return (addr & (NORA_NVM_WORD_BYTES - 1U)) == 0U; }
-static inline bool NORA_NVM_IsRowAligned (uint32_t addr) { return (addr & (NORA_NVM_ROW_BYTES  - 1U)) == 0U; }
-static inline bool NORA_NVM_IsPageAligned(uint32_t addr) { return (addr & (NORA_NVM_PAGE_BYTES - 1U)) == 0U; }
+static inline bool nora_nvm_is_word_aligned(uint32_t addr) { return (addr & (NORA_NVM_WORD_BYTES - 1U)) == 0U; }
+static inline bool nora_nvm_is_row_aligned (uint32_t addr) { return (addr & (NORA_NVM_ROW_BYTES  - 1U)) == 0U; }
+static inline bool nora_nvm_is_page_aligned(uint32_t addr) { return (addr & (NORA_NVM_PAGE_BYTES - 1U)) == 0U; }
 
 //----------------------------------------------------------------
 // Which physical partition is currently active (NVMCON.P2ACTIV).
 // false -> Partition 1 active; true -> Partition 2 active.
 //----------------------------------------------------------------
-bool NORA_NVM_IsPartition2Active(void);
+bool nora_nvm_is_partition2_active(void);
 
 //----------------------------------------------------------------
 // Erase the 4 KB page that contains program address `page_addr`.
 // `page_addr` must be page-aligned. Blocks until complete (CPU stalls).
 //----------------------------------------------------------------
-nora_nvm_status_t NORA_NVM_PageErase(uint32_t page_addr);
+nora_nvm_status_t nora_nvm_page_erase(uint32_t page_addr);
 
 //----------------------------------------------------------------
 // Program one 128-bit Flash word (4 x uint32_t) at `word_addr`.
 // `word_addr` must be word-aligned; `data` points to 4 uint32_t.
 // The page must already be erased. Blocks until complete.
 //----------------------------------------------------------------
-nora_nvm_status_t NORA_NVM_WordProgram(uint32_t word_addr, const uint32_t data[NORA_NVM_U32_PER_WORD]);
+nora_nvm_status_t nora_nvm_word_program(uint32_t word_addr, const uint32_t data[NORA_NVM_U32_PER_WORD]);
 
 //----------------------------------------------------------------
 // Program one 512-byte row (32 words) at `row_addr` from a RAM source buffer.
 // `row_addr` must be row-aligned; `ram_src` points to 128 uint32_t in data RAM.
 // The page must already be erased. Blocks until complete.
 //----------------------------------------------------------------
-nora_nvm_status_t NORA_NVM_RowProgram(uint32_t row_addr, const uint32_t *ram_src);
+nora_nvm_status_t nora_nvm_row_program(uint32_t row_addr, const uint32_t *ram_src);
 
 //----------------------------------------------------------------
 // Read one 128-bit Flash word (4 x uint32_t) from `word_addr` into `out`.
 // Plain linear read; no PSV/table setup on dsPIC33A. `word_addr` word-aligned.
 //----------------------------------------------------------------
-nora_nvm_status_t NORA_NVM_ReadWord(uint32_t word_addr, uint32_t out[NORA_NVM_U32_PER_WORD]);
+nora_nvm_status_t nora_nvm_read_word(uint32_t word_addr, uint32_t out[NORA_NVM_U32_PER_WORD]);
 
 //----------------------------------------------------------------
 // Convenience: verify `len_bytes` (multiple of 16) of program memory at
 // `flash_addr` against `expect` in RAM. Returns OK only on an exact match.
 //----------------------------------------------------------------
-nora_nvm_status_t NORA_NVM_Verify(uint32_t flash_addr, const void *expect, uint32_t len_bytes);
+nora_nvm_status_t nora_nvm_verify(uint32_t flash_addr, const void *expect, uint32_t len_bytes);
 
 //----------------------------------------------------------------
 // Scan every 4 KB Flash page touched by [flash_addr, flash_addr+len_bytes)
@@ -134,17 +134,17 @@ nora_nvm_status_t NORA_NVM_Verify(uint32_t flash_addr, const void *expect, uint3
 // is an ECC/security preflight before the CPU reads Flash directly. Unlike a
 // CPU read, the CRC engine reports ECC DED through CRCEC without taking a trap.
 //----------------------------------------------------------------
-nora_nvm_status_t NORA_NVM_CRCPreflight(uint32_t flash_addr,
-                                                   uint32_t len_bytes);
+nora_nvm_status_t nora_nvm_crc_preflight(uint32_t flash_addr,
+                                         uint32_t len_bytes);
 
 //----------------------------------------------------------------
 // The NVMCON.WREC field captured after the most recent program/erase (0 when the
 // last operation succeeded). For diagnostics/telemetry after an ERR_WRERR.
 //----------------------------------------------------------------
-uint8_t NORA_NVM_LastWrec(void);
+uint8_t nora_nvm_last_wrec(void);
 
-// Raw NVMCRCCON.CRCEC captured by the most recent CRCPreflight call.
-uint8_t NORA_NVM_LastCrcError(void);
+// Raw NVMCRCCON.CRCEC captured by the most recent nora_nvm_crc_preflight call.
+uint8_t nora_nvm_last_crc_error(void);
 
 #ifdef __cplusplus
 }

@@ -494,9 +494,12 @@ which is the owner's call, not a cleanup to take unilaterally.
 Reported here, deliberately **not** fixed in this starter (donor files are kept
 byte-identical to Sonora):
 
-- `nora_nvm.h` keeps `NORA_NVM_PageErase` / `NORA_NVM_ReadWord` / … —
+- ~~`nora_nvm.h` keeps `NORA_NVM_PageErase` / `NORA_NVM_ReadWord` / … —
   callable functions spelled `NORA_*`, which `nora_hal_public_api.md` reserves
-  for compile-time identifiers only.
+  for compile-time identifiers only.~~ **Fixed 2026-08-09**, upstream first: the
+  twelve functions are `nora_nvm_page_erase()` / `nora_nvm_read_word()` / … in
+  Sonora, and this starter's `hal_nvm` pair is byte-identical to it again. See
+  "The `NORA_NVM_*` casing question, measured" in §14.
 - `nora_clock_dspic33ak.h:30` writes a path as `board/clock/*` inside a block
   comment, so the compiler emits `warning: "/*" within comment [-Wcomment]`
   three times per build. Cosmetic, but it is the only warning this project
@@ -762,11 +765,11 @@ full prose-and-API review of the same two did find more, in `hal_nvm` only:
   the files are `nora_nvm.h` and `nora_nvm_dspic33ak.c`. Exactly the blind spot above:
   the old banner said `dspic33ak_nvm.{c,h}`, which *was* a real pair, so the namespace
   substitution produced a plausible-looking dead reference. Fixed.
-* The public functions are `NORA_NVM_PageErase()`, `NORA_NVM_ReadWord()`, … —
+* The public functions were `NORA_NVM_PageErase()`, `NORA_NVM_ReadWord()`, … —
   function-like UPPER-CASE names inherited from `DSPIC33AK_NVM_*`, which §1 reserves
   for compile-time identifiers. This is §9's third blind spot class arriving as a
   finding rather than a prediction, and §12 already recorded it as a Sonora-side
-  residue. Not fixed here — see below for the measured cost.
+  residue. **Fixed 2026-08-09** — see below for what it actually cost.
 * `hal_udid` needed nothing on either pass. Its public API is already
   `nora_udid_read()` / `nora_udid_is_plausible()`.
 
@@ -791,9 +794,25 @@ Two of the three are production `main` branches, and the dual-partition tree has
 rules out) and it carries two functions the other two trees do not,
 `NORA_NVM_CacheInvalidate()` and `NORA_NVM_CacheState()`, from the read-after-program
 displacing-read work. So the rename is a three-repository change with a merge question
-attached, not a starter-local cleanup, and doing it here alone would leave `hal_nvm`
-permanently non-identical across the fleet — the opposite of what §14's convergence
-plan is for. Deferred as an explicit decision, not an oversight.
+attached, not a starter-local cleanup, and doing it here alone would have left
+`hal_nvm` non-identical between the two trees that *do* share it.
+
+**Done 2026-08-09, in the only order that keeps that identity.** Sonora renamed
+first, on `fix/nora-naming-convergence`, as its own commit separate from the
+documentation convergence; the `hal_nvm` pair was then copied here byte-for-byte and
+this starter's seven consumers renamed to match. The twelve functions are now
+`nora_nvm_is_partition2_active()`, `nora_nvm_page_erase()`, `nora_nvm_word_program()`,
+`nora_nvm_row_program()`, `nora_nvm_read_word()`, `nora_nvm_verify()`,
+`nora_nvm_crc_preflight()`, `nora_nvm_last_wrec()`, `nora_nvm_last_crc_error()`, and
+the three `nora_nvm_is_*_aligned()` predicates. The macros and enum values keep
+`NORA_NVM_*` — `NORA_NVM_WORD_BYTES`, `NORA_NVM_ACTIVE_BASE`, `NORA_NVM_TO_INACTIVE()`,
+`NORA_NVM_OK` and the `ERR_*` values — which is §1's rule, not an exception to it.
+
+Resolved for Sonora/Starter; dual-partition reconciliation remains explicitly deferred
+because that repository carries a divergent NVM backend and two additional
+cache-coherency APIs. Whether `NORA_NVM_CacheInvalidate()` / `NORA_NVM_CacheState()`
+are promoted into the common NVM contract or stay a dual-partition-specific extension
+is a design decision, not a rename, and it is tracked separately.
 
 ### Direction of this wave, and what it costs
 

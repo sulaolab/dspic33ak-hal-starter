@@ -119,7 +119,7 @@ static void print_partition_status(void)
 {
     fw_uca_report_t act_uca;
     fw_uca_report_t ina_uca;
-    bool            p2        = NORA_NVM_IsPartition2Active();
+    bool            p2        = nora_nvm_is_partition2_active();
     uint16_t        act_seq   = fw_btseq_read_active_seq();
     uint16_t        ina_seq   = fw_btseq_read_inactive_seq();
     fw_uca_status_t act_status = fw_uca_validate_active(&act_uca);

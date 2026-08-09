@@ -255,7 +255,7 @@ int main(void)
     printf(" uart   : UART1 @ 230400 8N1, RX ISR-ring echo active\n");
     {
         fw_uca_report_t uca;
-        bool p2 = NORA_NVM_IsPartition2Active();
+        bool p2 = nora_nvm_is_partition2_active();
         uint16_t seq = fw_btseq_read_active_seq();
         fw_uca_status_t uca_status = fw_uca_validate_active(&uca);
         printf(" bank   : P%u active, BTSEQ=0x%03X\n", p2 ? 2u : 1u,

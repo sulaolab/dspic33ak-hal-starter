@@ -212,8 +212,8 @@ static fw_update_status_t fw_flush_row( fw_ctx_t* c )
     // for the first row of every page, and rows arrive in order).
     if ( ( c->row_base_off % NORA_NVM_PAGE_BYTES ) == 0u )
     {
-        s = NORA_NVM_PageErase( inactive_addr );
-        c->last_wrec = NORA_NVM_LastWrec();
+        s = nora_nvm_page_erase( inactive_addr );
+        c->last_wrec = nora_nvm_last_wrec();
         if ( s != NORA_NVM_OK )
         {
             return FW_UPDATE_ERR_NVM;
@@ -221,14 +221,14 @@ static fw_update_status_t fw_flush_row( fw_ctx_t* c )
         c->pages_erased++;
     }
 
-    s = NORA_NVM_RowProgram( inactive_addr, c->row.w );
-    c->last_wrec = NORA_NVM_LastWrec();
+    s = nora_nvm_row_program( inactive_addr, c->row.w );
+    c->last_wrec = nora_nvm_last_wrec();
     if ( s != NORA_NVM_OK )
     {
         return FW_UPDATE_ERR_NVM;
     }
 
-    s = NORA_NVM_Verify( inactive_addr, c->row.b, NORA_NVM_ROW_BYTES );
+    s = nora_nvm_verify( inactive_addr, c->row.b, NORA_NVM_ROW_BYTES );
     if ( s != NORA_NVM_OK )
     {
         return FW_UPDATE_ERR_NVM;
@@ -333,7 +333,7 @@ static fw_update_status_t fw_readback_crc( fw_ctx_t* c, uint16_t* out_crc )
     {
         uint32_t w[NORA_NVM_U32_PER_WORD];
         uint32_t inactive_addr = NORA_NVM_TO_INACTIVE( NORA_NVM_ACTIVE_BASE + a );
-        if ( NORA_NVM_ReadWord( inactive_addr, w ) != NORA_NVM_OK )
+        if ( nora_nvm_read_word( inactive_addr, w ) != NORA_NVM_OK )
         {
             return FW_UPDATE_ERR_NVM;
         }

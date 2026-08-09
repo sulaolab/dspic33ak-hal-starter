@@ -98,12 +98,12 @@ fw_uca_status_t fw_uca_validate_active(fw_uca_report_t *report)
 {
     // Active partition = P2 iff P2ACTIV. NOT the program-flash |0x400000 alias:
     // the UCA is at a fixed physical address, chosen by which partition booted.
-    return fw_uca_validate(NORA_NVM_IsPartition2Active(), report);
+    return fw_uca_validate(nora_nvm_is_partition2_active(), report);
 }
 
 fw_uca_status_t fw_uca_validate_inactive(fw_uca_report_t *report)
 {
-    return fw_uca_validate(!NORA_NVM_IsPartition2Active(), report);
+    return fw_uca_validate(!nora_nvm_is_partition2_active(), report);
 }
 
 const char *fw_uca_status_name(fw_uca_status_t s)

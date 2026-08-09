@@ -63,14 +63,14 @@ static nora_nvm_status_t nvm_execute(uint8_t op)
     return (NVMCONbits.WRERR != 0U) ? NORA_NVM_ERR_WRERR : NORA_NVM_OK;
 }
 
-bool NORA_NVM_IsPartition2Active(void)
+bool nora_nvm_is_partition2_active(void)
 {
     return (NVMCONbits.P2ACTIV != 0U);
 }
 
-nora_nvm_status_t NORA_NVM_PageErase(uint32_t page_addr)
+nora_nvm_status_t nora_nvm_page_erase(uint32_t page_addr)
 {
-    if (!NORA_NVM_IsPageAligned(page_addr))
+    if (!nora_nvm_is_page_aligned(page_addr))
     {
         return NORA_NVM_ERR_ARG;
     }
@@ -81,9 +81,9 @@ nora_nvm_status_t NORA_NVM_PageErase(uint32_t page_addr)
     return nvm_execute(NVMOP_PAGE_ERASE);
 }
 
-nora_nvm_status_t NORA_NVM_WordProgram(uint32_t word_addr, const uint32_t data[NORA_NVM_U32_PER_WORD])
+nora_nvm_status_t nora_nvm_word_program(uint32_t word_addr, const uint32_t data[NORA_NVM_U32_PER_WORD])
 {
-    if ((data == NULL) || !NORA_NVM_IsWordAligned(word_addr))
+    if ((data == NULL) || !nora_nvm_is_word_aligned(word_addr))
     {
         return NORA_NVM_ERR_ARG;
     }
@@ -99,9 +99,9 @@ nora_nvm_status_t NORA_NVM_WordProgram(uint32_t word_addr, const uint32_t data[N
     return nvm_execute(NVMOP_WORD_PROGRAM);
 }
 
-nora_nvm_status_t NORA_NVM_RowProgram(uint32_t row_addr, const uint32_t *ram_src)
+nora_nvm_status_t nora_nvm_row_program(uint32_t row_addr, const uint32_t *ram_src)
 {
-    if ((ram_src == NULL) || !NORA_NVM_IsRowAligned(row_addr))
+    if ((ram_src == NULL) || !nora_nvm_is_row_aligned(row_addr))
     {
         return NORA_NVM_ERR_ARG;
     }
@@ -119,12 +119,12 @@ nora_nvm_status_t NORA_NVM_RowProgram(uint32_t row_addr, const uint32_t *ram_src
     return nvm_execute(NVMOP_ROW_PROGRAM);
 }
 
-nora_nvm_status_t NORA_NVM_ReadWord(uint32_t word_addr, uint32_t out[NORA_NVM_U32_PER_WORD])
+nora_nvm_status_t nora_nvm_read_word(uint32_t word_addr, uint32_t out[NORA_NVM_U32_PER_WORD])
 {
     const volatile uint32_t *source;
     uint32_t index;
 
-    if ((out == NULL) || !NORA_NVM_IsWordAligned(word_addr))
+    if ((out == NULL) || !nora_nvm_is_word_aligned(word_addr))
     {
         return NORA_NVM_ERR_ARG;
     }
@@ -144,14 +144,14 @@ nora_nvm_status_t NORA_NVM_ReadWord(uint32_t word_addr, uint32_t out[NORA_NVM_U3
 // address-error trap on a runtime data-pointer read of a flash-resident object,
 // so comparing flash against another flash location is not supported. In the
 // bootloader `expect` is always the received/source block in RAM, which matches.
-nora_nvm_status_t NORA_NVM_Verify(uint32_t flash_addr, const void *expect, uint32_t len_bytes)
+nora_nvm_status_t nora_nvm_verify(uint32_t flash_addr, const void *expect, uint32_t len_bytes)
 {
     const volatile uint32_t *flash;
     const uint32_t *want;
     uint32_t count;
     uint32_t index;
 
-    if ((expect == NULL) || !NORA_NVM_IsWordAligned(flash_addr) ||
+    if ((expect == NULL) || !nora_nvm_is_word_aligned(flash_addr) ||
         ((len_bytes & (NORA_NVM_WORD_BYTES - 1U)) != 0U))
     {
         return NORA_NVM_ERR_ARG;
@@ -172,8 +172,8 @@ nora_nvm_status_t NORA_NVM_Verify(uint32_t flash_addr, const void *expect, uint3
     return NORA_NVM_OK;
 }
 
-nora_nvm_status_t NORA_NVM_CRCPreflight(uint32_t flash_addr,
-                                                   uint32_t len_bytes)
+nora_nvm_status_t nora_nvm_crc_preflight(uint32_t flash_addr,
+                                         uint32_t len_bytes)
 {
     uint32_t end_address;
     uint32_t first_page;
@@ -222,12 +222,12 @@ nora_nvm_status_t NORA_NVM_CRCPreflight(uint32_t flash_addr,
     return NORA_NVM_ERR_CRC_ENGINE;
 }
 
-uint8_t NORA_NVM_LastWrec(void)
+uint8_t nora_nvm_last_wrec(void)
 {
     return s_last_wrec;
 }
 
-uint8_t NORA_NVM_LastCrcError(void)
+uint8_t nora_nvm_last_crc_error(void)
 {
     return s_last_crcec;
 }

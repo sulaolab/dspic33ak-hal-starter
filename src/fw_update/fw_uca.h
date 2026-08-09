@@ -30,7 +30,7 @@
 //
 // READ RULE (mirrors ?fb / hal_udid): each config word is a small fuse segment,
 // so it is read as a SINGLE 32-bit word through a volatile absolute uint32_t*,
-// one word at a time -- NOT a 128-bit NORA_NVM_ReadWord (that would read
+// one word at a time -- NOT a 128-bit nora_nvm_read_word (that would read
 // past the segment into an unimplemented hole). All comparands are RAM scalars
 // (this core traps on a runtime data-pointer read of a flash-resident constant).
 //===========================================================
