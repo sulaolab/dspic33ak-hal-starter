@@ -545,8 +545,8 @@ untouched. "ref" is the starter commit its `src/` is verified identical to.
 | clock | `f9c3a53` | `c2518d2` | `3728e28` | #4 | yes | `b70982d` |
 | i2c | `b148137` | `9e60f69` | `97223c6` | #9 | yes | `b70982d` |
 | uart | `510e4ef` | `092f676` | `86dc04b` | #11 | yes | `b70982d` |
-| can | `f995c99` | `34d06e7` | — | — | no | `a2ce22a` |
-| spi-i2s-tdm | `9e2c54d` | `a8dfac2` | — | — | no | `a2ce22a` |
+| can | `f995c99` | `34d06e7` | `edbc659` | #3 | yes | `a2ce22a` |
+| spi-i2s-tdm | `9e2c54d` | `a8dfac2` | `31a4b79` | #7 | yes | `a2ce22a` |
 | ccp-input-capture | — | — | — | — | no | — |
 
 `a2ce22a` differs from `b70982d` in documentation only, so the seven repositories
@@ -559,16 +559,21 @@ starter (10/10 and 12/12):
 - **can** — 7 of 10 files reverse-normalise byte for byte, and the residue is the
   ISR layer alone (`nora_canfd_isr.h` non-comment +3/−0,
   `nora_canfd_isr_dspic33ak.c` +61/−7, `nora_canfd_node.h` 0/0). API 25 → 26
-  functions, 33 → 34 macros, nothing removed — so what the diff really carries is
+  functions and 13 → 14 public `#define`s across the five headers (the "33 → 34"
+  figure first recorded here counted a wider macro set; the delta is +1 either
+  way), nothing removed — so what the diff really carries is
   §11d and §11g **behind unchanged names**: the sticky `rx_overflow` field with
   `clear_rx_overflow()`, the TX CPU line following its module source rather than
   `isr_enable()`, `priority == 0` selecting `NORA_CANFD_ISR_DEFAULT_PRIORITY`, and
   `tx_start()` returning `ERR_SEQUENCE` while the ISR layer is off. §11d's
   four-argument `isr_enable()` arity delta does **not** apply to that repository:
   it already had the `isr_set_callback` + `isr_enable(inst, prio)` shape.
-  Note for its `docs/`: sonora `91adb63` predates this work, so the honest
-  upstream anchor is sonora `main` (`c26ecb0` / `427e406` / `bf232f4`), not the
-  ref the other seven cite.
+  Its `docs/` therefore cites sonora `main` (`c26ecb0` / `427e406` / `bf232f4`)
+  rather than the `91adb63` the other seven name: that commit predates this work,
+  and sonora `main`'s `src/hal_can/` was verified 10/10 blob-identical to this
+  starter before the claim was written. Its two prose documents were **not** merely
+  substituted — the refresh made two statements factually wrong ("forward all three
+  vectors", and the `IEC`/`IFS` mask list), and both were corrected in `edbc659`.
 - **spi-i2s-tdm** — 3 of 11 pure, 1 new file, from five causes: (a) the DMA HAL's
   `nora_dma_trigger_t` / `_channel_t` / `_status_t` adopted in place of raw CHSEL
   bytes and `uint8_t`/`uint32_t`, so `nora_spi_i2s_tdm_diag.h` now includes
@@ -585,9 +590,14 @@ starter (10/10 and 12/12):
   register-mask helper's name, reverse-normalises onto the old text, which is the
   mechanical proof that `a2ce22a`'s fix there was naming and nothing else.
 
+can and spi-i2s-tdm are done through step 6: docs committed, both repositories
+renamed on GitHub, local `origin` re-pointed, and PRs open (can #3,
+spi-i2s-tdm #7). Their PR bodies were hand-written rather than generated from the
+`nora_pr.py` template, because the template hard-codes the `91adb63` → `b70982d`
+chain and the plain tag-stripping normalisation, and neither holds for these two.
+
 Remaining:
 
-- can and spi-i2s-tdm: steps 5–7 (docs, PR, `gh repo rename`).
 - **ccp-input-capture: untouched.** Different layout (`tests/`, `examples/`) and
   no counterpart under `src/hal_*` here, so its upstream has to be Sonora rather
   than this starter, and it carries a `prepare/v1.0.0` branch that needs a
@@ -604,4 +614,9 @@ Remaining:
   headers, "dsPIC33A DMA hot-path helpers" / "Only the dsPIC33A backend" in
   `nora_dma_dspic33ak_fast.h`, `nora_spi_i2s_tdm_dspic33ak_diag_fast.h`'s
   "dsPIC33A-private" opening, and a garbled leftover comment fragment in
-  `nora_i2c_dspic33ak_reg.h`.
+  `nora_i2c_dspic33ak_reg.h`. Added by the can wave: `nora_canfd_node.h`'s opening
+  comment still says "Phase 1: ... Interrupt-driven operation is added in a later
+  phase", which is **staler than the text it replaced** in the standalone repository
+  — the only place in this migration where the refresh moved a comment backwards.
+  Recorded in that repository's `docs/nora_migration.md` and left unpatched so the
+  snapshot stays byte-identical.
