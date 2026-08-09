@@ -832,3 +832,65 @@ until Sonora is patched:
 Since ccp-input-capture has no `src/hal_ccp_input_capture/` here, its two corrected files
 have no starter counterpart and go straight from the snapshot to Sonora.
 
+## 15. The forbidden-name gate, measured across all twelve trees (2026-08-09)
+
+§14's lesson was promoted from prose to a tool: `aiw namegate`
+(`_ai_work_tools/ai-namegate.ps1`). Its population is `git ls-files` minus an explicit
+binary-extension list and a NUL-byte content sniff — **not** an extension allow-list, which
+is what §14's third mechanism defeats. So `.h_example`, `.yml`, `.py`, `.ps1`, `.xml` and
+extensionless files are all in scope. It distinguishes **USED** from **QUOTED**: a forbidden
+name inside backticks, inside a fenced block, or on a mapping-arrow line is being *referred
+to*, so migration docs and rename tables do not fail their own gate — a gate that fails on
+its rename table gets switched off.
+
+**Re-measured 2026-08-09 with real process exit codes** (`pwsh -NoProfile -File … ; $LASTEXITCODE`,
+one child process per repo, output redirected to a file). The previous "12 trees PASS" was
+taken from a pipeline's status, which reports the *last stage's* exit code, not the
+script's — that measurement is void and was treated as **unverified** until this run.
+
+**Result: 12 / 12 exit 0.** Populations: sonora 582 tracked / 564 scanned as text (18
+excluded, `.namegate-ignore` covering the Microchip QTouch vendor API); starter 155 / 149;
+the ten snapshots 7–26 files each, 0 excluded.
+
+A PASS here means only "no forbidden name is **used**". The gate also emitted **119 REVIEW
+hits, and a REVIEW hit that nobody reads is exactly the failure this tool exists to
+prevent — so all 119 were read.** The split is 94 + 25 (sonora 50 + 2, starter 26 + 2, the
+ten snapshots 18 + 21):
+
+* **94 × `dsPIC33A` in the backend sense.** Every one is correct as written, because it is
+  a statement about the **core**, which is what `dsPIC33A` legitimately names: unified/linear
+  address space, no NVMKEY, 128-bit Flash word + ECC, flat 1:1 program flash, the PAC
+  guarding `RPCON`, "the Microchip dsPIC33A headers". 14 of sonora's are in
+  `src/dspic33-cmsis-dsp`, a vendor library that genuinely is dsPIC33A-only.
+* **25 × absent `nora_*` reference**, i.e. a `nora_*` filename named in a tree that does not
+  contain it. All are cross-module, which is inherent to a one-module snapshot:
+  * **21 in the snapshots** (16 spi-i2s-tdm, 3 spi, 1 ccp-input-capture, 1 dma). Some are
+    prose comparisons between register headers; the rest are **real `#include`s of sibling
+    modules** — `nora_dma.h`, `nora_dma_dspic33ak_fast.h`, `nora_high_res_timer.h`,
+    `nora_tick_timer.h`. So the spi-i2s-tdm snapshot does **not** compile alone. That is
+    declared: its `README.md` §4 "Required sibling HALs" names `nora_dma` (required) and
+    `nora_high_res_timer`, each with its standalone repo link. Documented topology, not a
+    dangling reference.
+  * **2 identical in sonora and starter** (`hal_spi_i2s_tdm`), both explicitly past tense —
+    "Previously these lived in a separate optional TU `nora_spi_i2s_tdm_irq.c`", "It used to
+    live in a separate `nora_spi_i2s_tdm_diag_internal.h`". Correct history of a fold-back,
+    not dead references.
+
+  REVIEW rather than FAIL is the right verdict for all 25: the gate cannot know whether an
+  absent name is a sibling-module dependency or a stale path, so it hands the decision over
+  instead of guessing. A pre-rename basename, by contrast, is FATAL — that one it can decide.
+
+**Corrections needed: none.** The value of the run is that the green is now *earned* — the
+population is the tracked tree, the exit code is a real process's, and no REVIEW hit is
+unread.
+
+One cross-check worth recording: several REVIEW hits sit in **public** headers
+(`nora_nvm.h` ×4, `nora_udid.h` ×2) stating a silicon fact about the family. That is the
+same pattern the Timer pilot isolated as principle **P3** in
+[`nora_timer_boundary_review.md`](nora_timer_boundary_review.md) §7 — a portable header
+carrying a hardware fact without marking it implementation-defined. In NVM's case the fact
+is load-bearing (the API's units follow the 128-bit word geometry), exactly as `Timer1` is
+load-bearing for the tick timer. Finding the same shape in a module the pilot never touched
+is evidence that P3 is a NORA-wide question rather than a Timer artefact. No change is made
+here: P3 has not been adopted as a rule.
+
