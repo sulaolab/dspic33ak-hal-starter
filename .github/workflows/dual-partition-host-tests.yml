@@ -10,7 +10,11 @@ on:
       # trigger this workflow as well.
       - "src/fw_update/**"
       - "src/console/fw_command.c"
-      - "src/hal_nvm/dspic33ak_nvm.h"
+      # Whole directory, not the header by name: this filter used to name
+      # `src/hal_nvm/dspic33ak_nvm.h` and kept pointing at it after the NORA rename,
+      # so the job silently stopped triggering on NVM edits. A path filter that
+      # names a file fails open -- it does not error, it just never matches.
+      - "src/hal_nvm/**"
       - "firmware.X/nbproject/configurations.xml"
       - ".github/workflows/dual-partition-host-tests.yml"
   pull_request:
@@ -22,7 +26,11 @@ on:
       # trigger this workflow as well.
       - "src/fw_update/**"
       - "src/console/fw_command.c"
-      - "src/hal_nvm/dspic33ak_nvm.h"
+      # Whole directory, not the header by name: this filter used to name
+      # `src/hal_nvm/dspic33ak_nvm.h` and kept pointing at it after the NORA rename,
+      # so the job silently stopped triggering on NVM edits. A path filter that
+      # names a file fails open -- it does not error, it just never matches.
+      - "src/hal_nvm/**"
       - "firmware.X/nbproject/configurations.xml"
       - ".github/workflows/dual-partition-host-tests.yml"
   workflow_dispatch:

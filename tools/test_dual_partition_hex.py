@@ -324,7 +324,7 @@ def main():
     # failure mode is nasty: the board silently rejects every image the host builds.
     # Parse the C defines and compare.
     fw_c = os.path.join(HERE, "..", "src", "fw_update", "fw_update.c")
-    nvm_h = os.path.join(HERE, "..", "src", "hal_nvm", "dspic33ak_nvm.h")
+    nvm_h = os.path.join(HERE, "..", "src", "hal_nvm", "nora_nvm.h")
     try:
         with open(fw_c, "r", encoding="utf-8", errors="replace") as f:
             csrc = f.read()
@@ -365,7 +365,7 @@ def main():
             m2 = re.fullmatch(r"0[xX][0-9a-fA-F]+|\d+", expr)
             return int(m2.group(0), 0) if m2 else None
 
-        row_bytes = cdef(nvmsrc, "DSPIC33AK_NVM_ROW_BYTES")
+        row_bytes = cdef(nvmsrc, "NORA_NVM_ROW_BYTES")
         partition = cdef(csrc, "FW_PARTITION_BYTES")
         pairs = [
             ("manifest bytes", cdef(csrc, "FW_PACKAGE_MANIFEST_BYTES"),
@@ -386,7 +386,7 @@ def main():
         # operands keep their values, and a value-only check would still pass. Pin
         # the formula itself, then check the value it yields.
         cap_expr = cmacro(csrc, "FW_MAX_IMAGE_BYTES")
-        expected_expr = "(FW_PARTITION_BYTES - DSPIC33AK_NVM_ROW_BYTES)"
+        expected_expr = "(FW_PARTITION_BYTES - NORA_NVM_ROW_BYTES)"
         normalize = lambda s: re.sub(r"\s+", " ", s).strip() if s else s
         check("firmware payload cap is still partition minus exactly one row",
               normalize(cap_expr) == normalize(expected_expr),

@@ -35,11 +35,19 @@ $script:HalStarterBuildStampName = '.hal_starter_app_build'
 $script:HalStarterAppBuildHeaderRelative = 'src\app\app_build_config.h'
 
 # One preset needs a HAL-layer macro that must NOT come from app_build_config.h
-# (that header is app-layer; dspic33ak_spi_i2s_tdm_conf.h, the HAL's own config,
+# (that header is app-layer; nora_spi_i2s_tdm_conf.h, the HAL's own config,
 # documents that it must never gain an app-layer dependency). build.ps1 injects
 # these directly on the compiler command line for the listed preset only.
+#
+# The macro name must track the HAL's (DSPIC33AK_TDM_USE_SPI2 -> NORA_TDM_USE_SPI2,
+# corrected 2026-08-09). It kept the pre-NORA name after the rename had made that
+# name dead, and nothing complained: the define was still
+# injected, nothing read it, and the preset silently built the single-leg matrix
+# while reporting itself as the 2-leg one. An injected define that no longer
+# matches anything does not warn -- there is nothing to warn about at the
+# compiler level, which is what makes this class of staleness quiet.
 $script:HalStarterPresetExtraDefines = @{
-    'APP_BUILD_TDM_NEG_TEST_2LEG' = @('DSPIC33AK_TDM_USE_SPI2=1')
+    'APP_BUILD_TDM_NEG_TEST_2LEG' = @('NORA_TDM_USE_SPI2=1')
 }
 
 function Resolve-HalStarterRepoRoot {
