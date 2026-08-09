@@ -320,6 +320,14 @@ tree carries another session's uncommitted edits). Until they land in the
 mothership, this starter's `src/hal_can/` is *not* reproducible from sonora
 `main`.
 
+**Update (2026-08-09, §13):** they have landed. `c26ecb0`, `427e406` and
+`bf232f4` (§11g) are all on sonora `main`, and a blob comparison of sonora
+`main` against this starter's `b70982d` now reports `src/hal_can/` **10/10
+identical** — so the reproducibility caveat above is discharged. The same
+comparison over `src/hal_spi_i2s_tdm/` matches on every source file, with
+`README.md` the one deliberate divergence (de-codenamed for publication) and
+`UPSTREAM.md` starter-only.
+
 ## 11e. Hardware acceptance (2026-08-09) — PASS
 
 All 11 modules NORA-ised, `build.ps1 -Full` + `flashauto.ps1` on PKOB4
@@ -498,3 +506,102 @@ byte-identical to Sonora):
 - `nora_spi_dspic33ak.c` still uses file-local `DSPIC33AK_SPI_REG_ROW` /
   `DSPIC33AK_SPI_ARRAY_LEN` macros; `nora_dma_dspic33ak_reg.h` likewise keeps
   `DSPIC33AK_DMA_*` bit macros. Private, but leftovers of the rename.
+
+## 13. Task B: the standalone HAL repositories become published snapshots
+
+Ten `sulaolab/dspic33ak-hal-*` repositories are being NORA-ised **from this
+starter's bytes** and renamed `nora-hal-dspic33ak-*`. The same move inverts the
+vendoring direction: a repository stops being the place its HAL is edited and
+becomes a published snapshot of `src/hal_<m>/` here, which is itself a snapshot of
+the Sonora tree that runs on silicon. A fix made only in a standalone repository
+would now be a fork of validated code — `a2ce22a` rewrote the two `UPSTREAM.md`
+files that still claimed the old direction.
+
+Seven steps per repository (gpio was the approved template):
+
+1. **rename-only commit** — every file R100, 0 insertions / 0 deletions, so the
+   rename reviews on its own and the next diff is readable;
+2. **content refresh** — `src/` overwritten with this starter's bytes;
+3. **mechanical proof** — reverse-normalise each new file (strip the
+   `_dspic33ak` tag, `nora_` → `dspic33ak_`, `NORA_` → `DSPIC33AK_`) and diff
+   against its pre-rename blob; whatever survives that is, by construction, not
+   naming;
+4. **blob-hash identity** against this starter, recorded file by file;
+5. **docs** — identifier substitution in prose plus `docs/nora_migration.md`,
+   touching no file under `src/`, so step 4's claim stays true;
+6. `gh repo rename` and a PR;
+7. **`main` lands last**, together with this starter, so the fleet flips
+   namespace in one step.
+
+State, 2026-08-09. Every repository sits on `refactor/nora-hal` with `main`
+untouched. "ref" is the starter commit its `src/` is verified identical to.
+
+| repo | rename | content | docs | PR | GH renamed | ref |
+|---|---|---|---|---|---|---|
+| gpio (template) | `b5fbcec` | `f812d11` | `bfcd662` | #9 | yes | `b70982d` |
+| spi | `b9632f2` | `5ec9ced` | `d3efabd` | #3 | yes | `b70982d` |
+| timer | `e218a12` | `280168c` | `ead23e8`, `d7c5c06` | #6 | yes | `a2ce22a` |
+| dma | `76f8fe1` | `0f778e3` | `39b65e5` | #5 | yes | `b70982d` |
+| clock | `f9c3a53` | `c2518d2` | `3728e28` | #4 | yes | `b70982d` |
+| i2c | `b148137` | `9e60f69` | `97223c6` | #9 | yes | `b70982d` |
+| uart | `510e4ef` | `092f676` | `86dc04b` | #11 | yes | `b70982d` |
+| can | `f995c99` | `34d06e7` | — | — | no | `a2ce22a` |
+| spi-i2s-tdm | `9e2c54d` | `a8dfac2` | — | — | no | `a2ce22a` |
+| ccp-input-capture | — | — | — | — | no | — |
+
+`a2ce22a` differs from `b70982d` in documentation only, so the seven repositories
+already published against `b70982d` keep an accurate claim; only timer's
+`src/README.md` needed the re-sync (`d7c5c06`).
+
+Measured for the can + spi-i2s-tdm wave — both **100 % blob-identical** to this
+starter (10/10 and 12/12):
+
+- **can** — 7 of 10 files reverse-normalise byte for byte, and the residue is the
+  ISR layer alone (`nora_canfd_isr.h` non-comment +3/−0,
+  `nora_canfd_isr_dspic33ak.c` +61/−7, `nora_canfd_node.h` 0/0). API 25 → 26
+  functions, 33 → 34 macros, nothing removed — so what the diff really carries is
+  §11d and §11g **behind unchanged names**: the sticky `rx_overflow` field with
+  `clear_rx_overflow()`, the TX CPU line following its module source rather than
+  `isr_enable()`, `priority == 0` selecting `NORA_CANFD_ISR_DEFAULT_PRIORITY`, and
+  `tx_start()` returning `ERR_SEQUENCE` while the ISR layer is off. §11d's
+  four-argument `isr_enable()` arity delta does **not** apply to that repository:
+  it already had the `isr_set_callback` + `isr_enable(inst, prio)` shape.
+  Note for its `docs/`: sonora `91adb63` predates this work, so the honest
+  upstream anchor is sonora `main` (`c26ecb0` / `427e406` / `bf232f4`), not the
+  ref the other seven cite.
+- **spi-i2s-tdm** — 3 of 11 pure, 1 new file, from five causes: (a) the DMA HAL's
+  `nora_dma_trigger_t` / `_channel_t` / `_status_t` adopted in place of raw CHSEL
+  bytes and `uint8_t`/`uint32_t`, so `nora_spi_i2s_tdm_diag.h` now includes
+  `nora_dma.h` and the cross-repo dependency is explicit in a header; (b) the CPU
+  interrupt bits off the pointer table onto DFP bit aliases, as in i2c and uart,
+  which also removes the AK128 `IEC1`/`IEC2` bank straddle; (c) `DEV_AK512` /
+  `DEV_AK128` / `DEVICE`, `STAT_SPIROV` and `hw_sample_ack_errflags()` moved from
+  the public headers into `_dspic33ak_hw.h` / `_dspic33ak_reg.h` — they measure as
+  "removed" only because the measurement reads untagged headers; (d)
+  `NORA_TDM_SUMPROF` made mandatory by `#error`, **the one breaking change for an
+  existing consumer's conf header**; (e) §11f's TDMsum profiler, three entry
+  points plus the new `_dspic33ak_diag_fast.h`. Its `src/README.md` residue is
+  exactly three pre-rename sibling-repo URLs; the fourth changed line, the
+  register-mask helper's name, reverse-normalises onto the old text, which is the
+  mechanical proof that `a2ce22a`'s fix there was naming and nothing else.
+
+Remaining:
+
+- can and spi-i2s-tdm: steps 5–7 (docs, PR, `gh repo rename`).
+- **ccp-input-capture: untouched.** Different layout (`tests/`, `examples/`) and
+  no counterpart under `src/hal_*` here, so its upstream has to be Sonora rather
+  than this starter, and it carries a `prepare/v1.0.0` branch that needs a
+  decision before anything is renamed.
+- The five CMSIS driver repositories (`dspic33ak-{can,gpio,i2c,usart,sai}-cmsis-driver`)
+  **break** on the renames: `tools/sync_hal_from_upstream.py` hard-codes
+  `UPSTREAM_REPO` and `HAL_FILES`. Not yet filed.
+- Eight of the ten `src/hal_*` folders here carry no `UPSTREAM.md` at all; only
+  the two that had one were inverted.
+- §11's "zero-delta modules" line still counts gpio/pps as zero while §9's table
+  records `+2` for it; one clarifying line would settle which is meant.
+- Upstream (Sonora, then re-sync — deliberately not patched in the snapshots,
+  which must stay byte-identical): "Internal dsPIC33A helpers" in the i2c NORA
+  headers, "dsPIC33A DMA hot-path helpers" / "Only the dsPIC33A backend" in
+  `nora_dma_dspic33ak_fast.h`, `nora_spi_i2s_tdm_dspic33ak_diag_fast.h`'s
+  "dsPIC33A-private" opening, and a garbled leftover comment fragment in
+  `nora_i2c_dspic33ak_reg.h`.
