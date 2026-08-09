@@ -930,3 +930,122 @@ Consequences to carry into the final verification:
 4. adc, noinit_ram and reset are outside this migration entirely. They are not evidence of
    incompleteness.
 
+
+---
+
+## §17 The snapshot READMEs over-claimed the rename (2026-08-09)
+
+Four snapshot READMEs (`can:29`, `ccp-input-capture:32`, `dma:42`, `gpio:36`) said
+
+> The rename is purely textual: `dspic33ak_` → `nora_`, `DSPIC33AK_` → `NORA_`.
+
+and `spi-i2s-tdm:47` said the same thing as "The substitution is textual … and that includes
+the conf-header macros". In all five, the **very next paragraph** states that the chip name
+survives in backend-private identifiers on purpose. So the strong sentence and its own
+follow-up contradict each other, and the strong sentence is the one a reader quotes.
+
+Fixed in all five to scope the claim to the public namespace:
+
+> The **public** namespace migration is textual: … It is not a tree-wide substitution —
+> backend-private names deliberately retain the silicon tag, as below.
+
+Commits: can `7767f49`, ccp-input-capture `2186ba9`, dma `6f94a47`, gpio `5e3eacf`,
+spi-i2s-tdm `75d49b2`. Each touches only the top-level `README.md`, which is snapshot
+packaging — **no `src/` file changed**, so §18's identity result is unaffected.
+
+**Five snapshots needed no change**, and the reasons differ — worth recording so a later
+sweep does not "fix" them into uniformity:
+
+* `clock:34` already hedges ("mostly textual … with one structural exception for CLKGEN
+  callers").
+* `spi:28` and `timer:34` make a *different and stronger* claim — "the rename is the only
+  change: reverse-normalising the new sources reproduces the previous ones byte for byte" —
+  which is a verified statement about the diff, not about which names were substituted.
+* `i2c:45` and `uart:33` make no textual claim at all.
+
+### The same phrase in `docs/`, deliberately left alone
+
+The first survey read only `README.md`. Widening it to the whole tree found
+"the substitution is purely textual" in **seven** `docs/nora_migration.md` files (can, gpio,
+i2c, spi, spi-i2s-tdm, timer, uart) — the third blind-spot mechanism of §14 recurring
+(a filter narrower than the tree), caught this time.
+
+Those seven are **correct as written** and were not changed. There the sentence sits under
+"## Consumer impact" with the subject already scoped:
+
+> The public namespace changed from `dspic33ak_*` / `DSPIC33AK_*` to `nora_*` / `NORA_*` and
+> **no compatibility aliases were added**. Call sites must be renamed; the substitution is
+> purely textual.
+
+The substitution being described is the *consumer's*, applied to its own call sites, which
+only ever contain public names. That is true. Leaving a true sentence that greps like a false
+one is a judgement call, recorded here so the next `grep purely textual` does not read as
+unfinished work.
+
+---
+
+## §18 Blob identity census — relation matrix (2026-08-09)
+
+The publication-candidate seal. Measured with `git ls-tree -r HEAD` per tree and compared as
+path → blob maps, so a file present on one side and absent on the other shows up as a
+difference instead of being skipped. Paths: sonora and starter `src/hal_<m>/`, snapshot
+`src/` (module flattened). Trees: sonora `fix/nora-naming-convergence`, starter and all ten
+snapshots `refactor/nora-hal`.
+
+### Source files (`.c` / `.h`) — the result
+
+| module | files | sonora ⇄ starter | sonora ⇄ snapshot |
+|---|---|---|---|
+| hal_can | 10 | IDENTICAL | IDENTICAL |
+| hal_clock | 7 | IDENTICAL | IDENTICAL |
+| hal_dma | 4 | IDENTICAL | IDENTICAL |
+| hal_gpio | 7 | IDENTICAL | IDENTICAL |
+| hal_i2c | 10 | IDENTICAL | IDENTICAL |
+| hal_spi | 3 | IDENTICAL | IDENTICAL |
+| hal_spi_i2s_tdm | 10 | IDENTICAL | IDENTICAL |
+| hal_timer | 4 | IDENTICAL | IDENTICAL |
+| hal_uart | 7 | IDENTICAL | IDENTICAL |
+| hal_ccp_input_capture | 4 | **N/A (topology)** | IDENTICAL |
+| hal_nvm | 2 | IDENTICAL | **N/A (topology)** |
+| hal_udid | 2 | IDENTICAL | **N/A (topology)** |
+| hal_adc, hal_noinit_ram, hal_reset | 4 / 2 / 2 | **N/A (topology)** | **N/A (topology)** |
+
+**Every source file is byte-identical across every pair that exists.** 70 files over 21
+comparable pairs; the 9 `N/A (topology)` cells are §16's four relation classes, stated not
+omitted. Non-`.c`/`.h` compiled-adjacent files are covered too: both
+`nora_spi_i2s_tdm_conf.h_example` (`eea43c08`) and
+`nora_ccp_input_capture_conf_dspic33ak.h_example` (`c0e9166f`) match everywhere they exist —
+the file class that §14's third blind spot was originally about.
+
+### Non-source differences, each accounted for
+
+Splitting code from packaging is what makes the result readable; a flat compare reports four
+"DIFF" rows that are all module documentation.
+
+| what | state | verdict |
+|---|---|---|
+| `hal_spi_i2s_tdm/README.md` | sonora `09f38580`, starter = snapshot `636bac87` | **declared divergence.** De-codenamed, and omits upstream-only §10 (the canonical-API / no-portable-facade record, which cites `docs_internal/` material absent outside the audio project). Declared in that folder's `UPSTREAM.md`. |
+| `hal_dma/README.md`, `hal_gpio/README.md` | sonora only | **not this migration's doing.** `git log --all` shows neither path was *ever* tracked in starter. Module docs that were never vendored; only i2c, spi_i2s_tdm, timer and uart have one in starter. |
+| `hal_dma/UPSTREAM.md`, `hal_spi_i2s_tdm/UPSTREAM.md` | starter only | starter-local provenance notes, deliberately unpublished. Now says so — see below. |
+| `hal_ccp_input_capture/LICENSE` | sonora module-local; snapshot has it top-level | topology, not drift. |
+
+Two stale claims found in those provenance notes and fixed, both the fail-open shape §14
+catalogues — a sentence that stays green while the fact under it moves:
+
+1. `hal_spi_i2s_tdm/UPSTREAM.md` said "(`hal_timer/README.md` diverges the same way.)" —
+   **false now.** The timer README is `d5cf2a24` in all three trees; its de-codenaming was
+   carried upstream and it converged. Corrected, and the spi_i2s_tdm README is now stated as
+   the only deliberately divergent module README.
+2. Both `UPSTREAM.md` files claimed the snapshot's `src/` is "blob-identical to this folder"
+   without qualification, while `UPSTREAM.md` itself is not published and (for spi_i2s_tdm)
+   the README is a declared exception. Scoped to source files, with the measurement date and
+   file counts.
+
+### What this does and does not license
+
+* It licenses: "every NORA HAL source file is identical across sonora, the starter, and the
+  published snapshots, for every pair that exists."
+* It does **not** license "byte-identical across the fleet". `dual-partition` is an
+  intentional divergent variant and is out of this matrix; the CMSIS driver repos hold
+  *vendored copies* whose gap is a separate, unmeasured question, and their readiness is
+  another session's evidence — `-fsyntax-only` is not a build.
