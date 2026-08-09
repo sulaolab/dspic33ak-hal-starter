@@ -1049,3 +1049,56 @@ catalogues — a sentence that stays green while the fact under it moves:
   intentional divergent variant and is out of this matrix; the CMSIS driver repos hold
   *vendored copies* whose gap is a separate, unmeasured question, and their readiness is
   another session's evidence — `-fsyntax-only` is not a build.
+
+### Measured heads — the coordinates of this seal
+
+Branch names move, so recording "sonora `fix/nora-naming-convergence`, the rest
+`refactor/nora-hal`" does not let anyone reproduce this measurement later. The result above
+is `files=70 pairs=21 mismatches=0` **at these exact commits**, re-run after every
+publication-doc fix landed:
+
+| tree | branch | head |
+|---|---|---|
+| dspic33ak-audio-dsp-sonora | `fix/nora-naming-convergence` | `e64b3fe` |
+| dspic33ak-hal-starter | `refactor/nora-hal` | `4a99613` |
+| nora-hal-dspic33ak-can | `refactor/nora-hal` | `7767f49` |
+| nora-hal-dspic33ak-ccp-input-capture | `refactor/nora-hal` | `2186ba9` |
+| nora-hal-dspic33ak-clock | `refactor/nora-hal` | `8d43d17` |
+| nora-hal-dspic33ak-dma | `refactor/nora-hal` | `6f94a47` |
+| nora-hal-dspic33ak-gpio | `refactor/nora-hal` | `5e3eacf` |
+| nora-hal-dspic33ak-i2c | `refactor/nora-hal` | `d80149d` |
+| nora-hal-dspic33ak-spi | `refactor/nora-hal` | `336a799` |
+| nora-hal-dspic33ak-spi-i2s-tdm | `refactor/nora-hal` | `b066d5f` |
+| nora-hal-dspic33ak-timer | `refactor/nora-hal` | `42e794e` |
+| nora-hal-dspic33ak-uart | `refactor/nora-hal` | `654374d` |
+
+The starter row is this commit's **parent**: the commit adding this table touches only
+`docs/`, so the 70-file source result is unchanged by it. That is also why the seal survives
+the publication-doc work at all — every fix in §17, §18 and the two below landed in
+packaging documentation, never under a source path.
+
+### Publication-doc finalization, same review round
+
+Three items, all documentation, none touching a source blob:
+
+1. **`nora-hal-dspic33ak-spi-i2s-tdm` top-level `README.md` provenance** (`b066d5f`). The
+   snapshot banner claimed *every file* under `src/` is byte-identical to the starter, which
+   is in turn identical to the audio project. The **source** claim holds; the transitive
+   *every-file* claim does not, because `src/README.md` (`636bac87`) matches the starter and
+   not the audio project (`09f38580`). Scoped to source files, with the exception named. This
+   is the third instance of the same stale shape in one round — the other two were the
+   `UPSTREAM.md` claims above — which is the argument for treating unqualified identity
+   sentences as a recurring defect class rather than three coincidences.
+2. **The portability guardrail is now public** (same commit). The upstream module README's
+   §10 records four decisions: the native transport header **is** the contract; do not add a
+   second smaller facade above it; silicon differences adapt below the contract and surface as
+   capability queries or explicit unsupported results; and contract agreement does **not**
+   imply a byte-identical public header. Nothing published let a reader derive the second
+   point — the public docs explain that CMSIS-SAI sits above and that `ARM_SAI_*` stays out of
+   the core, but not "therefore do not build another facade". A six-line
+   `## 10. Portability boundary` section now states all four. The 40-line upstream section was
+   **not** propagated: its history (`nora_tdm_stream.h`, M3 → §12.1 → §13,
+   `docs_internal/shared/review_nora_hal_merge_2026-08-07.md`) is evidence for why the rule was
+   chosen, not the rule itself, and it cites material that does not exist outside the audio
+   project.
+3. **This SHA table**, so the seal is content-addressed rather than branch-addressed.
