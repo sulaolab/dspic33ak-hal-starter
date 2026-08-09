@@ -655,8 +655,34 @@ plus one more: the template's chain has no valid value for this repository at al
 Remaining:
 
 - The five CMSIS driver repositories (`dspic33ak-{can,gpio,i2c,usart,sai}-cmsis-driver`)
-  **break** on the renames: `tools/sync_hal_from_upstream.py` hard-codes
-  `UPSTREAM_REPO` and `HAL_FILES`. Not yet filed.
+  **break** on the renames. **Filed 2026-08-09**, one tailored issue each: can #3,
+  gpio #2, i2c #9, usart #4, sai #7. Measuring it first changed the story in three
+  ways worth keeping here:
+  - `UPSTREAM_REPO` does **not** break. GitHub redirects a renamed repository's
+    clone URL indefinitely, verified by cloning `dspic33ak-hal-gpio.git` after the
+    rename. So the sync keeps succeeding while `UPSTREAM.md` records a name that no
+    longer exists — a silent accuracy bug, not an outage.
+  - `HAL_FILES` breaks loudly (the script raises on the first missing file), but the
+    dangerous case is the opposite one: it is a literal list, so a file **added** by
+    the refresh is silently not copied and surfaces later as a missing include. Three
+    places have that shape — `nora_dma_dspic33ak_fast.h` (needed by the DMA backend
+    *and* by both spi-i2s-tdm `.c` files, so it hits sai twice),
+    `nora_spi_i2s_tdm_dspic33ak_diag_fast.h`, and i2c where `dspic33ak_i2c_common.h`
+    is **gone** and `nora_i2c_dspic33ak_internal.h` took its place — the only entry
+    in the five that is a restructure rather than a rename. gpio gained a PPS pair
+    it does not currently vendor.
+  - Fixing the sync script is not enough: the wrappers call the renamed API
+    directly — 65 / 37 / 57 / 49 / 57 HAL identifier occurrences in
+    can / gpio / i2c / usart / sai `cmsis_driver/*.{c,h}`. In gpio and sai the
+    *wrapper's own public header* includes a HAL header, so the rename reaches the
+    CMSIS driver's consumers too. sai additionally has to define
+    `NORA_TDM_SUMPROF` in its preserved local `..._conf.h`, or §11d's `#error`
+    stops its build, and its `RTE_Device_SAI_..._example.h` is the only RTE example
+    in the five that names a HAL macro (`DSPIC33AK_TDM_SLOTS_PER_FS`).
+
+  None of them is broken *today*, because all ten HAL repositories still have an
+  untouched `main`. They break at the moment step 7 lands, which is the argument for
+  landing that batch deliberately rather than incidentally.
 - Eight of the ten `src/hal_*` folders here carry no `UPSTREAM.md` at all; only
   the two that had one were inverted.
 - §11's "zero-delta modules" line still counts gpio/pps as zero while §9's table
