@@ -547,7 +547,7 @@ untouched. "ref" is the starter commit its `src/` is verified identical to.
 | uart | `510e4ef` | `092f676` | `86dc04b` | #11 | yes | `b70982d` |
 | can | `f995c99` | `34d06e7` | `edbc659` | #3 | yes | `a2ce22a` |
 | spi-i2s-tdm | `9e2c54d` | `a8dfac2` | `31a4b79` | #7 | yes | `a2ce22a` |
-| ccp-input-capture | — | — | — | — | no | — |
+| ccp-input-capture | `21cb76a` | `8de6f33` | `00d6c51` | #1 | yes | n/a (sonora `main`) |
 
 `a2ce22a` differs from `b70982d` in documentation only, so the seven repositories
 already published against `b70982d` keep an accurate claim; only timer's
@@ -596,12 +596,64 @@ spi-i2s-tdm #7). Their PR bodies were hand-written rather than generated from th
 `nora_pr.py` template, because the template hard-codes the `91adb63` → `b70982d`
 chain and the plain tag-stripping normalisation, and neither holds for these two.
 
+**ccp-input-capture** is now done through step 6 as well, and it is the one
+repository in the ten whose "ref" column cannot name a starter commit: there is no
+`src/hal_ccp_input_capture/` here, so its upstream anchor is sonora `main`'s
+`src/hal_ccp_input_capture/` directly. Its `docs/nora_migration.md` says so
+explicitly rather than citing this starter, which would be a claim about a file
+that does not exist. What that wave measured:
+
+- **Blob identity: `src/` 6 of 6, `tests/` 8 of 9.** The single difference is
+  `tests/run_host_tests.ps1`, and it is unavoidable: upstream the module is at
+  `<repo>/src/hal_ccp_input_capture` and the runner resolves `$repoRoot` two levels
+  up, while the snapshot publishes the module flat into `src/`. Two assignment
+  lines changed, the SPDX header was restored, and the file states the change in a
+  comment. Every test `.c` file was checked path-free and published verbatim.
+- **The `include/` flattening** is new to this repository — the other nine already
+  kept their public header inside `src/`. The user's decision was to flatten, so
+  the layout matches both the siblings and the upstream module folder; a consumer
+  changes only its include path, since headers are included by bare name.
+- **Residue: the device whitelist left the public header.** `nora_ccp_input_capture.h`
+  is +1/−15 non-comment, and the 15 are the whole `DEV_AK512` / `DEV_UNSUPPORTED`
+  / `__dsPIC33AK512MPS512__` / `#error` block plus the opt-in escape hatch
+  `DSPIC33AK_CCP_ICAP_ALLOW_UNSUPPORTED_STUBS`. Public `#define`s in the header go
+  **6 → 1**. The guarantee moved into the backend as a DFP capability test
+  (`CCP9CON1` + `_IFS4_CCP9IF_MASK` + `_IEC4_CCP9IE_MASK` + `_IPC16_CCP9IP_MASK`
+  → `NORA_CCP_DSPIC33AK_HAS_FULL_CCP_MAP`), with `tests/test_unsupported.c`
+  compiling the backend against a CCP9-less `xc.h` and calling every entry point so
+  that a function confined to the full-inventory branch surfaces as a link error.
+  This is the cleanest instance in the migration of §1's rule paying off: device
+  selection is not public API. API 8 → 9 functions, the +1 being
+  `nora_ccp_icap_irq_clear()` for an application-owned ISR that drains the FIFO
+  itself and until now had to write `IFSx` by hand — which is why such files ended
+  up including `<xc.h>` and the backend register header. `_reg.h` residue is 1
+  dropped SPDX line; the backend is +85/−44 non-comment (capability test, the move
+  onto `_CCPnIF`/`_CCPnIE` bit aliases as in i2c/uart/dma/spi-i2s-tdm, and the hot
+  path relocating into the new `_fast.h`).
+- **`LICENSE` was a blob-level EOL inversion**, not a working-tree artefact: CRLF
+  baked into the blob against the repository's own `.gitattributes`, so it read as
+  permanently modified and `git checkout --` could not clear it.
+  `git add --renormalize` (`a4161ef`, landed straight on `main` since it is
+  namespace-independent) produced a pure-LF blob with `git diff --ignore-all-space`
+  empty.
+- **`prepare/v1.0.0` deleted** (user decision). Its only difference from `main` was
+  a weaker `.gitattributes` / `.gitignore` — a superseded release-prep branch.
+- **The host suite does not currently pass, and that is upstream's**, recorded in
+  the repository's README, CHANGELOG, `docs/nora_migration.md` and PR rather than
+  patched. It stops at `test_validation`, and the examples build fails identically,
+  because `tests/fake_xc/xc.h` defines the `_IFSx_CCPnIF_MASK` capability macros
+  but not the bare `_CCPnIF` / `_CCPnIE` bit-alias lvalues the code now writes.
+  Verified not to be the adapted path: upstream's own copy of the runner, against
+  the upstream tree, produces the identical `C2065` errors. The two header stages
+  pass. Target builds with XC-DSC against the real DFP are unaffected — this is the
+  fake header lagging the DFP-bit-alias change, and it is the first place where
+  §11-class refactoring outran the host test scaffolding.
+
+Its PR body was hand-written for the same reason can's and spi-i2s-tdm's were,
+plus one more: the template's chain has no valid value for this repository at all.
+
 Remaining:
 
-- **ccp-input-capture: untouched.** Different layout (`tests/`, `examples/`) and
-  no counterpart under `src/hal_*` here, so its upstream has to be Sonora rather
-  than this starter, and it carries a `prepare/v1.0.0` branch that needs a
-  decision before anything is renamed.
 - The five CMSIS driver repositories (`dspic33ak-{can,gpio,i2c,usart,sai}-cmsis-driver`)
   **break** on the renames: `tools/sync_hal_from_upstream.py` hard-codes
   `UPSTREAM_REPO` and `HAL_FILES`. Not yet filed.
@@ -620,3 +672,15 @@ Remaining:
   — the only place in this migration where the refresh moved a comment backwards.
   Recorded in that repository's `docs/nora_migration.md` and left unpatched so the
   snapshot stays byte-identical.
+  Added by the ccp-input-capture wave, and both live in Sonora's
+  `src/hal_ccp_input_capture/` (or its `tests/`):
+  - `tests/hal_ccp_input_capture/fake_xc/xc.h` defines `_IFSx_CCPnIF_MASK` but not
+    the bare `_CCPnIF` / `_CCPnIE` bit-alias lvalues the backend and
+    `..._dspic33ak_fast.h` now write, so upstream's own host suite stops at
+    `test_validation` with `C2065`. This one is a **real gap in the test
+    scaffolding**, not a cosmetic leftover: it means the validation, callback, overflow
+    and timebase stages have not run since the DFP-bit-alias change. Fixing the
+    fake header is the highest-value item on this list.
+  - SPDX regression: `SPDX-FileCopyrightText: 2026 SulaoLab` was dropped from the
+    files that carried it, and `nora_ccp_input_capture_dspic33ak_fast.h` carries no
+    SPDX line at all.
