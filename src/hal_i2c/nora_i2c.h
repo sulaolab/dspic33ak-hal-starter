@@ -50,6 +50,12 @@ typedef enum {
     NORA_I2C_ERR_SEQUENCE
 } nora_i2c_status_t;
 
+/*
+ * Return the status as a short name, e.g. "ERR_NACK".
+ * Never NULL: an unrecognised value returns "?".
+ */
+const char *nora_i2c_status_str(nora_i2c_status_t status);
+
 typedef uint32_t (*nora_i2c_get_ms_fn)(void);
 
 /* Shared lifecycle / query API -------------------------------------------- */

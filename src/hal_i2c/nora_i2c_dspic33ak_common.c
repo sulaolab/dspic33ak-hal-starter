@@ -14,6 +14,27 @@
  * -------------------------------------------------------------------------- */
 
 /* --------------------------------------------------------------------------
+ * Status -> short name
+ * -------------------------------------------------------------------------- */
+const char *nora_i2c_status_str(nora_i2c_status_t status)
+{
+    switch (status) {
+    case NORA_I2C_OK:                  return "OK";
+    case NORA_I2C_ERR_INVALID_ARG:     return "ERR_INVALID_ARG";
+    case NORA_I2C_ERR_NOT_PRESENT:     return "ERR_NOT_PRESENT";
+    case NORA_I2C_ERR_NOT_INITIALIZED: return "ERR_NOT_INITIALIZED";
+    case NORA_I2C_ERR_BUSY:            return "ERR_BUSY";
+    case NORA_I2C_ERR_TIMEOUT:         return "ERR_TIMEOUT";
+    case NORA_I2C_ERR_NACK:            return "ERR_NACK";
+    case NORA_I2C_ERR_BUS:             return "ERR_BUS";
+    case NORA_I2C_ERR_COLLISION:       return "ERR_COLLISION";
+    case NORA_I2C_ERR_UNSUPPORTED:     return "ERR_UNSUPPORTED";
+    case NORA_I2C_ERR_SEQUENCE:        return "ERR_SEQUENCE";
+    default:                                return "?";
+    }
+}
+
+/* --------------------------------------------------------------------------
  * Validate instance number
  * -------------------------------------------------------------------------- */
 bool nora_i2c_inst_is_valid(nora_i2c_instance_t inst)
