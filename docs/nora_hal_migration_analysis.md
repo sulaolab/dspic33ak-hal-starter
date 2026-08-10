@@ -1077,6 +1077,35 @@ The starter row is this commit's **parent**: the commit adding this table touche
 the publication-doc work at all — every fix in §17, §18 and the two below landed in
 packaging documentation, never under a source path.
 
+#### The sonora coordinate needed a qualifier (added 2026-08-11)
+
+The table above names a *branch tip*, and reading it as "sonora, i.e. its `main`" is wrong
+for the window this seal was taken in: **`e64b3fe` was not an ancestor of sonora `main`**
+(`merge-base` `3843976`), and the only branch containing it was
+`fix/nora-naming-convergence`. Sonora had two NORA HAL lineages that had never met — this
+one carrying the naming wave, `main` carrying the 2026-08-10 contract wave (clock r4,
+`NORA_DMA_TRIGGER_NONE`, `nora_tdm_slot_t`, `nora_i2c_status_str()`, the UART RX recovery
+counters, `nora_pps_find_output_rp()`). So during that window the seal licensed
+"starter == this branch", **not** "starter == sonora".
+
+`e64b3fe` merged into sonora `main` as `9f9d380` on 2026-08-11, making `main` a superset of
+both other trees; the merge is recorded in
+[`nora_hal_sync_gap_2026-08-10.md`](nora_hal_sync_gap_2026-08-10.md) §0. Two consequences
+for this section:
+
+* The `files=70 pairs=21 mismatches=0` measurement stands as taken — re-verified at
+  `9f9d380` against starter `refactor/nora-hal`, where 70 of the 71 shared `src/hal_*` paths
+  still match and the one exception is the `hal_spi_i2s_tdm/README.md` divergence §17
+  already declares.
+* It is nevertheless **stale as a fleet claim**: `main` now holds the contract wave, so the
+  starter is behind it — 18 shared files when the gap was measured, 15 after `fae5b17` and
+  `96229bc` re-synced i2c and uart onto `refactor/nora-hal`. Do not re-run the seal expecting
+  zero until the rest of that document's §4 lands (gpio/pps, dma + spi_i2s_tdm, clock).
+
+The general lesson, which cost a wrong report before it was caught: a commit id pins
+*content*, not *reachability*. A seal that spans repositories has to say which ref the
+commit was reachable from, or a later reader will assume the default branch.
+
 ### Publication-doc finalization, same review round
 
 Three items, all documentation, none touching a source blob:
