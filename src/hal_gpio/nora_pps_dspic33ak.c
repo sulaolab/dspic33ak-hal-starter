@@ -547,6 +547,21 @@ static bool nora_pps_write_output_rp(nora_gpio_rp_t rp, uint8_t code)
 
 
 //===========================================================
+// Local: read the output function code from a physical RP pin's _RPnnR
+//===========================================================
+// dsPIC33AK RPORx registers pack four RP output codes into 8-bit slots, with
+// RP1 in the low slot of RPOR0. Callers first validate the RP against the
+// _RPnnR switch below, so this only reads a physical output PPS register.
+static uint8_t nora_pps_read_output_rp(nora_gpio_rp_t rp)
+{
+    volatile uint32_t *reg = (&RPOR0) + ((rp - 1u) / 4u);
+    const uint32_t pos = ((rp - 1u) % 4u) * 8u;
+
+    return (uint8_t)((*reg >> pos) & 0x7Fu);
+}
+
+
+//===========================================================
 // Local: is rp a physical remappable pin on this device?
 //===========================================================
 // PPS input sources and output pins are the same physical RP set, so an RP that
@@ -963,6 +978,35 @@ bool nora_pps_route_output(nora_pps_output_t output, nora_gpio_rp_t rp)
     bool ok = nora_pps_write_output_rp(rp, code);
     nora_pps_lock();
     return ok;
+}
+
+bool nora_pps_find_output_rp(nora_pps_output_t output, nora_gpio_rp_t *rp)
+{
+    uint8_t want;
+
+    if (rp == NULL)
+    {
+        return false;
+    }
+    if (!nora_pps_get_output_code(output, &want))
+    {
+        return false;   /* peripheral output not available on this device */
+    }
+
+    /* RP129..RP144 are virtual outputs and intentionally outside this physical
+     * GPIO/PPS lookup. nora_pps_rp_is_defined() also skips any RP number without
+     * an output PPS register on the selected device. */
+    for (nora_gpio_rp_t candidate = 1u; candidate <= 128u; ++candidate)
+    {
+        if (nora_pps_rp_is_defined(candidate) &&
+            (nora_pps_read_output_rp(candidate) == want))
+        {
+            *rp = candidate;
+            return true;
+        }
+    }
+
+    return false;   /* no physical pin currently carries this output */
 }
 
 bool nora_pps_route_input(nora_pps_input_t input, nora_gpio_rp_t rp)
