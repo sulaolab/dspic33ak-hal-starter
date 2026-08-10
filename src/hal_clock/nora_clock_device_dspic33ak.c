@@ -1,4 +1,4 @@
-#include "nora_clock_device.h"
+#include "nora_clock_device_dspic33ak.h"
 
 /*
  * Device adaptation layer.
@@ -65,10 +65,10 @@ bool nora_clock_device_encode_clkgen_source(
     case NORA_CLOCK_SOURCE_LPRC:
         *value = 4u;
         return true;
-    case NORA_CLOCK_SOURCE_PLL1:
+    case NORA_CLOCK_SOURCE_PLL_1:
         *value = 5u;
         return true;
-    case NORA_CLOCK_SOURCE_PLL2:
+    case NORA_CLOCK_SOURCE_PLL_2:
         *value = 6u;
         return true;
     case NORA_CLOCK_SOURCE_PLL1_VCO_FRACDIV:
@@ -82,6 +82,91 @@ bool nora_clock_device_encode_clkgen_source(
         return true;
     case NORA_CLOCK_SOURCE_REFI2:
         *value = 10u;
+        return true;
+    default:
+        return false;
+    }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Decode PLL input source                                                    */
+/* -------------------------------------------------------------------------- */
+/*
+ * The inverse of the PLL encoder above, and deliberately not the CLKGEN decoder:
+ * PLLxCON.NOSC and CLKxCON.NOSC share encodings for the oscillators but not the
+ * rest, so decoding a PLL's input select through the CLKGEN table would name
+ * sources no PLL can select.  Kept adjacent to the table it inverts.
+ */
+bool nora_clock_device_decode_pll_source(
+    uint16_t value,
+    nora_clock_source_t *source)
+{
+    if (source == 0) {
+        return false;
+    }
+
+    switch (value) {
+    case 1u:
+        *source = NORA_CLOCK_SOURCE_FRC;
+        return true;
+    case 2u:
+        *source = NORA_CLOCK_SOURCE_BFRC;
+        return true;
+    case 3u:
+        *source = NORA_CLOCK_SOURCE_PRIMARY;
+        return true;
+    case 9u:
+        *source = NORA_CLOCK_SOURCE_REFI1;
+        return true;
+    case 10u:
+        *source = NORA_CLOCK_SOURCE_REFI2;
+        return true;
+    default:
+        return false;
+    }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Decode CLKGEN input source                                                 */
+/* -------------------------------------------------------------------------- */
+bool nora_clock_device_decode_clkgen_source(
+    uint16_t value,
+    nora_clock_source_t *source)
+{
+    if (source == 0) {
+        return false;
+    }
+
+    switch (value) {
+    case 1u:
+        *source = NORA_CLOCK_SOURCE_FRC;
+        return true;
+    case 2u:
+        *source = NORA_CLOCK_SOURCE_BFRC;
+        return true;
+    case 3u:
+        *source = NORA_CLOCK_SOURCE_PRIMARY;
+        return true;
+    case 4u:
+        *source = NORA_CLOCK_SOURCE_LPRC;
+        return true;
+    case 5u:
+        *source = NORA_CLOCK_SOURCE_PLL_1;
+        return true;
+    case 6u:
+        *source = NORA_CLOCK_SOURCE_PLL_2;
+        return true;
+    case 7u:
+        *source = NORA_CLOCK_SOURCE_PLL1_VCO_FRACDIV;
+        return true;
+    case 8u:
+        *source = NORA_CLOCK_SOURCE_PLL2_VCO_FRACDIV;
+        return true;
+    case 9u:
+        *source = NORA_CLOCK_SOURCE_REFI1;
+        return true;
+    case 10u:
+        *source = NORA_CLOCK_SOURCE_REFI2;
         return true;
     default:
         return false;

@@ -60,8 +60,8 @@
       </logicalFolder>
       <logicalFolder name="f22" displayName="hal_clock" projectFiles="true">
         <itemPath>../src/hal_clock/nora_clock.h</itemPath>
-        <itemPath>../src/hal_clock/nora_clock_device.h</itemPath>
         <itemPath>../src/hal_clock/nora_clock_device_dspic33ak.c</itemPath>
+        <itemPath>../src/hal_clock/nora_clock_device_dspic33ak.h</itemPath>
         <itemPath>../src/hal_clock/nora_clock_dspic33ak.c</itemPath>
         <itemPath>../src/hal_clock/nora_clock_dspic33ak.h</itemPath>
         <itemPath>../src/hal_clock/nora_clock_dspic33ak_reg.c</itemPath>

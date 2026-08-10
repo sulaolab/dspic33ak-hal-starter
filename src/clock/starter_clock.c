@@ -36,7 +36,7 @@ bool starter_clock_init(void)
 bool starter_clock_can_init(void)
 {
     const nora_clock_dspic33ak_clkgen_config_t can_clk = {
-        .source = NORA_CLOCK_SOURCE_PLL1,
+        .source = NORA_CLOCK_SOURCE_PLL_1,
         .divide_by = 10u,
     };
 
@@ -48,7 +48,7 @@ bool starter_clock_can_init(void)
 static bool configure_app_clkgen(nora_clock_dspic33ak_clkgen_t clkgen)
 {
     const nora_clock_dspic33ak_clkgen_config_t app_clk = {
-        .source = NORA_CLOCK_SOURCE_PLL1,
+        .source = NORA_CLOCK_SOURCE_PLL_1,
         .divide_by = 1u,
     };
 
