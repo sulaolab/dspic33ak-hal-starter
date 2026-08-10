@@ -168,6 +168,15 @@ void nora_pps_lock(void);     /* IOLOCK = 1 : PPS registers protected */
 bool nora_pps_route_output(nora_pps_output_t output, nora_gpio_rp_t rp);
 
 /*
+ * Find the first PHYSICAL RP pin currently carrying a peripheral OUTPUT.
+ * Returns false when rp is NULL, the output is unavailable on this device, or
+ * no physical pin has that output route. Virtual RPV outputs are not searched:
+ * this GPIO-typed API reports only board-visible pins. Read-only; does not
+ * change IOLOCK.
+ */
+bool nora_pps_find_output_rp(nora_pps_output_t output, nora_gpio_rp_t *rp);
+
+/*
  * Route a peripheral INPUT to read from an RP pin (writes the peripheral's RPINRx
  * input-select with the RP number). Self-brackets IOLOCK. Returns false if the
  * peripheral input is not available on this device, OR if rp is not a physical
