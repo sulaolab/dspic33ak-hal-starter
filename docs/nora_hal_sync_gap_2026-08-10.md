@@ -6,7 +6,7 @@ Gap measured 2026-08-10. Revised 2026-08-11 after the sonora-internal merge desc
 | tree | ref | head |
 |---|---|---|
 | `dspic33ak-hal-starter` | `refactor/nora-hal`, when the gap was measured | `ac42fb3` (last source commit `4af7049`, 2026-08-09 23:35) |
-| `dspic33ak-hal-starter` | `refactor/nora-hal`, now | `fae5b17` — i2c and uart already re-synced, see §4 |
+| `dspic33ak-hal-starter` | `refactor/nora-hal`, now | `ee31e1e` — §1 fully discharged, see §4 |
 | `dspic33ak-audio-dsp-sonora-dev` | `main`, before the merge | `17a57b3` |
 | `dspic33ak-audio-dsp-sonora-dev` | `fix/nora-naming-convergence` | `e64b3fe` |
 | `dspic33ak-audio-dsp-sonora-dev` | `main`, after the merge | `9f9d380` |
@@ -67,16 +67,17 @@ now excluded via `.namegate-ignore`), `Nora` → `NORA` in five module READMEs, 
 That file was written on 08-10, after the naming wave had already passed through, so no
 earlier sweep could have caught it.
 
-## 1. Starter is behind main — 18 shared files at the time of measurement, 15 now
+## 1. Starter is behind main — 18 shared files at the time of measurement, 0 now
 
 Unchanged by the merge (the merge touched none of these on the sonora side). Line counts
 are `only_sonora / only_starter` = diff lines present on one side only, measured against
 pre-merge `main`.
 
-**Rows 13, 14 and 17 are already done** — `fae5b17` and `96229bc` landed the i2c and uart
-ports on `refactor/nora-hal` on 2026-08-10, all three files verified blob-identical to
-sonora `main`. They are kept in the table because the reasoning is still the record of what
-was ported and why. See §4 for what is left.
+**Every row in this table has landed** — see §4 *Done* for the commits. The table is kept
+because the reasoning is the record of what was ported and why. Measured after the last
+one, the two trees differ on **no** shared `src/hal_*` path except
+`hal_spi_i2s_tdm/README.md`, which is the declared divergence at the bottom of the table
+and not a gap. What remains is §2, and it is a scope decision rather than a sync.
 
 | # | file | −/+ | sonora commit(s) | what starter is missing |
 |---|---|---|---|---|
@@ -103,8 +104,7 @@ was ported and why. See §4 for what is left.
 
 It is already on starter **`origin/main`** as `7773395 fix(hal_gpio): add PPS output RP lookup`,
 which `refactor/nora-hal` does not contain (the branch is 1 behind `origin/main`).
-So items 11–12 land for free by merging `origin/main` into the branch — do that first
-and they drop off this list.
+So items 11–12 landed for free by merging `origin/main` into the branch (`6ec819d`).
 
 ## 2. Modules sonora has and starter does not (18 files)
 
@@ -178,7 +178,7 @@ This is the third member of a family already recorded in `nora_hal_migration_ana
 §14: a check whose *shape* is narrower than what it claims to cover, returning a strict
 subset and reading as clean. `ai-namegate.ps1` was built for exactly this failure mode.
 
-## 4. Remaining work — 15 files in three groups
+## 4. Remaining work — §1 is closed, §2 is not
 
 Everything below happens on **`refactor/nora-hal`**. The starter's `main` is not a
 destination in this work at all.
@@ -189,25 +189,49 @@ destination in this work at all.
   source file, `.namegate-ignore` included, namegate PASS, `.text` byte-identical (§0).
 * **2026-08-10, starter:** `hal_i2c` (`fae5b17`) and `hal_uart` (`96229bc`) — §1 rows 13, 14,
   17. Both verified blob-identical to sonora `main`, so nothing to redo.
+* **2026-08-11, starter — the remaining three groups, in this order:**
 
-### Left, in order — each step buildable on its own
+  | # | commit | what | §1 rows |
+  |---|---|---|---|
+  | 1 | `6ec819d` | `git merge origin/main` — `nora_pps_find_output_rp()` for free | 11–12 |
+  | 2 | `c9d2fcd` | `hal_dma` + `hal_spi_i2s_tdm`, one commit | 7–10, 15, 16 |
+  | 3 | `ee31e1e` | `hal_clock` r4, incl. the device-header rename | 1–6 |
 
-1. **`hal_gpio` / pps — 2 files, free.** `nora_pps_find_output_rp()` is already on the
-   starter's `origin/main` as `7773395`. Either `git merge origin/main` into the branch, or
-   `git cherry-pick 7773395` if the branch should stay free of merges from `main`. §1 rows
-   11–12.
-2. **`hal_dma` + `hal_spi_i2s_tdm` — 6 files, ONE commit.** `nora_tdm_slot_t` retypes the TDM
-   block callback and the TX fill pointer, and `nora_dma_dspic33ak_fast.h` is included by
-   both spi_i2s_tdm `.c` files — split them and the tree does not build in between. This is
-   also the step that reaches the five CMSIS driver repos (`sai` twice; issues already
-   filed: can #3, gpio #2, i2c #9, usart #4, sai #7). §1 rows 7–10, 15, 16.
-   `hal_spi_i2s_tdm/README.md` stays divergent — do **not** sync it.
-3. **`hal_clock` — 6 files, the big one.** ~1,900 sonora-only lines, and the only group with
-   a real API delta (`nora_clock_get_state()`, `nora_clock_<family>_raw_capture()`,
-   source-enum split). Includes the `nora_clock_device.h` →
-   `nora_clock_device_dspic33ak.h` rename. Own commit, own hardware check.
-4. **Decide §2** — port or explicitly declare out-of-scope. `hal_ccp_input_capture` first,
-   since it already has a public snapshot.
+  Group 1 was taken as a merge rather than a cherry-pick: the branch was 3 ahead / 1
+  behind, the one commit touched exactly the two pps files, and a merge keeps the branch's
+  eventual return to `main` free of a duplicated commit.
 
-Do not re-run the §18 blob-identity seal until groups 1–3 land. Its sonora coordinate
-(`e64b3fe`) is now a *merged* commit rather than a branch tip; see the note added to §18.
+  Each group's files were verified **blob-identical** to sonora `9f9d380` before the commit
+  (`git rev-parse <sonora>:<path>` vs `git rev-parse :<path>`, not a text diff), each was
+  built with `buildtools/build.ps1 -Full` (0 warnings, provision PASS, dual-partition
+  artifacts PASS), and namegate was re-run after each. `hal_spi_i2s_tdm/README.md` was not
+  synced, and is now the only shared `src/hal_*` path where the two trees differ.
+
+  Two things this plan did not predict, both worth carrying forward as shapes:
+
+  * **A "prose" rename was an identifier rename.** §2 recorded `PLL1` → `PLL_1` as a fix
+    *in the prose* of the device header. It is also the enumerator: r4 spells them
+    `NORA_CLOCK_SOURCE_PLL_1` / `_PLL_2`. `src/clock/starter_clock.c` used the old spelling
+    in two places, so group 3 carried the one consumer source change of the whole re-sync.
+    Reading a rename wave's summary is not the same as grepping the tree for the old names.
+  * **The MPLAB project file is part of a rename.** `firmware.X/nbproject/configurations.xml`
+    lists headers by path, so `nora_clock_device.h` → `nora_clock_device_dspic33ak.h` had to
+    be re-registered there. The build does not fail without it — the header is found by
+    include path — so nothing would have caught this but looking.
+
+  Cost of the r4 surface: program region 88,936 → 92,192 bytes (+3,256).
+
+### Left
+
+1. **Hardware check for `hal_clock`.** Group 3 changes the clock bring-up path
+   (`nora_clock_switch_source()` no longer normalizes the AK system divider; CLKGEN1 is
+   re-sourced through the system-clock switch sequence). Built and blob-verified only; not
+   yet run on a board.
+2. **Decide §2** — port or explicitly declare out-of-scope, per module.
+   `hal_ccp_input_capture` first, since it already has a public snapshot and so the starter's
+   omission is visible from outside. 17 files across 6 items; `hal_adc` is on hold under its
+   own notes, and `hal_dma/README.md` + `hal_gpio/README.md` are the cheap two.
+
+Now that groups 1–3 have landed, the §18 blob-identity seal can be re-run. Its sonora
+coordinate (`e64b3fe`) is a *merged* commit rather than a branch tip, so use `9f9d380`;
+see the note added to §18.
