@@ -691,9 +691,9 @@ nora_spi_i2s_tdm_error_t nora_spi_i2s_tdm_get_last_error( void )
  * SPI1's. Returns NULL if inst is NULL/stopped or the half cannot be resolved; the
  * caller must NULL-check before writing.
  */
-int32_t* nora_spi_i2s_tdm_inst_tx_fill_ptr( nora_spi_i2s_tdm_inst_t* inst )
+nora_tdm_slot_t* nora_spi_i2s_tdm_inst_tx_fill_ptr( nora_spi_i2s_tdm_inst_t* inst )
 {
-    int32_t* dst = NULL;
+    nora_tdm_slot_t* dst = NULL;   // == int32_t* on this family; see nora_tdm_slot_t
 
     if( ( inst == NULL ) || !inst->running )
     {
@@ -732,8 +732,8 @@ int32_t* nora_spi_i2s_tdm_inst_tx_fill_ptr( nora_spi_i2s_tdm_inst_t* inst )
 nora_spi_i2s_tdm_mirror_result_t nora_spi_i2s_tdm_inst_tx_fill_mirror(
         nora_spi_i2s_tdm_inst_t*       inst,
         const nora_spi_i2s_tdm_inst_t* ref,
-        const int32_t*                      ref_fill_half,
-        int32_t**                           dst )
+        const nora_tdm_slot_t*              ref_fill_half,
+        nora_tdm_slot_t**                   dst )
 {
     if( dst == NULL )
     {

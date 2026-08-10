@@ -180,6 +180,97 @@ typedef enum {
     NORA_SPI_I2S_TDM_CLOCK_EVENT_RESUMED, // external clock back
 } nora_spi_i2s_tdm_clock_event_t;
 
+//===========================================================
+// TDM SLOT -- the element type of the block callback's buffers, and of the TX fill pointer.
+//
+// One name, one representation per family, and the representation belongs to the backend:
+//   AK: int32_t, transparent. MODE32 gives a single 32-bit SPIxBUF and 32-bit DMA
+//       elements, so one sample IS one DMA element and there is nothing to pack.
+//   CK: struct { uint16_t wire[2]; }. The DMA element there is a 16-bit wire word; the
+//       struct is what keeps that visible. Hiding it behind an int32_t buffer is how a
+//       half-swap defect stayed hidden once already (dspic33ck-hal-lab,
+//       docs/ck_silicon_findings.md defect 7).
+//
+// This is the DMA contract's typed-value rule (nora_dma_status_t) applied one level up: the
+// TYPE is shared, the LAYOUT is not, and a consumer touches the value only through the
+// accessors below. It is not a portability facade -- no extra header, no conversion layer,
+// no copy, no runtime cost. What it buys is that the block-callback signature is textually
+// identical in both families while a portable consumer that writes `dst[i] = sample`
+// still FAILS TO COMPILE on CK, at build time, loudly.
+//
+// The struct is NOT ported to this family and must not be: `int32_t` is the honest
+// description of an AK DMA element. Sharing the NAME is not sharing the layout.
+//
+// THREE RULES FOR CODE THAT IS MEANT TO MOVE BETWEEN FAMILIES. All three are contract,
+// not style, and all three exist because THIS family cannot detect a violation:
+//
+//  1. Go through the accessors. This family's typedef is transparent, so `dst[i] = sample`
+//     compiles here and only fails on a family whose slot is a struct. The build that
+//     catches the mistake is the OTHER one -- writing portable code here and discovering
+//     it in someone else's port is the failure mode this rule exists to prevent. (An
+//     AK-only consumer is not forced to convert; `audio_transport.c` does not.)
+//
+//  2. A slot is not a byte sequence. Both families are exactly 4 bytes and both assert it,
+//     so memcpy'ing slot buffers between families, persisting them, or reinterpreting them
+//     as int32_t COMPILES EVERYWHERE AND IS WRONG (this family stores a plain int32_t; a
+//     wire-word family stores most-significant half first). Cross-family transfer,
+//     storage and reinterpretation of the raw bytes are outside this contract. The DMA
+//     status word needed no such prohibition because nothing tempts a consumer to move it;
+//     an audio buffer is tempting, so the prohibition is written down.
+//
+//  3. Fold the conversion into the store/load the DSP already performs; do not add a
+//     conversion pass. `for (i) encode(&dst[i], out[i])` is the shape the accessor
+//     vocabulary invites, and it is the shape that costs: on a wire-word family a separate
+//     pass measured 3-4x a conversion folded into the DSP's own final store. Here
+//     encode/decode are the identity and cost nothing, which is exactly why an author on
+//     this family cannot see the trap -- hence it is stated in the shared contract rather
+//     than in one backend's comments.
+//===========================================================
+typedef int32_t nora_tdm_slot_t;
+
+_Static_assert( sizeof(nora_tdm_slot_t) == 4u,
+                "a TDM slot must be exactly 32 bits with no padding" );
+
+// int32_t sample -> slot. Use at the DSP's final store.
+static inline void nora_tdm_slot_encode_s32( nora_tdm_slot_t* dst, int32_t sample )
+{
+    *dst = sample;
+}
+
+// slot -> int32_t sample. Use where the DSP loads its input.
+static inline int32_t nora_tdm_slot_decode_s32( const nora_tdm_slot_t* src )
+{
+    return *src;
+}
+
+// Unsigned Q15 gain applied to one slot, saturation-free by precondition.
+//
+// CONTRACT (identical in every family):
+//   gain_q15 <= 0x8000, i.e. unity is 0x8000 and gains above unity are NOT this function's
+//   job -- |y| <= |x| follows, so no overflow is possible and no saturation is performed.
+//   gain_q15 == 0x8000 -> y == x in every audio bit.  gain_q15 == 0 -> y == 0, branchless.
+//   Truncating, not rounding.  src == dst is safe.
+//
+// The two families differ in the LEAST SIGNIFICANT BIT of the 32-bit word and nowhere else,
+// and the difference is ONE-SIDED, which is the part worth pinning: a wire-word family
+// computing ((x*g) >> 16) << 1 from two 16x16 products produces exactly
+//     y_wire == y_here - bit15( lo16(x) * g )
+// so y_wire <= y_here always, bit 0 is always clear, and the difference is a truncation
+// toward negative infinity -- not a rounding-mode disagreement that could go either way.
+// Unity (0x8000) and zero are bit-exact in both; only intermediate gains differ. That bit
+// is below the audio LSB of a 24-bit-in-32 wire word on both parts. Stated rather than
+// hidden: a consumer comparing two families bit-for-bit will find this, and one-sidedness
+// is what lets it conclude "declared difference" instead of "possible bug".
+//
+// Off the ISR path by construction. A consumer that measures this in a hot loop takes the
+// backend's *_fast.h twin (the `_hot` naming rule), it does not rewrite this one.
+static inline void nora_tdm_slot_scale_q15( const nora_tdm_slot_t* src,
+                                            nora_tdm_slot_t*       dst,
+                                            uint16_t               gain_q15 )
+{
+    *dst = (int32_t)( ( (int64_t)*src * (int64_t)(uint32_t)gain_q15 ) >> 15 );
+}
+
 // One-completed-block callback (event hook), registered PER SPI instance. The
 // instance's RX-block ISR calls this for each completed block: src = the RX ping/pong
 // half just captured by THIS instance; dst = the TX ping/pong half of THIS instance
@@ -195,9 +286,14 @@ typedef enum {
 // cannot resolve either half-buffer (reload boundary / just-stopped / first block /
 // fault), it skips the block instead of calling the callback -- the callee never
 // NULL-checks src/dst.
-typedef void (*nora_spi_i2s_tdm_block_cb_t)( const int32_t* src,
-                                                  int32_t*       dst,
-                                                  void*          user );
+// src and dst are SLOT buffers (nora_tdm_slot_t, above), not raw int32_t arrays. On this
+// family a slot IS an int32_t, so `dst[i] = sample` compiles and costs the same as it
+// always did; a consumer that intends to be portable goes through
+// nora_tdm_slot_decode_s32() / _encode_s32() instead, because on a family whose DMA
+// element is a 16-bit wire word the raw store is a half-swap bug.
+typedef void (*nora_spi_i2s_tdm_block_cb_t)( const nora_tdm_slot_t* src,
+                                                  nora_tdm_slot_t*       dst,
+                                                  void*                  user );
 
 // Opaque per-leg instance handle. The engine exposes the built dense logical leg table, backed
 // by up to four physical SPI instances on AK512. Legs sharing a sync_domain are co-clocked and
@@ -333,12 +429,20 @@ extern nora_spi_i2s_tdm_inst_t* nora_spi_i2s_tdm_spi3( void );
 extern nora_spi_i2s_tdm_inst_t* nora_spi_i2s_tdm_spi4( void );
 
 //===========================================================
-// CANDIDATE / non-generic API (co-clocked dual-codec support). The four functions below
-// exist for a single-producer co-clocked A/B path (one logical leg's callback fills a
-// sibling leg's TX, plus phase probes measuring their alignment). A generic single- or
-// independent-instance consumer does NOT need them. They are NOT part of the minimal public
-// transport contract and may change or move if that minimal transport contract is narrowed or
-// reorganized.
+// CO-CLOCKED BLOCK (dual-codec, single-producer). The four functions below serve one
+// logical leg's callback filling a sibling leg's TX, plus the phase probes that measure
+// their alignment. A single-leg or independent-instance consumer never calls them.
+//
+// "A consumer here does not call it" is NOT a licence to omit: every NORA backend whose
+// silicon can co-clock two legs implements all four, under these names, with these
+// semantics -- that is what lets a co-clocked application move between families. Unused,
+// they cost zero bytes (per-function sections + section GC; see the DMA declaration's
+// R0.1 and its measured 128-bytes-emitted-then-dropped result).
+//
+// What the banner above used to say -- "may change or move" -- is withdrawn as a
+// stability statement. What remains true is the USAGE note: these are not part of the
+// minimal single-leg transport surface, so a consumer that calls them is declaring a
+// co-clocked topology, and the phase probes are diagnostics, not a control loop.
 //===========================================================
 
 // Return one instance's current writable TX ping-pong half (the half NOT being
@@ -346,7 +450,7 @@ extern nora_spi_i2s_tdm_inst_t* nora_spi_i2s_tdm_spi4( void );
 // instance's output from ANOTHER instance's block callback so two co-clocked codecs
 // stay sample-aligned (call at a block boundary; co-clocked siblings share the phase).
 // NULL-check before writing.
-extern int32_t* nora_spi_i2s_tdm_inst_tx_fill_ptr( nora_spi_i2s_tdm_inst_t* inst );
+extern nora_tdm_slot_t* nora_spi_i2s_tdm_inst_tx_fill_ptr( nora_spi_i2s_tdm_inst_t* inst );
 
 // Result of inst_tx_fill_mirror() -- lets the caller distinguish a transient "position not yet
 // resolvable" (reload boundary / just-started) from a genuine "target half is being transmitted"
@@ -370,15 +474,17 @@ typedef enum {
 extern nora_spi_i2s_tdm_mirror_result_t nora_spi_i2s_tdm_inst_tx_fill_mirror(
         nora_spi_i2s_tdm_inst_t*       inst,
         const nora_spi_i2s_tdm_inst_t* ref,
-        const int32_t*                      ref_fill_half,
-        int32_t**                           dst );
+        const nora_tdm_slot_t*              ref_fill_half,
+        nora_tdm_slot_t**                   dst );
 
 // Phase probe: which TX ping-pong half is this instance's DMA transmitting NOW?
 // 0 = ping, 1 = pong, -1 = unresolved. For measuring co-clocked sibling alignment.
 extern int nora_spi_i2s_tdm_inst_tx_active_half( nora_spi_i2s_tdm_inst_t* inst );
 
-// Phase probe (finer): TX DMA current read position, word offset into [0, 2*half). -1 if
-// unresolved. Diff of two co-clocked legs = their sub-block sample offset.
+// Phase probe (finer): TX DMA current read position as a SLOT offset into [0, 2*half),
+// i.e. one unit = one sample of one wire slot -- not bytes, and not a family's DMA element
+// (a backend whose element is a 16-bit wire word converts). -1 if unresolved. Diff of two
+// co-clocked legs = their sub-block sample offset.
 extern int32_t nora_spi_i2s_tdm_inst_tx_active_pos( nora_spi_i2s_tdm_inst_t* inst );
 
 // Register the per-completed-block callback for one SPI instance. The callback
