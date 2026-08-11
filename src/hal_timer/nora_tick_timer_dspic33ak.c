@@ -4,8 +4,10 @@
  * 1 ms time base on Timer1. See nora_tick_timer.h.
  *
  * Timer1 uses a caller-supplied input clock. The HAL selects the smallest
- * available prescaler that can generate an exact or nearest 1 ms period within
- * the 32-bit PR1 range, then the interrupt handler increments a 32-bit counter.
+ * available prescaler that can generate an EXACT 1 ms period within the 32-bit
+ * PR1 range, then the interrupt handler increments a 32-bit counter. A clock
+ * that cannot produce 1.000 ms is refused, not rounded -- see
+ * NORA_TICK_TIMER_ERR_INEXACT_PERIOD in the header.
  */
 
 #include "nora_tick_timer.h"
@@ -41,6 +43,8 @@ static nora_tick_timer_status_t calc_period_reg(
     const nora_tick_timer_config_t *config,
     uint32_t *period_reg,
     uint8_t *tckps);
+static nora_tick_timer_status_t apply_clock_source(
+    nora_tick_timer_clock_source_t clock_source);
 
 nora_tick_timer_status_t nora_tick_timer_init(
     const nora_tick_timer_config_t *config)
@@ -50,6 +54,13 @@ nora_tick_timer_status_t nora_tick_timer_init(
     nora_tick_timer_status_t status;
 
     status = calc_period_reg(config, &period_reg, &tckps);
+    if (status != NORA_TICK_TIMER_OK) {
+        return status;
+    }
+
+    /* Before touching Timer1: an unsupported clock source must leave the timer as it
+     * was, so this refusal happens while the peripheral is still untouched. */
+    status = apply_clock_source(config->clock_source);
     if (status != NORA_TICK_TIMER_OK) {
         return status;
     }
@@ -149,26 +160,104 @@ static nora_tick_timer_status_t calc_period_reg(
     if ((config == 0) || (period_reg == 0) || (tckps == 0) ||
         (config->timer_clk_hz == 0u) ||
         (config->irq_priority == 0u) ||
-        (config->irq_priority > DSPIC33AK_TICK_TIMER_MAX_PRIORITY)) {
+        (config->irq_priority > DSPIC33AK_TICK_TIMER_MAX_PRIORITY) ||
+        ((config->clock_source != NORA_TICK_TIMER_CLOCK_INTERNAL) &&
+         (config->clock_source != NORA_TICK_TIMER_CLOCK_FRC))) {
         return NORA_TICK_TIMER_ERR_INVALID_ARG;
     }
 
-    for (i = 0u; i < (uint8_t)(sizeof(prescaler_options) / sizeof(prescaler_options[0])); i++) {
-        const uint64_t denominator =
-            (uint64_t)prescaler_options[i].divisor * DSPIC33AK_TICK_TIMER_HZ;
-        const uint64_t counts =
-            ((uint64_t)config->timer_clk_hz + (denominator / 2u)) / denominator;
+    /*
+     * EXACT DIVISORS ONLY. Two independent reasons to skip a prescaler:
+     *
+     *   remainder      -- this divisor cannot produce 1.000 ms at all
+     *   count overflow -- it can, but PR1 is 32 bits; a LARGER prescaler gives a smaller
+     *                     count, so the ones left to try are exactly the ones that help
+     *
+     * The overflow case is why the loop exists. Neither case may return early, and the flag
+     * has to record the EXACT case, not the inexact one -- the two walls are not symmetric:
+     *
+     *   a remainder at divisor d implies a remainder at every LATER one (1|8|64|256), so
+     *   seeing one says nothing about the divisors already tried;
+     *   an overflow at d says nothing about later ones, which is what the loop continues for.
+     *
+     * So "some divisor divided exactly, none of them fitted" is out-of-range, and only "no
+     * divisor divided exactly at all" is inexact -- which is what the header says each name
+     * means.
+     *
+     * THIS USED TO ROUND -- `(clk + denominator/2) / denominator`, no remainder check,
+     * OK returned. Harmless on both current callers (100 MHz / 1 / 1000 = 100,000 and
+     * 4 MHz / 1 / 1000 = 4,000, both exact) but it made the header's contract false, and
+     * that contract is load-bearing: every cadence in the tree is milliseconds of this
+     * tick. See ERR_INEXACT_PERIOD in the header. dsPIC33CK fixed the same defect on
+     * 2026-08-03; the logic below is that one, ported to a 32-bit PR1.
+     */
+    {
+        bool saw_exact = false;
 
-        if (counts == 0u) {
-            continue;
+        for (i = 0u;
+             i < (uint8_t)(sizeof(prescaler_options) / sizeof(prescaler_options[0]));
+             i++) {
+            const uint64_t denominator =
+                (uint64_t)prescaler_options[i].divisor * DSPIC33AK_TICK_TIMER_HZ;
+            uint64_t counts;
+
+            if (((uint64_t)config->timer_clk_hz % denominator) != 0u) {
+                continue;
+            }
+
+            counts = (uint64_t)config->timer_clk_hz / denominator;
+
+            if (counts == 0u) {
+                continue;
+            }
+
+            saw_exact = true;
+
+            if ((counts - 1u) <= UINT32_MAX) {
+                *period_reg = (uint32_t)(counts - 1u);
+                *tckps = prescaler_options[i].tckps;
+                return NORA_TICK_TIMER_OK;
+            }
         }
 
-        if ((counts - 1u) <= UINT32_MAX) {
-            *period_reg = (uint32_t)(counts - 1u);
-            *tckps = prescaler_options[i].tckps;
-            return NORA_TICK_TIMER_OK;
-        }
+        /* Nothing fitted. Say WHICH wall was hit: out-of-range means the period IS exact
+         * but this timer's divisors cannot bring the count inside 32 bits, while inexact
+         * is a design error the caller must fix at the clock. */
+        return saw_exact ? NORA_TICK_TIMER_ERR_OUT_OF_RANGE
+                         : NORA_TICK_TIMER_ERR_INEXACT_PERIOD;
+    }
+}
+
+/*
+ * Named to match the dsPIC33CK backend's apply_clock_source() so the two files stay
+ * diffable, but on this part there is nothing to program: Timer1's mux offers the
+ * peripheral clock (TCS = 0, written unconditionally by nora_tick_timer_init()) and an
+ * external TxCK pin, and no FRC input. So this function only DECIDES, and the caller
+ * runs it before touching the peripheral -- a refused init leaves Timer1 as it was.
+ *
+ * The full data-sheet evidence for the refusal, and the two board/system-level routes to
+ * an FRC-clocked tick, are at NORA_TICK_TIMER_ERR_NOT_SUPPORTED in nora_tick_timer.h.
+ * They belong in the header because the reader who needs them is the caller who just got
+ * the status back.
+ */
+static nora_tick_timer_status_t apply_clock_source(
+    nora_tick_timer_clock_source_t clock_source)
+{
+#if DSPIC33AK_TICK_TIMER_PRESENT
+    switch (clock_source) {
+    case NORA_TICK_TIMER_CLOCK_INTERNAL:
+        break;
+
+    case NORA_TICK_TIMER_CLOCK_FRC:
+        return NORA_TICK_TIMER_ERR_NOT_SUPPORTED;
+
+    default:
+        return NORA_TICK_TIMER_ERR_INVALID_ARG;
     }
 
-    return NORA_TICK_TIMER_ERR_OUT_OF_RANGE;
+    return NORA_TICK_TIMER_OK;
+#else
+    (void)clock_source;
+    return NORA_TICK_TIMER_ERR_NOT_PRESENT;
+#endif
 }

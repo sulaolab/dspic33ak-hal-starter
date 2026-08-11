@@ -18,8 +18,23 @@ own any interrupt vector wrappers.
 ## Timer1 Tick
 
 Timer1 is configured as a 1 kHz periodic interrupt source. The HAL selects the
-smallest available prescaler that can generate an exact or nearest 1 ms period
-within the 32-bit `PR1` range.
+smallest available prescaler that can generate an **exact** 1 ms period within
+the 32-bit `PR1` range.
+
+Exact means exact: an input clock that no prescaler divides to 1.000 ms is
+refused with `NORA_TICK_TIMER_ERR_INEXACT_PERIOD` rather than rounded to the
+nearest count. Rounding is the worse outcome, because every cadence built on
+this HAL is expressed in milliseconds of this tick, so an approximate tick makes
+all of them wrong by one unstated factor with no attributable symptom.
+`NORA_TICK_TIMER_ERR_OUT_OF_RANGE` is the other wall: the period is exact, but
+no available prescaler brings the count inside `PR1`.
+
+`clock_source` selects which clock family feeds the tick. This part supports
+`NORA_TICK_TIMER_CLOCK_INTERNAL` only — its Timer1 has no FRC input, so
+`NORA_TICK_TIMER_CLOCK_FRC` returns `NORA_TICK_TIMER_ERR_NOT_SUPPORTED`. The
+data-sheet evidence and the two routes to an FRC-clocked tick (re-clock the
+system to FRC; or feed FRC back in through `T1CK`) are documented at that
+enumerator in `nora_tick_timer.h`.
 
 Basic setup:
 
@@ -28,6 +43,7 @@ Basic setup:
 
 const nora_tick_timer_config_t tick_timer_config = {
     .timer_clk_hz = timer1_input_hz,
+    .clock_source = NORA_TICK_TIMER_CLOCK_INTERNAL,
     .irq_priority = NORA_TICK_TIMER_DEFAULT_IRQ_PRIORITY,
     .run_in_idle = false,
 };
