@@ -1,5 +1,7 @@
 #include <xc.h>
 #include "nora_i2c_dspic33ak_device.h"
+#include "nora_i2c_slave.h"
+#include "nora_i2c_dspic33ak_internal.h"
 
 /*
  * Device/instance mapping layer.
@@ -391,3 +393,101 @@ bool nora_i2c_device_tx_irq_enable(nora_i2c_instance_t inst, bool enable)
 
     return false;
 }
+
+/* --------------------------------------------------------------------------
+ * Slave interrupt vectors
+ *
+ * Each vector delegates to the portable slave engine, which clears the flag and
+ * services I2CxSTAT1. Guarded per-instance so the driver only defines vectors
+ * for I2C instances the target actually has.
+ *
+ * Owning the vectors here - rather than leaving them to the application, as this
+ * backend used to - is the convention every other module in this HAL already
+ * follows (hal_ccp_input_capture, hal_spi_i2s_tdm) and matches the dsPIC33CK
+ * backend, so a slave application is source-portable between the two families.
+ *
+ * All three sources this silicon exposes per instance are bound, but only the
+ * event vector can fire: nora_i2c_slave_init() aggregates every client condition
+ * onto I2CxIF through INTC and leaves I2CxRXIE / I2CxTXIE at 0. The RX/TX pair is
+ * bound anyway so the hedge documented in the slave engine stays a working path
+ * (the service routine is idempotent) instead of unreachable code.
+ *
+ * The I2CxE (bus error) source is deliberately not bound: this driver does not
+ * service it, so an integration that wants error interrupts still owns that
+ * vector.
+ * -------------------------------------------------------------------------- */
+#if defined(_I2C1IF)
+void __attribute__((interrupt, no_auto_psv)) _I2C1Interrupt(void)
+{
+    nora_i2c_slave_event_irq(NORA_I2C_INST_1);
+}
+#endif
+#if defined(_I2C1RXIF)
+void __attribute__((interrupt, no_auto_psv)) _I2C1RXInterrupt(void)
+{
+    nora_i2c_slave_rx_irq(NORA_I2C_INST_1);
+}
+#endif
+#if defined(_I2C1TXIF)
+void __attribute__((interrupt, no_auto_psv)) _I2C1TXInterrupt(void)
+{
+    nora_i2c_slave_tx_irq(NORA_I2C_INST_1);
+}
+#endif
+
+#if defined(_I2C2IF)
+void __attribute__((interrupt, no_auto_psv)) _I2C2Interrupt(void)
+{
+    nora_i2c_slave_event_irq(NORA_I2C_INST_2);
+}
+#endif
+#if defined(_I2C2RXIF)
+void __attribute__((interrupt, no_auto_psv)) _I2C2RXInterrupt(void)
+{
+    nora_i2c_slave_rx_irq(NORA_I2C_INST_2);
+}
+#endif
+#if defined(_I2C2TXIF)
+void __attribute__((interrupt, no_auto_psv)) _I2C2TXInterrupt(void)
+{
+    nora_i2c_slave_tx_irq(NORA_I2C_INST_2);
+}
+#endif
+
+#if defined(_I2C3IF)
+void __attribute__((interrupt, no_auto_psv)) _I2C3Interrupt(void)
+{
+    nora_i2c_slave_event_irq(NORA_I2C_INST_3);
+}
+#endif
+#if defined(_I2C3RXIF)
+void __attribute__((interrupt, no_auto_psv)) _I2C3RXInterrupt(void)
+{
+    nora_i2c_slave_rx_irq(NORA_I2C_INST_3);
+}
+#endif
+#if defined(_I2C3TXIF)
+void __attribute__((interrupt, no_auto_psv)) _I2C3TXInterrupt(void)
+{
+    nora_i2c_slave_tx_irq(NORA_I2C_INST_3);
+}
+#endif
+
+#if defined(_I2C4IF)
+void __attribute__((interrupt, no_auto_psv)) _I2C4Interrupt(void)
+{
+    nora_i2c_slave_event_irq(NORA_I2C_INST_4);
+}
+#endif
+#if defined(_I2C4RXIF)
+void __attribute__((interrupt, no_auto_psv)) _I2C4RXInterrupt(void)
+{
+    nora_i2c_slave_rx_irq(NORA_I2C_INST_4);
+}
+#endif
+#if defined(_I2C4TXIF)
+void __attribute__((interrupt, no_auto_psv)) _I2C4TXInterrupt(void)
+{
+    nora_i2c_slave_tx_irq(NORA_I2C_INST_4);
+}
+#endif

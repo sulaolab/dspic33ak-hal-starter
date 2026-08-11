@@ -14,9 +14,9 @@
  * because MikroBUS A (I2C2) and MikroBUS B (I2C3) sit on one shared I2C bus
  * through the on-board shorting resistors -- no jumper wire required.
  *
- * The three I2C3 interrupt vectors (_I2C3Interrupt / _I2C3RXInterrupt /
- * _I2C3TXInterrupt) are defined in i2c_loopback.c and delegate to the slave
- * HAL, demonstrating how an application wires the slave into its ISRs.
+ * No interrupt vector is defined here: the I2C HAL owns the _I2CxInterrupt
+ * vectors and routes them to its slave engine, so an application supplies only
+ * the callbacks in nora_i2c_slave_config_t.
  */
 
 #include <stdint.h>

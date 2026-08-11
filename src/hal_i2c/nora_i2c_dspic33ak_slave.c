@@ -15,6 +15,9 @@
  * ISR delegates funnel into one re-entrant-safe service routine that polls
  * STAT1 and acts on whatever is pending. Reading I2CxRCV clears RBF, so if more
  * than one flag is raised for the same byte the extra pass is a harmless no-op.
+ * Only the event delegate is public (nora_i2c_slave.h); the RX/TX pair is
+ * backend-only (nora_i2c_dspic33ak_internal.h) because the number of interrupt
+ * sources a slave has is silicon count, and the device layer owns the vectors.
  *
  * STAT1 tells us what happened:
  *   RBF  - a byte (address or data) is in RCV

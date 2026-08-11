@@ -18,9 +18,15 @@ extern "C" {
  * types live in nora_i2c.h (included above); the bus-master role is in
  * nora_i2c_master.h. A program may include either or both.
  *
- * The slave is callback-driven and interrupt-based. Platform startup owns the
- * I2C vector bindings and delegates the event, receive, and transmit sources
- * to the matching nora_i2c_slave_*_irq() handler below.
+ * The slave is callback-driven and interrupt-based. The dsPIC33A "new" I2C
+ * module aggregates address / data / STOP into one event interrupt, routed there
+ * through the INTC register by nora_i2c_slave_init(); the dedicated RX/TX buffer
+ * interrupts this silicon also has belong to the DMA/smart path and stay masked.
+ *
+ * This driver defines the I2C interrupt vectors for the instances that exist on
+ * the target (in the device layer); each calls nora_i2c_slave_event_irq(inst).
+ * The delegate is also exported so an integration that owns the vector itself,
+ * or a host-side unit test, can drive the same service routine.
  *
  * Scope: 7-bit addressing only. 10-bit and general-call are not handled yet.
  */
@@ -57,11 +63,17 @@ nora_i2c_status_t nora_i2c_slave_deinit(
 /* True once nora_i2c_slave_init() has configured this instance. */
 bool nora_i2c_slave_is_active(nora_i2c_instance_t inst);
 
-/* ISR delegates. Bind the platform's I2C event, receive, and transmit vectors
- * to the matching handler below. Each clears the backend flag it handles. */
+/*
+ * Slave interrupt delegate.
+ *
+ *   _I2CxInterrupt -> nora_i2c_slave_event_irq(inst)
+ *
+ * Clears the hardware event-interrupt flag and services whatever the I2CxSTAT1
+ * register reports (address match, received byte, transmit-continue, STOP). The
+ * device layer wires the real vectors to this function; it is public so a custom
+ * vector or a host-side test can call it directly.
+ */
 void nora_i2c_slave_event_irq(nora_i2c_instance_t inst);
-void nora_i2c_slave_rx_irq(nora_i2c_instance_t inst);
-void nora_i2c_slave_tx_irq(nora_i2c_instance_t inst);
 
 #ifdef __cplusplus
 }

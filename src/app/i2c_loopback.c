@@ -60,25 +60,10 @@ static uint8_t slave_on_tx(void)
     return b;
 }
 
-/* --- I2C3 interrupt vectors, delegated to the slave HAL --------------------
- * This is how an application wires the slave into its ISRs: define the device
- * vectors and forward each to the matching slave handler. */
-void __attribute__((__interrupt__, __no_auto_psv__)) _I2C3Interrupt(void)
-{
-    nora_i2c_slave_event_irq(LB_SLAVE_INST);
-}
-
-void __attribute__((__interrupt__, __no_auto_psv__)) _I2C3RXInterrupt(void)
-{
-    nora_i2c_slave_rx_irq(LB_SLAVE_INST);
-}
-
-void __attribute__((__interrupt__, __no_auto_psv__)) _I2C3TXInterrupt(void)
-{
-    nora_i2c_slave_tx_irq(LB_SLAVE_INST);
-}
-
-/* ------------------------------------------------------------------------- */
+/* --- Interrupt vectors: nothing to do here ---------------------------------
+ * The I2C HAL defines the _I2CxInterrupt vectors itself and routes them to the
+ * slave engine, so an application only installs callbacks. Defining a vector
+ * here would fail the link on a duplicate symbol. */
 
 bool i2c_loopback_init(void)
 {
@@ -92,8 +77,8 @@ bool i2c_loopback_init(void)
         .on_stop       = 0,
     };
 
-    /* The slave HAL enables the interrupt sources; the application owns the
-     * vectors and asks the HAL to set the matching line priorities. */
+    /* The slave HAL owns both the interrupt sources and their vectors; the
+     * application only asks it to set the matching line priorities. */
     if (nora_i2c_set_interrupt_priority(LB_SLAVE_INST, 4u) != NORA_I2C_OK) {
         return false;
     }

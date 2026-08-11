@@ -41,6 +41,23 @@ void nora_i2c_set_role(nora_i2c_instance_t inst,
                        nora_i2c_role_t role);
 nora_i2c_role_t nora_i2c_get_role(nora_i2c_instance_t inst);
 
+/*
+ * Backend-only slave ISR delegates for the dedicated RX / TX buffer interrupts.
+ *
+ * These are a hedge, not a path in use: nora_i2c_slave_init() aggregates every
+ * client condition onto the event interrupt via INTC and enables only that
+ * vector, so I2CxRXIE / I2CxTXIE stay 0 and these never fire. They exist so the
+ * device layer can bind the RX/TX vectors defined by this silicon, and because
+ * both funnel into the same idempotent service routine an extra pass would be
+ * harmless if a future smart/FIFO path did enable them.
+ *
+ * They are deliberately NOT in nora_i2c_slave.h: how many interrupt sources one
+ * slave has is silicon count (the CK part has a single SI2Cx), and the device
+ * layer owns the vectors on both families, so no caller can name them.
+ */
+void nora_i2c_slave_rx_irq(nora_i2c_instance_t inst);
+void nora_i2c_slave_tx_irq(nora_i2c_instance_t inst);
+
 #ifdef __cplusplus
 }
 #endif
