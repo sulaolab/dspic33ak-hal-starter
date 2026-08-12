@@ -31,6 +31,7 @@ static uint32_t g_pending_timeout_ms[NORA_I2C_INST_COUNT];
 /* inst_is_valid / get_regs / calc_brg are shared primitives, declared in
  * nora_i2c_dspic33ak_internal.h and defined in
  * nora_i2c_dspic33ak_common.c. */
+static bool addr7_is_valid(uint8_t addr7);
 static nora_i2c_status_t require_initialized(
     nora_i2c_instance_t inst,
     const nora_i2c_regs_t **regs);
@@ -116,6 +117,19 @@ nora_i2c_status_t nora_i2c_init(
     st = nora_i2c_get_regs(inst, &r);
     if (st != NORA_I2C_OK) {
         return st;
+    }
+
+    /*
+     * Refuse to re-purpose an instance that is live in the other role. Without
+     * this, configuring a running slave as a master rewrote the control
+     * registers and took the role, but left the slave engine's own state active
+     * and its event interrupt ENABLED -- a master-configured peripheral with an
+     * armed client vector, while nora_i2c_slave_is_active() still answered
+     * true. Call nora_i2c_slave_deinit() first. Re-initializing the same role
+     * stays allowed: bring-up code relies on it.
+     */
+    if (nora_i2c_get_role(inst) == NORA_I2C_ROLE_SLAVE) {
+        return NORA_I2C_ERR_BUSY;
     }
 
     /* Start from a known disabled state; enable after configuration is complete. */
@@ -291,7 +305,7 @@ nora_i2c_status_t nora_i2c_write(
 {
     nora_i2c_status_t st;
 
-    if (tx_len != 0u && tx == 0) {
+    if (!addr7_is_valid(addr7) || (tx_len != 0u && tx == 0)) {
         return NORA_I2C_ERR_INVALID_ARG;
     }
 
@@ -320,7 +334,7 @@ nora_i2c_status_t nora_i2c_read(
     nora_i2c_status_t st;
     size_t i;
 
-    if (rx == 0 || rx_len == 0u) {
+    if (!addr7_is_valid(addr7) || rx == 0 || rx_len == 0u) {
         return NORA_I2C_ERR_INVALID_ARG;
     }
 
@@ -366,7 +380,8 @@ nora_i2c_status_t nora_i2c_write_read(
 {
     nora_i2c_status_t st;
 
-    if ((tx_len != 0u && tx == 0) || rx == 0 || rx_len == 0u) {
+    if (!addr7_is_valid(addr7) ||
+        (tx_len != 0u && tx == 0) || rx == 0 || rx_len == 0u) {
         return NORA_I2C_ERR_INVALID_ARG;
     }
 
@@ -394,7 +409,7 @@ nora_i2c_status_t nora_i2c_master_write_no_stop(
 {
     nora_i2c_status_t st;
 
-    if (tx_len != 0u && tx == 0) {
+    if (!addr7_is_valid(addr7) || (tx_len != 0u && tx == 0)) {
         return NORA_I2C_ERR_INVALID_ARG;
     }
 
@@ -417,7 +432,7 @@ nora_i2c_status_t nora_i2c_master_read_after_restart(
 {
     nora_i2c_status_t st;
 
-    if (rx == 0 || rx_len == 0u) {
+    if (!addr7_is_valid(addr7) || rx == 0 || rx_len == 0u) {
         return NORA_I2C_ERR_INVALID_ARG;
     }
 
@@ -847,6 +862,23 @@ nora_i2c_status_t nora_i2c_irq_clear(
 
 /* inst_is_valid and get_regs are shared primitives defined in
  * nora_i2c_dspic33ak_common.c. */
+
+/* --------------------------------------------------------------------------
+ * Validate a 7-bit slave address
+ *
+ * The address is right-justified 7-bit: send_address_blocking() forms the wire
+ * byte as (addr7 << 1) | R/W, so bit 7 of the argument has nowhere to go.
+ * Rejecting it catches the ordinary mistake rather than an exotic one -- a
+ * caller passing the already-shifted 8-bit address a datasheet also prints
+ * (WM8904: 7-bit 0x1A, also documented as 0x34) would otherwise address
+ * 0x34 << 1 = 0x68, a legal byte for a different device, and get a silent wrong
+ * target or an ERR_NACK that reads as a wiring fault. nora_i2c_slave_init()
+ * already range-checks its own addr7 the same way.
+ * -------------------------------------------------------------------------- */
+static bool addr7_is_valid(uint8_t addr7)
+{
+    return (addr7 <= 0x7Fu);
+}
 
 /* --------------------------------------------------------------------------
  * Resolve registers and require initialized state

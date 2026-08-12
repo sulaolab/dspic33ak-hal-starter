@@ -73,6 +73,7 @@
       <logicalFolder name="f3" displayName="hal_gpio" projectFiles="true">
         <itemPath>../src/hal_gpio/nora_gpio_dspic33ak.c</itemPath>
         <itemPath>../src/hal_gpio/nora_gpio_event_dspic33ak.c</itemPath>
+        <itemPath>../src/hal_gpio/nora_gpio_table_dspic33ak.c</itemPath>
         <itemPath>../src/hal_gpio/nora_pps_dspic33ak.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f10" displayName="hal_i2c" projectFiles="true">

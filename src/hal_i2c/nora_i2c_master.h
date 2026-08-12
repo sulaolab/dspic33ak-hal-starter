@@ -25,6 +25,16 @@ extern "C" {
  *   - This header intentionally does not expose XC-DSC/DFP bitfield types.
  */
 
+/*
+ * bus_hz is a REQUEST, not a guarantee. It is converted to the LBRG/HBRG
+ * reload pair (equal halves, 50 % duty), so the achievable rates are quantized
+ * to Fcy / (2 * (BRG + 1)) and the nearest divider is used -- a request the
+ * divider cannot express lands on a neighbouring rate rather than being
+ * refused, and init() still answers NORA_I2C_OK. Only fcy_hz == 0 and
+ * bus_hz == 0 are rejected.
+ *
+ * If a target rate matters, measure SCL with a scope.
+ */
 typedef struct {
     uint32_t fcy_hz;
     uint32_t bus_hz;
@@ -43,7 +53,23 @@ typedef struct {
     uint32_t pending_timeout_ms;
 } nora_i2c_config_t;
 
-/* Normal blocking API ----------------------------------------------------- */
+/* Normal blocking API -----------------------------------------------------
+ *
+ * addr7 is the RIGHT-JUSTIFIED 7-bit address (WM8904 = 0x1A, not the 0x34 its
+ * datasheet also prints): the driver forms the wire byte as (addr7 << 1) | R/W.
+ * Anything above 0x7F is NORA_I2C_ERR_INVALID_ARG rather than a silently
+ * truncated address that would reach a different device.
+ *
+ * Buffer arguments are asymmetric, deliberately: a write may pass tx_len == 0
+ * with tx == NULL, which sends address + STOP only and is how a bus scan probes
+ * for a device, whereas a read of zero bytes has no meaning on the wire and
+ * rx == NULL or rx_len == 0 is NORA_I2C_ERR_INVALID_ARG.
+ *
+ * An instance that is live as a slave must be released with
+ * nora_i2c_slave_deinit() before nora_i2c_init(); otherwise init returns
+ * NORA_I2C_ERR_BUSY. Re-initializing an instance that is already a master is
+ * allowed.
+ */
 
 nora_i2c_status_t nora_i2c_init(
     nora_i2c_instance_t inst,

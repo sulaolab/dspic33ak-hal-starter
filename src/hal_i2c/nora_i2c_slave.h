@@ -51,7 +51,14 @@ typedef struct {
     void (*on_stop)(void);
 } nora_i2c_slave_config_t;
 
-/* Configure the instance as a slave at config->addr7 and enable it. */
+/*
+ * Configure the instance as a slave at config->addr7 (right-justified 7-bit;
+ * above 0x7F is NORA_I2C_ERR_INVALID_ARG) and enable it.
+ *
+ * An instance that is live as a master must be released with nora_i2c_deinit()
+ * first, otherwise this returns NORA_I2C_ERR_BUSY. Re-initializing an instance
+ * that is already a slave is allowed.
+ */
 nora_i2c_status_t nora_i2c_slave_init(
     nora_i2c_instance_t inst,
     const nora_i2c_slave_config_t *config);
