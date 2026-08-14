@@ -444,7 +444,9 @@ docs/
   hal_gpio_event_design.md
                          GPIO CN event usage and current limitations
   hal_udid.md           UDID helper notes
-  touch-addon.md        optional capacitive-touch add-on (QTM; not bundled)
+  touch-addon.md        capacitive touch: what the open implementation is
+  open-touch.md         using and tuning the touch pads (console module 'k')
+  open-touch-sync.md    keeping the vendored touch files in sync with sonora
 ```
 
 Design split: **Clock / GPIO / UART / SPI / I2C / CAN FD / Timer are the HALs**.
@@ -470,9 +472,18 @@ single identifier for both GPIO config and PPS routing on PPS-capable pins.
 
 ## Capacitive touch
 
-The Curiosity board's touch pads are supported via Microchip's QTM library, which
-is proprietary and tool-generated, so it is **not** part of this MIT-0 starter.
-See [docs/touch-addon.md](docs/touch-addon.md) for how to add it yourself.
+The Curiosity board's three touch pads work out of the box, with an open
+implementation written from the family reference manual and bench measurement --
+not Microchip's QTM library, which is proprietary and tool-generated and is not
+part of this MIT-0 starter. `src/hal_itc/` reads the Integrated Touch Controller;
+`src/hal_touch/` turns its counts into press/release and lets each pad learn its
+own threshold in use.
+
+Touch a pad and the console prints the event; `?ko` shows what detection is
+working with. See [docs/open-touch.md](docs/open-touch.md) for the command set and
+the tuning procedure, and [docs/touch-addon.md](docs/touch-addon.md) for
+provenance and for what this deliberately does not do. Set
+`HAL_STARTER_ENABLE_TOUCH` to 0 in `src/app/app_config.h` to remove it.
 
 ## License
 
