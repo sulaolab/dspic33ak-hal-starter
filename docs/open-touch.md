@@ -89,7 +89,7 @@ on a guess is a threshold that has to be moved again on the next board.
 
 ## Detail
 
-The full tuning manual — the parameter identification chapters, the measured basis
-for every constant, and the appendix recording what was tried and refuted — is
-maintained with the sonora firmware. Because the command names are the same, its
-procedures read true on this starter unchanged.
+[open-touch-tuning.md](open-touch-tuning.md) is the full tuning manual: the
+acquisition sweeps and what they are worth, the measured basis for every default,
+the per-pad learning rule clause by clause, the acceptance run, and a limits
+section saying what a product still has to do itself.

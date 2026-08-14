@@ -25,7 +25,8 @@ are supported here by code this project owns outright.
   and the header says so rather than implying coverage it does not have.
 
 Usage, the console commands, and the tuning procedure are in
-[open-touch.md](open-touch.md).
+[open-touch.md](open-touch.md); the full tuning manual is
+[open-touch-tuning.md](open-touch-tuning.md).
 
 ## Official reference source (for the board, not for the code)
 
