@@ -1,0 +1,1144 @@
+/* Provenance: written from DS70005591 ch.18 (ITC), the DFP SFR header, and
+ * measurements taken on this board. No vendor touch-library source, header or
+ * binary was consulted, and no vendor detection algorithm was inspected.
+ * See docs_internal/shared/open_touch/provenance_rules.md.
+ */
+
+#include <stdint.h>
+#include <stdbool.h>
+#include <stdio.h>
+
+#include "nora_touch.h"
+#include "nora_itc.h"
+
+/*===========================================================================
+ * nora_touch.c — raw ITC counts to key events.
+ *
+ * The whole file is one state machine per key plus a non-blocking scan pump.
+ * Every constant that could have been a magic number is either in
+ * nora_touch_default_config() with its bench justification, or named below.
+ *=========================================================================== */
+
+/* The clock feeding the ITC is a board fact and arrives in nora_touch_config_t;
+ * this layer owns no clock and now states none either. It is kept in s_clock_hz
+ * because nora_touch_set_acquisition() has to re-apply the list long after
+ * nora_touch_init() returned. */
+
+/* The reference settings from the bench sweeps (itc_hardware_reference.md §10):
+ * all three analog knobs saturate, so these sit just past their knees, and the
+ * signal-to-noise is bought with accumulation depth instead.
+ *
+ * Re-measured 2026-08-14 against the tracked noise tail rather than a six-sample
+ * spread: the analog knobs are flatter than chapter 1 first reported (the tail does
+ * not move at all across CVDCAP 0-7, charge 500-5000 ns or balance 250-4000 ns),
+ * and depth is worth less than it first reported -- ~3x from 2^4 to 2^8, not ~40x,
+ * because the absolute tail grows 5x while the count grows 16x. Still the only
+ * lever there is, which is why this stays at the maximum. */
+#define NORA_TOUCH_CHARGE_NS   (2000UL)
+#define NORA_TOUCH_BALANCE_NS  (1000UL)
+#define NORA_TOUCH_CVDCAP      (4u)
+#define NORA_TOUCH_ACC_COUNT   (8u)     /* 2^8: ~3x better SNR than 2^4       */
+
+#define NORA_TOUCH_LIST        (NORA_ITC_LIST_0)
+
+/* A scan at 2^8 over three records takes roughly 5 ms. This is not a timeout on
+ * that: it counts *process() calls* spent waiting, and only exists so a scan
+ * that never completes gets re-armed instead of wedging the key layer forever. */
+#define NORA_TOUCH_STALL_POLLS (20000UL)
+
+/* Scans thrown away after a (re)configuration, before the baseline is seeded.
+ *
+ * Not defensive padding — measured 2026-08-14. Seeding from the very first scan
+ * after *kc03 produced a baseline 24,000 counts away from where the count then
+ * settled, so all three keys came up PRESSED and stayed there. The cause is
+ * already in the manual as a fact about the peripheral (a record's first few
+ * repeats read low, which is why the count is not linear in accumulation depth);
+ * what was missing was the consequence, that the first scan after a reconfigure
+ * is not a measurement. At ~5 ms/scan this costs 40 ms once. */
+#define NORA_TOUCH_SETTLE_SCANS (8u)
+
+/* Scans whose median seeds the baseline, instead of taking the first one.
+ *
+ * The settle count above deals with the *systematic* error (early repeats read
+ * low). This deals with the occasional single result that reads near zero — see
+ * implausible_samples in the header. That one cannot be waited out, because it is
+ * not early, it is random, and if it lands on the seeding scan the baseline is
+ * ~80 % of full scale away from the count and the key is unusable until the next
+ * reconfigure. Three samples and a median is the cheapest thing that survives one
+ * of them; the guard below then catches the rest. */
+#define NORA_TOUCH_SEED_SAMPLES (3u)
+
+/* A sample is rejected when |delta| exceeds this fraction of the baseline's
+ * magnitude, expressed as a right shift: 2 means a quarter.
+ *
+ * Ratio and not an absolute count, because the count scales with accumulation
+ * depth and an absolute limit would reject every legitimate reading at 2^4 while
+ * accepting garbage at 2^8. A quarter leaves ~16x headroom over the largest touch
+ * measured (13,036 against 874,000, 1.5 %), so nothing a finger can do comes near
+ * it, and the failure it catches is at 80 %. */
+#define NORA_TOUCH_IMPLAUSIBLE_SHIFT (2u)
+
+/* Consecutive rejected samples after which the baseline, not the sample, is
+ * assumed to be the wrong one — and is thrown away and re-seeded.
+ *
+ * This is not belt-and-braces; without it the guard above is a worse bug than the
+ * one it fixes. Measured 2026-08-14: the bad readings do not arrive singly, they
+ * arrive in runs of dozens, so a run that straddles the seeding scans defeats the
+ * median and the baseline latches near zero. Every later sample is then a quarter
+ * of full scale away from it, so the guard rejects all of them, and the key is
+ * dead until the next reconfigure — observed as 2,445 rejections out of 2,473
+ * scans with the electrode working perfectly. A guard that can wedge a key needs
+ * a way out, and re-seeding is the only correct one: after this many rejections in
+ * a row the reference is what has to go.
+ *
+ * 16 at ~5 ms is 80 ms, which is short enough that no user notices and long enough
+ * that a real burst is ridden out rather than answered by re-seeding. */
+#define NORA_TOUCH_REJECT_RUN_MAX (16u)
+
+/* Trace depth. 64 scans is ~0.44 s at the measured ~146 scans/s, which covers a
+ * tap whole and the first half of a hold. Costs 64 x 2 bytes x KEY_MAX of RAM. */
+#define NORA_TOUCH_TRACE_LEN   (64u)
+
+/* Scans averaged to get a key's activity magnitude. Detection works on the mean
+ * of |delta| over this many scans, not on delta itself, and that is the single
+ * most important decision in this file -- see the block above
+ * nora_touch_default_config(). 4 scans is ~27 ms at the measured ~146 scans/s:
+ * long enough to average the alternation out, short enough that a 60 ms tap is
+ * still several windows long. */
+#define NORA_TOUCH_MAG_SCANS   (4u)
+
+/* Seeding samples must agree within baseline magnitude >> this, or the window is
+ * thrown away and re-collected. The median handles one bad sample among three; the
+ * agreement check is what handles two, which is the case actually measured. 5 is
+ * ~3 %, roughly 50x the noise tail and 2x the largest touch, so a finger resting
+ * on the pad during a reconfigure does not stall seeding forever. */
+#define NORA_TOUCH_SEED_AGREE_SHIFT (5u)
+
+/* --- per-pad learning (header: learn_presses) -------------------------------
+ *
+ * The pad teaches the library its own press amplitude, because measuring the
+ * quiet pad cannot: appendix A.6 tried exactly that -- thresholds from each pad's
+ * idle noise tail -- and it was measured wrong on hardware. Pad 1 had the
+ * *smallest* tail and needed the *highest* threshold, so the tail does not
+ * predict the press. Only a press predicts the press.
+ *
+ * That forces the shape of this code: two thresholds, not one.
+ *
+ *   candidate  low, learns, never fires an event
+ *   press      the one the app sees, moved once enough presses are known
+ *
+ * Without the candidate the design cannot start: a first touch below the press
+ * threshold produces no event *and* no sample, so the pad would never learn what
+ * it just failed to detect. With it, the first touch after a boot may well be
+ * missed as an event while still being recorded as evidence -- which is the
+ * accepted trade (operator decision 2026-08-14: a poor first touch is allowed).
+ *
+ * candidate = max(idle_ref * CAND_MULT, CAND_MIN), where idle_ref is a decaying
+ * maximum of the key's own quiet magnitude. Decaying, not all-time: the noise is
+ * low-frequency drift (A.7), so an all-time peak would ratchet up and never come
+ * back down, and the candidate would drift out from under the learner.
+ *
+ * An excursion must hold for LEARN_RUN scans before it counts, so a single bad
+ * conversion cannot manufacture a sample, and CAND_MIN keeps the candidate above
+ * the idle magnitudes actually measured.
+ *
+ * CAND_MIN is 600 and not the 400 first tried, and the difference was measured,
+ * not argued. 400 came from the A.7 trace, whose idle windows reached 317. Over a
+ * longer idle run on the same board the tracked extremes are wider -- |delta| to
+ * 895 and four-scan magnitudes past 470 -- so a 400 gate sits *inside* the noise:
+ * the learner recorded quiet-pad excursions as presses, the median came out small,
+ * the clamp pinned press at its floor, and the board then fired events with
+ * nobody touching it (observed 2026-08-14, "press, mag 402" on an untouched pad).
+ * The gate has to clear the noise the pad actually produces over minutes, not the
+ * noise it produced during one seventeen-scan trace. 600 does, and the lightest
+ * touch measured is 780, so nothing a finger does is excluded.
+ *
+ * LEARN_RUN is 3 for the same reason: a real touch spans dozens of scans, so
+ * asking for three consecutive windows costs a press nothing, while a noise
+ * excursion that clears 600 for one window rarely clears it for three.
+ *
+ * press = median(samples) * NUM/DEN, clamped into
+ * [idle_ref * FLOOR_MULT, the configured default].
+ *
+ *   sample  the second-smallest recorded press (the smallest, below four
+ *           samples), because the threshold must clear the weakest press rather
+ *           than the average one -- see nora_touch_learn_apply() for the run of
+ *           firm taps that showed a median cannot do this. Second-smallest and not
+ *           smallest so one unusually light excursion cannot drag the pad alone.
+ *   NUM/DEN 35/100, and the fraction is small because of what it multiplies. A
+ *           sample is the *peak* magnitude of the excursion, whereas the threshold
+ *           is crossed on the way up: measured 2026-08-14, the same taps peaked at
+ *           1,400..2,400 while firing at 826..1,520, so peaks run about 1.5x the
+ *           magnitude that has to be cleared. 45/100 was derived from A.7.1's
+ *           *fire-time* figures and then applied to peaks, which is a unit
+ *           mismatch, and it landed the three pads at 700/638/665 -- 28..40 % above
+ *           the hand-tuned 500. Against peaks, 35 % of the second-smallest gives
+ *           496/517/560, i.e. it converges onto the pair a bench operator chose,
+ *           while still leaving 1.65x to the lightest press measured.
+ *   ceiling the configured default is *known* to work on this hardware, so
+ *           learning is never allowed to make a pad less sensitive than the value
+ *           it shipped with. It may only move down, towards lighter touches.
+ *   floor   max(FLOOR_MIN, three times the pad's own quiet magnitude), because
+ *           below that the key presses itself. FLOOR_MIN is 500 -- the pair a
+ *           bench operator hand-tuned on this board -- and it is there because the
+ *           relative floor alone was not enough: with idle_ref at 74 the floor was
+ *           222, so the clamp did nothing to stop the noise-fed run above. This is
+ *           the one place idle noise still has a vote, and it is a veto, not the
+ *           rule.
+ */
+/* Presses before the pair is set for the first time -- a minimum, not a quota.
+ * The pair is recomputed on every press after this one, over a median of up to
+ * SAMPLES_MAX, so the estimate keeps improving without the threshold waiting for
+ * it.
+ *
+ * Three, not five, and the acceptance criterion is what fixes it: from a
+ * default-only power-up, ten taps per pad with no miss from the third tap
+ * onwards (operator, 2026-08-14). A one-shot rule that converged at the fifth
+ * press could not meet that -- taps three and four would still be judged by the
+ * shipped 700, which is exactly the threshold the light taps fall under. Three
+ * is the largest minimum that still has the pad learned before the first tap the
+ * criterion counts.
+ *
+ * The cost of deciding on three samples instead of five is bounded rather than
+ * argued: the ceiling in nora_touch_learn_apply() is the configured pair, so an
+ * unlucky median can only make the pad *more* sensitive than shipped, the floor
+ * keeps it above both 500 and three times its own idle magnitude, and the next press recomputes it
+ * from one more sample. */
+#define NORA_TOUCH_LEARN_PRESSES     (3u)
+#define NORA_TOUCH_LEARN_SAMPLES_MAX (8u)
+#define NORA_TOUCH_LEARN_CAND_MIN    (600)
+#define NORA_TOUCH_LEARN_CAND_MULT   (4)
+#define NORA_TOUCH_LEARN_RUN         (3u)
+#define NORA_TOUCH_LEARN_NUM         (35)
+#define NORA_TOUCH_LEARN_DEN         (100)
+#define NORA_TOUCH_LEARN_FLOOR_MIN  (500)
+#define NORA_TOUCH_LEARN_FLOOR_MULT  (3)
+
+/* Release as a fraction of press, so hysteresis scales with a learned-down pad
+ * instead of being lost by it. Learning it separately is what A.6 got wrong: a
+ * release level derived from idle noise landed inside the noise band. */
+#define NORA_TOUCH_LEARN_REL_NUM     (1)
+#define NORA_TOUCH_LEARN_REL_DEN     (2)
+
+/* How fast idle_ref follows the quiet magnitude, in both directions: 2^-6 of the
+ * gap per scan, so a few hundred milliseconds at ~146 scans/s -- fast enough to
+ * follow drift, far slower than a tap.
+ *
+ * Symmetric on purpose, and this is the correction of a bug that cost a whole
+ * hardware run (2026-08-14). The first version let idle_ref rise *instantly* --
+ * "quiet, so this is what quiet looks like" -- which is wrong, because mag is a
+ * 4-scan mean: the scan on which a touch first falls below the candidate still
+ * contains touch. Measured consequence: one tap pushed idle_ref to roughly 650,
+ * the candidate to ~1,950, and every following tap (mag 780..1,400) then sat
+ * *under* the candidate. Ten taps per pad produced zero samples while the press
+ * threshold, being a fixed 700, kept firing events perfectly -- so the log looked
+ * healthy and the learner was starved.
+ *
+ * A slow rise costs nothing that the floor does not already cover: if the real
+ * noise climbs, the candidate lags it for a few hundred milliseconds and a
+ * spurious sample may be taken, and such a sample can only ever push the
+ * threshold *down* to the floor of max(idle_ref*2, CAND_MIN). */
+#define NORA_TOUCH_IDLE_SHIFT        (6u)
+
+/* Consecutive scans below the candidate before idle_ref is allowed to move at
+ * all. NORA_TOUCH_MAG_SCANS would be the minimum that flushes the touch out of
+ * the averaging window; twice that leaves margin for the release tail without
+ * being long enough to miss drift. */
+#define NORA_TOUCH_IDLE_QUIET_RUN    (8u)
+
+typedef struct {
+    uint8_t  cvdan;
+    int32_t  baseline;
+    int32_t  raw;
+    bool     baseline_valid;
+    bool     pressed;
+    int32_t  press_threshold;   /* this key's own pair — seeded from the config  */
+    int32_t  release_threshold;
+    uint8_t  debounce;          /* consecutive scans agreeing with the crossing */
+    int32_t  mag_win[NORA_TOUCH_MAG_SCANS]; /* |delta| ring for the magnitude    */
+    int32_t  mag_sum;           /* sum of mag_win, so mag = mag_sum / MAG_SCANS  */
+    uint8_t  mag_i;
+    int32_t  mag;               /* the value the thresholds are compared against */
+    uint8_t  settle;            /* scans still to discard after a reconfigure   */
+    int32_t  seed[NORA_TOUCH_SEED_SAMPLES];
+    uint8_t  seed_n;            /* seeding samples collected so far             */
+    uint8_t  reject_run;        /* consecutive samples the guard has rejected   */
+    int32_t  idle_ref;          /* decaying max of mag while quiet              */
+    int32_t  learn_peak;        /* highest mag in the excursion under way        */
+    uint8_t  learn_run;         /* scans the excursion has held                 */
+    uint8_t  quiet_run;         /* scans below the candidate, for idle_ref       */
+    uint16_t presses;           /* press events since the last reset_peaks()     */
+    bool     learn_active;
+    int32_t  learn_mag[NORA_TOUCH_LEARN_SAMPLES_MAX]; /* press amplitudes seen  */
+    uint8_t  learn_n;
+    bool     cal_done;
+    bool     cal_pinned;        /* integrator set the pair; learning defers     */
+    int32_t  peak;              /* max delta since reset — see the header       */
+    int32_t  trough;            /* min delta since reset                        */
+    nora_touch_event_t event;
+} nora_touch_key_t;
+
+static nora_touch_key_t     s_keys[NORA_TOUCH_KEY_MAX];
+static nora_touch_config_t  s_cfg;
+/* The record set and the acquisition settings are kept here rather than being
+ * local to nora_touch_init(), because nora_touch_set_acquisition() has to re-init
+ * the same list with the same electrodes and only the timings changed. */
+static nora_itc_record_config_t s_records[NORA_TOUCH_KEY_MAX];
+static uint32_t             s_charge_ns  = NORA_TOUCH_CHARGE_NS;
+static uint32_t             s_balance_ns = NORA_TOUCH_BALANCE_NS;
+static uint8_t              s_cvdcap     = NORA_TOUCH_CVDCAP;
+static uint8_t              s_acc_count  = NORA_TOUCH_ACC_COUNT;
+static uint8_t              s_key_count;
+static uint32_t             s_clock_hz;   /* from nora_touch_config_t; board fact */
+static bool                 s_initialized;
+static bool                 s_scan_in_flight;
+static uint32_t             s_stall_polls;
+static uint32_t             s_scans;
+static uint32_t             s_rejected;
+static uint32_t             s_implausible;
+
+/* --- scan-resolution trace -------------------------------------------------
+ * Why this exists: the console's ?ko view is sampled by whoever polls it, which
+ * on a PC is a few times a second against ~146 scans a second. Two of the three
+ * questions that came up on hardware -- does a press persist for the consecutive
+ * scans the debounce asks for, and does one pad's touch move the other pads --
+ * cannot be answered at that rate. So the layer records the deltas itself, and
+ * the trigger is in firmware so that a human can touch whenever they like
+ * instead of inside a window somebody opened for them. */
+static int16_t  s_trace[NORA_TOUCH_KEY_MAX][NORA_TOUCH_TRACE_LEN];
+static uint16_t s_trace_n;
+static int32_t  s_trace_trigger;
+static bool     s_trace_armed;
+static bool     s_trace_running;
+
+void nora_touch_default_config( nora_touch_config_t *cfg )
+{
+    if( !cfg ) { return; }
+
+    /* These are magnitudes -- the mean of |delta| over NORA_TOUCH_MAG_SCANS -- and
+     * not signed deltas. The change came from a scan-resolution trace taken on
+     * 2026-08-14 (manual appendix A A.7): while a pad is touched its delta does not
+     * sit high, it *alternates*, swinging between -4,180 and +2,346 on consecutive
+     * scans (9 sign flips in 17 scans). A signed threshold with a two-scan debounce
+     * therefore almost never sees two agreeing scans, which is why pads answered
+     * only a hard flat press -- the signal was always there, the test was wrong.
+     *
+     * Rectified, the same trace separates by a factor of seven: the touched pad's
+     * 4-scan mean |delta| peaks at 1,929 while its own idle maximum is 274 and the
+     * two untouched pads stay at 317 and below. So 700 sits ~2.5x above the worst
+     * idle window and ~2.7x below a light touch, with the release at half of it for
+     * hysteresis. Both numbers have more margin than any signed pair could have. */
+    cfg->press_threshold   = 700;
+    cfg->release_threshold = 350;
+    cfg->debounce_scans         = 2u;
+    /* 4 scans (~20 ms) of sustained sub-threshold delta before a release, against
+     * the measured 11 ms dip that split taps in appendix A §A.1. */
+    cfg->release_debounce_scans = 4u;
+    cfg->baseline_shift    = 6u;
+    /* On by default, and it has to be: the shipped pair is a compromise across
+     * pads, and letting each pad move its own threshold down to its own measured
+     * press is the whole point. It costs learn_presses touches per pad per boot,
+     * and nothing is kept across a power cycle -- deliberately, so what the board
+     * does at boot never depends on what happened before it.
+     *
+     * This replaces the idle-noise calibration of A.6, which was measured wrong:
+     * the pad with the smallest noise tail needed the highest threshold. */
+    cfg->learn_presses     = NORA_TOUCH_LEARN_PRESSES;
+    cfg->verbose           = true;
+    /* No clock: the board states it. See nora_touch_config_t.clock_hz -- a default
+     * here would be right on one board and silently wrong on every other. */
+    cfg->clock_hz          = 0uL;
+}
+
+/* Start a scan, remembering whether it actually started. A refusal is counted
+ * rather than swallowed: "the keys stopped responding" has to be answerable
+ * without a debugger, and rejected_scans is that answer. */
+static void nora_touch_arm_scan( void )
+{
+    if( nora_itc_scan_start( NORA_TOUCH_LIST ) == NORA_ITC_OK )
+    {
+        s_scan_in_flight = true;
+        s_stall_polls    = 0u;
+    }
+    else
+    {
+        s_scan_in_flight = false;
+        s_rejected++;
+    }
+}
+
+/* Push the record set plus the current acquisition settings at the ITC. The one
+ * place nora_itc_init() is called from, so the console's sweep and the initial
+ * bring-up cannot drift apart in what they configure. */
+static nora_itc_status_t nora_touch_apply_list( void )
+{
+    nora_itc_list_config_t list;
+    nora_itc_status_t      status;
+    int32_t                discard[NORA_TOUCH_KEY_MAX];
+
+    list.clock_hz     = s_clock_hz;
+    list.records      = s_records;
+    list.record_count = s_key_count;
+    list.charge_ns    = s_charge_ns;
+    list.balance_ns   = s_balance_ns;
+    list.cvdcap       = s_cvdcap;
+    list.acc_count    = s_acc_count;
+    list.trigger      = NORA_ITC_TRIGGER_SOFTWARE;
+    list.period_us    = 0u;
+    list.mode         = NORA_ITC_SCAN_LIST_NO_IRQ;
+
+    status = nora_itc_init( NORA_TOUCH_LIST, &list );
+    if( status != NORA_ITC_OK )
+    {
+        return status;
+    }
+
+    /* Consume any completion left over from the previous configuration. ACCDONE
+     * survives an init and is only cleared by reading ITCRESx, so without this
+     * the next scan_complete() answers true immediately, the results read back
+     * belong to no scan at all, and the settle scans below get spent on them in
+     * microseconds instead of on real acquisitions. Measured 2026-08-14: the
+     * first reconfigure after boot seeded a baseline of -47,453 against a count
+     * of -874,000 and pinned two keys PRESSED.
+     * The read is expected to fail when nothing is pending; that is the normal
+     * case and not an error. */
+    (void)nora_itc_read_all( NORA_TOUCH_LIST, discard, NORA_TOUCH_KEY_MAX );
+    return NORA_ITC_OK;
+}
+
+bool nora_touch_init( const uint8_t *cvdan, uint8_t key_count,
+                      const nora_touch_config_t *cfg )
+{
+    uint8_t i;
+
+    s_initialized    = false;
+    s_scan_in_flight = false;
+
+    if( !cvdan || !cfg || (key_count == 0u) || (key_count > NORA_TOUCH_KEY_MAX) ||
+        (cfg->clock_hz == 0uL) )
+    {
+        return false;
+    }
+
+    s_cfg       = *cfg;
+    s_key_count = key_count;
+    s_clock_hz  = cfg->clock_hz;
+
+    for( i = 0u; i < key_count; i++ )
+    {
+        s_records[i].cvdan   = cvdan[i];
+        /* No hardware guard: GRDAn/GRDBn can only select an immediate neighbour
+         * in the CVDANx numbering, and this board's pads have no spare ones. */
+        s_records[i].guard_a = NORA_ITC_GUARD_NONE;
+        s_records[i].guard_b = NORA_ITC_GUARD_NONE;
+
+        s_keys[i].cvdan            = cvdan[i];
+        s_keys[i].baseline         = 0;
+        s_keys[i].raw              = 0;
+        s_keys[i].baseline_valid   = false;
+        s_keys[i].pressed          = false;
+        /* Every key starts on the global pair; a caller that knows this board's
+         * pads overrides individual ones afterwards. */
+        s_keys[i].press_threshold   = s_cfg.press_threshold;
+        s_keys[i].release_threshold = s_cfg.release_threshold;
+        s_keys[i].debounce         = 0u;
+        {
+            uint8_t m;
+            for( m = 0u; m < NORA_TOUCH_MAG_SCANS; m++ ) { s_keys[i].mag_win[m] = 0; }
+        }
+        s_keys[i].mag_sum          = 0;
+        s_keys[i].mag_i            = 0u;
+        s_keys[i].mag              = 0;
+        s_keys[i].settle           = NORA_TOUCH_SETTLE_SCANS;
+        s_keys[i].seed_n           = 0u;
+        s_keys[i].reject_run       = 0u;
+        s_keys[i].peak             = 0;
+        s_keys[i].trough           = 0;
+        s_keys[i].idle_ref         = 0;
+        s_keys[i].learn_peak       = 0;
+        s_keys[i].learn_run        = 0u;
+        s_keys[i].quiet_run        = 0u;
+        s_keys[i].presses          = 0u;
+        s_keys[i].learn_active     = false;
+        s_keys[i].learn_n          = 0u;
+        s_keys[i].cal_done         = false;
+        s_keys[i].cal_pinned       = false;
+        s_keys[i].event            = NORA_TOUCH_EVENT_NONE;
+    }
+
+    if( nora_touch_apply_list() != NORA_ITC_OK )
+    {
+        return false;
+    }
+
+    s_scans       = 0u;
+    s_rejected    = 0u;
+    s_implausible = 0u;
+    s_initialized = true;
+    nora_touch_arm_scan();
+    return true;
+}
+
+/* Median of what the pad has taught us, then the arithmetic and its two limits.
+ * Split out so the rule can be read without the state machine around it. */
+static void nora_touch_learn_apply( nora_touch_key_t *k )
+{
+    int32_t sorted[NORA_TOUCH_LEARN_SAMPLES_MAX];
+    int32_t press;
+    int32_t floor_thr;
+    uint8_t i;
+    uint8_t j;
+
+    k->cal_done = true;
+
+    /* An explicit pair outranks the measurement: an integrator who has called
+     * nora_touch_set_key_thresholds knows something about this pad that a handful
+     * of taps cannot tell, and silently overwriting it would make the setter look
+     * like it worked while doing nothing. */
+    if( k->cal_pinned )
+    {
+        return;
+    }
+
+    for( i = 0u; i < k->learn_n; i++ ) { sorted[i] = k->learn_mag[i]; }
+    /* Insertion sort: n is five, and the alternative is a qsort call plus a
+     * comparator for five numbers. */
+    for( i = 1u; i < k->learn_n; i++ )
+    {
+        int32_t v = sorted[i];
+        for( j = i; (j > 0u) && (sorted[j - 1u] > v); j-- ) { sorted[j] = sorted[j - 1u]; }
+        sorted[j] = v;
+    }
+
+    /* Low order statistic, not the median -- measured 2026-08-14. The median ties
+     * the threshold to how hard the operator happened to press: a run of ordinary
+     * firm taps gave medians past 1,556 on all three pads, so 45 % of them cleared
+     * the shipped 700 and the ceiling held, i.e. learning did nothing at all. What
+     * the threshold has to sit under is the *weakest* press the pad will see, and
+     * that is the bottom of the sample set, not its middle.
+     *
+     * Second-smallest rather than smallest once there are four samples, so a single
+     * unusually light or clipped excursion cannot drag the pad down on its own; with
+     * fewer samples there is nothing to spare and the smallest is used. */
+    i = ( k->learn_n >= 4u ) ? 1u : 0u;
+    press = (sorted[i] * NORA_TOUCH_LEARN_NUM) / NORA_TOUCH_LEARN_DEN;
+
+    floor_thr = k->idle_ref * NORA_TOUCH_LEARN_FLOOR_MULT;
+    if( floor_thr < NORA_TOUCH_LEARN_FLOOR_MIN ) { floor_thr = NORA_TOUCH_LEARN_FLOOR_MIN; }
+    if( press < floor_thr )             { press = floor_thr; }
+    /* Never less sensitive than the configured value, which is the one already
+     * proven on hardware. Learning may only move a pad towards lighter touches. */
+    if( press > s_cfg.press_threshold ) { press = s_cfg.press_threshold; }
+
+    k->press_threshold   = press;
+    k->release_threshold = (press * NORA_TOUCH_LEARN_REL_NUM) / NORA_TOUCH_LEARN_REL_DEN;
+
+    if( s_cfg.verbose )
+    {
+        printf( " NORA_TOUCH(CVDAN%u): learned from %u press(es), median %ld,"
+                " idle %ld -> press %ld release %ld\n",
+                (unsigned)k->cvdan, (unsigned)k->learn_n,
+                (long)sorted[k->learn_n / 2u], (long)k->idle_ref,
+                (long)k->press_threshold, (long)k->release_threshold );
+    }
+}
+
+/* Record one finished excursion, newest-wins once the buffer is full, and re-apply
+ * the rule on every press from the learn_presses'th onwards -- not once. A median
+ * of three is a usable threshold immediately and a median of six is a better one
+ * later, and there is no reason to make the pad wait for the second in order to
+ * have the first.
+ *
+ * Kept out of the detection path on purpose: this runs whether or not the
+ * excursion fired an event, which is the entire reason a first touch too light to
+ * detect is still not wasted. */
+static void nora_touch_learn_sample( nora_touch_key_t *k, int32_t magnitude )
+{
+    uint8_t i;
+
+    if( (s_cfg.learn_presses == 0u) || k->cal_pinned )
+    {
+        return;
+    }
+
+    if( k->learn_n >= NORA_TOUCH_LEARN_SAMPLES_MAX )
+    {
+        for( i = 1u; i < NORA_TOUCH_LEARN_SAMPLES_MAX; i++ )
+        {
+            k->learn_mag[i - 1u] = k->learn_mag[i];
+        }
+        k->learn_n = (uint8_t)(NORA_TOUCH_LEARN_SAMPLES_MAX - 1u);
+    }
+
+    k->learn_mag[k->learn_n] = magnitude;
+    k->learn_n++;
+
+    if( k->learn_n >= s_cfg.learn_presses )
+    {
+        nora_touch_learn_apply( k );
+    }
+}
+
+/* One key's state machine, given a fresh raw count. Split out because the
+ * press/release asymmetry is the whole substance of this file and reads badly
+ * inline in the scan pump. */
+static void nora_touch_update_key( nora_touch_key_t *k )
+{
+    int32_t delta;
+
+    /* Discard the settling scans first: a baseline seeded from them is wrong by
+     * more than a finger is worth, and every later delta is measured against it. */
+    if( k->settle != 0u )
+    {
+        k->settle--;
+        return;
+    }
+
+    /* The first readings define the baseline: there is nothing to average against
+     * yet, and seeding from zero would report a 874,000-count "touch". The median
+     * of three is taken rather than the first, so one near-zero result cannot
+     * become the reference every later delta is measured against. */
+    if( !k->baseline_valid )
+    {
+        k->seed[k->seed_n] = k->raw;
+        k->seed_n++;
+        if( k->seed_n < NORA_TOUCH_SEED_SAMPLES )
+        {
+            return;
+        }
+
+        /* Refuse a window whose samples disagree: with a run of bad readings the
+         * median is bad too, and a bad baseline is the one error here that cannot
+         * be recovered from by looking at later samples — every one of them then
+         * looks wrong instead. Cheaper to wait for three that agree. */
+        {
+            int32_t lo = k->seed[0], hi = k->seed[0], mag, i;
+
+            for( i = 1; i < (int32_t)NORA_TOUCH_SEED_SAMPLES; i++ )
+            {
+                if( k->seed[i] < lo ) { lo = k->seed[i]; }
+                if( k->seed[i] > hi ) { hi = k->seed[i]; }
+            }
+            mag = (lo < 0) ? -lo : lo;
+
+            if( (hi - lo) > (mag >> NORA_TOUCH_SEED_AGREE_SHIFT) )
+            {
+                k->seed_n = 0u;
+                s_implausible++;
+                return;
+            }
+        }
+
+        /* Median of exactly three, written out: a sort would be more general and
+         * less obviously correct at this size. */
+        if( ((k->seed[0] >= k->seed[1]) && (k->seed[0] <= k->seed[2])) ||
+            ((k->seed[0] <= k->seed[1]) && (k->seed[0] >= k->seed[2])) )
+        {
+            k->baseline = k->seed[0];
+        }
+        else if( ((k->seed[1] >= k->seed[0]) && (k->seed[1] <= k->seed[2])) ||
+                 ((k->seed[1] <= k->seed[0]) && (k->seed[1] >= k->seed[2])) )
+        {
+            k->baseline = k->seed[1];
+        }
+        else
+        {
+            k->baseline = k->seed[2];
+        }
+
+        k->baseline_valid = true;
+        return;
+    }
+
+    /* A touch makes the count less negative, so delta is positive on a press. */
+    delta = k->raw - k->baseline;
+
+    /* Reject what an electrode cannot have produced, before it reaches the
+     * baseline tracker, the peaks or the thresholds. Deliberately the first thing
+     * done with delta: a result of this size would otherwise fire a press, drag
+     * the baseline, and — worst of the three, because it is the one that outlives
+     * the event — leave a peak that a tuning sweep would read as signal. */
+    {
+        int32_t magnitude = (k->baseline < 0) ? -k->baseline : k->baseline;
+        int32_t limit     = magnitude >> NORA_TOUCH_IMPLAUSIBLE_SHIFT;
+
+        if( (limit > 0) && ((delta > limit) || (delta < -limit)) )
+        {
+            s_implausible++;
+            k->reject_run++;
+            if( k->reject_run >= NORA_TOUCH_REJECT_RUN_MAX )
+            {
+                /* The baseline is what is wrong. Drop it and re-seed; the key
+                 * releases on the way through, because a press cannot be held
+                 * across a reference it was never measured against. */
+                k->baseline_valid = false;
+                k->seed_n         = 0u;
+                k->reject_run     = 0u;
+                k->pressed        = false;
+                k->debounce       = 0u;
+            }
+            return;
+        }
+
+        k->reject_run = 0u;
+    }
+
+    /* Recorded before any threshold is consulted, on purpose: a touch that does
+     * not reach press_threshold produces no event and no log line, so this is the
+     * only place a near-miss leaves a trace. */
+    if( delta > k->peak )   { k->peak   = delta; }
+    if( delta < k->trough ) { k->trough = delta; }
+
+    /* Rectify, then average over a few scans: this is what the thresholds see.
+     * A touch shows up as activity of either sign (the trace in A.7), so the sign
+     * carries no information about whether a finger is there -- averaging |delta|
+     * keeps the alternation as signal instead of cancelling it, which is exactly
+     * what averaging delta itself would have done. */
+    {
+        int32_t magnitude_now = (delta < 0) ? -delta : delta;
+
+        k->mag_sum -= k->mag_win[k->mag_i];
+        k->mag_win[k->mag_i] = magnitude_now;
+        k->mag_sum += magnitude_now;
+        k->mag_i = (uint8_t)((k->mag_i + 1u) % NORA_TOUCH_MAG_SCANS);
+        k->mag = k->mag_sum / (int32_t)NORA_TOUCH_MAG_SCANS;
+    }
+
+    /* The learning path. It sits above the detection path and shares nothing with
+     * it but the magnitude, so what the app is told and what the pad is learning
+     * cannot disagree about the same scan. */
+    {
+        int32_t candidate = k->idle_ref * NORA_TOUCH_LEARN_CAND_MULT;
+
+        if( candidate < NORA_TOUCH_LEARN_CAND_MIN )
+        {
+            candidate = NORA_TOUCH_LEARN_CAND_MIN;
+        }
+
+        if( k->mag >= candidate )
+        {
+            if( k->mag > k->learn_peak ) { k->learn_peak = k->mag; }
+            if( k->learn_run < 0xFFu )   { k->learn_run++; }
+            if( k->learn_run >= NORA_TOUCH_LEARN_RUN ) { k->learn_active = true; }
+            k->quiet_run = 0u;
+        }
+        else
+        {
+            if( k->learn_active )
+            {
+                nora_touch_learn_sample( k, k->learn_peak );
+            }
+            k->learn_active = false;
+            k->learn_run    = 0u;
+            k->learn_peak   = 0;
+
+            if( k->quiet_run < 0xFFu ) { k->quiet_run++; }
+
+            /* Below the candidate is not yet quiet: mag is a mean over
+             * NORA_TOUCH_MAG_SCANS, so the first scans under the candidate still
+             * carry the touch that just ended. Wait for the window to flush, then
+             * follow the quiet magnitude slowly in *both* directions -- see
+             * NORA_TOUCH_IDLE_SHIFT for the run this cost. */
+            if( k->quiet_run >= NORA_TOUCH_IDLE_QUIET_RUN )
+            {
+                k->idle_ref += (k->mag - k->idle_ref) >> NORA_TOUCH_IDLE_SHIFT;
+            }
+        }
+    }
+
+    if( !k->pressed )
+    {
+        /* Track the baseline only while released — see the header. */
+        k->baseline += (k->raw - k->baseline) >> s_cfg.baseline_shift;
+
+        if( k->mag >= k->press_threshold )
+        {
+            k->debounce++;
+            if( k->debounce >= s_cfg.debounce_scans )
+            {
+                k->pressed          = true;
+                k->debounce         = 0u;
+                k->event            = NORA_TOUCH_EVENT_PRESSED;
+                if( k->presses < 0xFFFFu ) { k->presses++; }
+                if( s_cfg.verbose )
+                {
+                    printf( " NORA_TOUCH(CVDAN%u): press, mag %ld\n",
+                            (unsigned)k->cvdan, (long)k->mag );
+                }
+            }
+        }
+        else
+        {
+            k->debounce = 0u;
+        }
+        return;
+    }
+
+    if( k->mag < k->release_threshold )
+    {
+        k->debounce++;
+        if( k->debounce >= s_cfg.release_debounce_scans )
+        {
+            k->pressed  = false;
+            k->debounce = 0u;
+            k->event    = NORA_TOUCH_EVENT_RELEASED;
+            if( s_cfg.verbose )
+            {
+                printf( " NORA_TOUCH(CVDAN%u): release\n", (unsigned)k->cvdan );
+            }
+        }
+        return;
+    }
+
+    k->debounce = 0u;
+}
+
+void nora_touch_process( void )
+{
+    int32_t results[NORA_TOUCH_KEY_MAX];
+    uint8_t i;
+
+    if( !s_initialized ) { return; }
+
+    if( !s_scan_in_flight )
+    {
+        nora_touch_arm_scan();
+        return;
+    }
+
+    if( !nora_itc_scan_complete( NORA_TOUCH_LIST ) )
+    {
+        s_stall_polls++;
+        if( s_stall_polls >= NORA_TOUCH_STALL_POLLS )
+        {
+            s_rejected++;
+            s_scan_in_flight = false;
+        }
+        return;
+    }
+
+    s_scan_in_flight = false;
+
+    /* Reading the results is what clears ACCDONE, so a failed read must not be
+     * treated as data: the counts would be from the previous scan. */
+    if( nora_itc_read_all( NORA_TOUCH_LIST, results, NORA_TOUCH_KEY_MAX )
+        != NORA_ITC_OK )
+    {
+        s_rejected++;
+        nora_touch_arm_scan();
+        return;
+    }
+
+    s_scans++;
+
+    for( i = 0u; i < s_key_count; i++ )
+    {
+        s_keys[i].raw = results[i];
+        nora_touch_update_key( &s_keys[i] );
+    }
+
+    /* Trace after the keys are updated, so what is recorded is the same delta the
+     * thresholds saw -- not a separately computed one that could differ. Every key
+     * is stored on every traced scan, because "did the other pads move too" is
+     * only answerable if the other pads were recorded at the same instant. */
+    if( s_trace_armed && (s_trace_n < NORA_TOUCH_TRACE_LEN) )
+    {
+        if( !s_trace_running )
+        {
+            for( i = 0u; i < s_key_count; i++ )
+            {
+                int32_t d = s_keys[i].raw - s_keys[i].baseline;
+                if( s_keys[i].baseline_valid &&
+                    ((d > s_trace_trigger) || (d < -s_trace_trigger)) )
+                {
+                    s_trace_running = true;
+                    break;
+                }
+            }
+        }
+
+        if( s_trace_running )
+        {
+            for( i = 0u; i < s_key_count; i++ )
+            {
+                int32_t d = s_keys[i].raw - s_keys[i].baseline;
+                if( d >  32767 ) { d =  32767; }
+                if( d < -32768 ) { d = -32768; }
+                s_trace[i][s_trace_n] = (int16_t)d;
+            }
+            s_trace_n++;
+        }
+    }
+
+    nora_touch_arm_scan();
+}
+
+void nora_touch_trace_arm( int32_t trigger )
+{
+    s_trace_trigger = (trigger > 0) ? trigger : 800;
+    s_trace_n       = 0u;
+    s_trace_running = false;
+    s_trace_armed   = true;
+}
+
+bool nora_touch_trace_ready( void )
+{
+    return (s_trace_n >= NORA_TOUCH_TRACE_LEN);
+}
+
+uint16_t nora_touch_trace_count( void )
+{
+    return s_trace_n;
+}
+
+bool nora_touch_trace_get( uint8_t key, uint16_t index, int32_t *delta )
+{
+    if( !delta || (key >= s_key_count) || (index >= s_trace_n) ) { return false; }
+    *delta = (int32_t)s_trace[key][index];
+    return true;
+}
+
+nora_touch_event_t nora_touch_get_event( uint8_t key )
+{
+    nora_touch_event_t event;
+
+    if( !s_initialized || (key >= s_key_count) )
+    {
+        return NORA_TOUCH_EVENT_NONE;
+    }
+
+    event             = s_keys[key].event;
+    s_keys[key].event = NORA_TOUCH_EVENT_NONE;
+    return event;
+}
+
+bool nora_touch_is_pressed( uint8_t key )
+{
+    if( !s_initialized || (key >= s_key_count) ) { return false; }
+    return s_keys[key].pressed;
+}
+
+void nora_touch_get_status( nora_touch_status_t *status )
+{
+    if( !status ) { return; }
+
+    status->initialized    = s_initialized;
+    status->key_count      = s_key_count;
+    status->scans          = s_scans;
+    status->rejected_scans = s_rejected;
+    status->implausible_samples = s_implausible;
+}
+
+bool nora_touch_get_key_state( uint8_t key, nora_touch_key_state_t *state )
+{
+    if( !state || !s_initialized || (key >= s_key_count) ) { return false; }
+
+    state->cvdan    = s_keys[key].cvdan;
+    state->raw      = s_keys[key].raw;
+    state->baseline = s_keys[key].baseline;
+    state->delta    = s_keys[key].raw - s_keys[key].baseline;
+    state->mag      = s_keys[key].mag;
+    state->peak     = s_keys[key].peak;
+    state->trough   = s_keys[key].trough;
+    state->pressed  = s_keys[key].pressed;
+    state->presses  = s_keys[key].presses;
+    return true;
+}
+
+void nora_touch_reset_peaks( void )
+{
+    uint8_t i;
+
+    for( i = 0u; i < NORA_TOUCH_KEY_MAX; i++ )
+    {
+        s_keys[i].peak   = 0;
+        s_keys[i].trough = 0;
+        s_keys[i].presses = 0u;
+    }
+}
+
+bool nora_touch_set_thresholds( int32_t press_threshold, int32_t release_threshold )
+{
+    if( (press_threshold <= 0) || (release_threshold <= 0) ||
+        (release_threshold >= press_threshold) )
+    {
+        return false;
+    }
+
+    s_cfg.press_threshold   = press_threshold;
+    s_cfg.release_threshold = release_threshold;
+
+    /* Applied to every key, per-key overrides included: this is the console's
+     * sweep knob, and a sweep that silently left one pad on an old value would
+     * report the sweep's numbers while measuring something else. */
+    {
+        uint8_t i;
+        for( i = 0u; i < s_key_count; i++ )
+        {
+            s_keys[i].press_threshold   = press_threshold;
+            s_keys[i].release_threshold = release_threshold;
+            /* Pinned for the same reason: a calibration started later must not
+             * quietly move the numbers the sweep is measuring at. *kz re-arms
+             * calibration explicitly when that is what is wanted. */
+            s_keys[i].cal_pinned        = true;
+        }
+    }
+    return true;
+}
+
+bool nora_touch_set_key_thresholds( uint8_t key, int32_t press_threshold,
+                                    int32_t release_threshold )
+{
+    if( (key >= s_key_count) ||
+        (press_threshold <= 0) || (release_threshold <= 0) ||
+        (release_threshold >= press_threshold) )
+    {
+        return false;
+    }
+
+    s_keys[key].press_threshold   = press_threshold;
+    s_keys[key].release_threshold = release_threshold;
+    /* Pinned: calibration will measure this pad's tail and report it, but will not
+     * overwrite a pair someone asked for by name. */
+    s_keys[key].cal_pinned        = true;
+    return true;
+}
+
+bool nora_touch_calibrate( void )
+{
+    uint8_t i;
+
+    if( !s_initialized || (s_cfg.learn_presses == 0u) )
+    {
+        return false;
+    }
+
+    for( i = 0u; i < s_key_count; i++ )
+    {
+        /* Forget the samples *and* the thresholds they produced. The ceiling in
+         * nora_touch_learn_apply() is the configured value, so a relearn that
+         * started from an already-learned pair could only ever ratchet downwards;
+         * returning each key to the configured pair is what makes this a fresh
+         * start rather than a second descent. */
+        s_keys[i].learn_n      = 0u;
+        s_keys[i].learn_peak   = 0;
+        s_keys[i].learn_run    = 0u;
+        s_keys[i].quiet_run    = 0u;
+        s_keys[i].learn_active = false;
+        s_keys[i].cal_done     = false;
+        if( !s_keys[i].cal_pinned )
+        {
+            s_keys[i].press_threshold   = s_cfg.press_threshold;
+            s_keys[i].release_threshold = s_cfg.release_threshold;
+        }
+        /* A press cannot be held across a change of the thresholds that decided
+         * it, so the key releases on the way in. */
+        s_keys[i].pressed      = false;
+        s_keys[i].debounce     = 0u;
+        s_keys[i].event        = NORA_TOUCH_EVENT_NONE;
+    }
+
+    return true;
+}
+
+bool nora_touch_get_calibration( uint8_t key, nora_touch_calibration_t *out )
+{
+    if( (key >= s_key_count) || !out )
+    {
+        return false;
+    }
+
+    out->calibrated        = s_keys[key].cal_done;
+    out->pinned            = s_keys[key].cal_pinned;
+    out->idle_ref          = s_keys[key].idle_ref;
+    out->samples           = s_keys[key].learn_n;
+    out->needed            = s_cfg.learn_presses;
+    out->press_threshold   = s_keys[key].press_threshold;
+    out->release_threshold = s_keys[key].release_threshold;
+    return true;
+}
+
+void nora_touch_get_thresholds( int32_t *press_threshold, int32_t *release_threshold )
+{
+    if( press_threshold )   { *press_threshold   = s_cfg.press_threshold; }
+    if( release_threshold ) { *release_threshold = s_cfg.release_threshold; }
+}
+
+bool nora_touch_set_acquisition( uint32_t charge_ns, uint32_t balance_ns,
+                                 uint8_t cvdcap, uint8_t acc_count )
+{
+    uint32_t old_charge  = s_charge_ns;
+    uint32_t old_balance = s_balance_ns;
+    uint8_t  old_cvdcap  = s_cvdcap;
+    uint8_t  old_acc     = s_acc_count;
+    uint8_t  i;
+
+    if( !s_initialized ) { return false; }
+
+    s_charge_ns  = charge_ns;
+    s_balance_ns = balance_ns;
+    s_cvdcap     = cvdcap;
+    s_acc_count  = acc_count;
+
+    if( nora_touch_apply_list() != NORA_ITC_OK )
+    {
+        /* Put the working settings back and re-apply them, so a refused sweep
+         * point leaves the list acquiring with what the caller last saw rather
+         * than with a configuration the ITC rejected. */
+        s_charge_ns  = old_charge;
+        s_balance_ns = old_balance;
+        s_cvdcap     = old_cvdcap;
+        s_acc_count  = old_acc;
+        (void)nora_touch_apply_list();
+        s_scan_in_flight = false;
+        return false;
+    }
+
+    /* Everything measured so far belonged to the old settings: the baseline is an
+     * absolute count and the peaks are extremes of a delta against it, and the
+     * §1.1 corollary applies inside one image too. Invalidate rather than adjust
+     * -- the first scan after this re-seeds the baseline outright. */
+    for( i = 0u; i < s_key_count; i++ )
+    {
+        s_keys[i].baseline_valid  = false;
+        s_keys[i].pressed         = false;
+        s_keys[i].debounce        = 0u;
+        s_keys[i].settle          = NORA_TOUCH_SETTLE_SCANS;
+        s_keys[i].seed_n          = 0u;
+        s_keys[i].reject_run      = 0u;
+        s_keys[i].event           = NORA_TOUCH_EVENT_NONE;
+        s_keys[i].peak            = 0;
+        s_keys[i].trough          = 0;
+        /* A press amplitude scales with the acquisition settings just as the count
+         * does, so presses learned under the old timings say nothing about the new
+         * ones. Forget them and re-learn; unpinned keys go back to the configured
+         * pair, since a learned threshold can only move down from it. */
+        s_keys[i].learn_n         = 0u;
+        s_keys[i].learn_peak      = 0;
+        s_keys[i].learn_run       = 0u;
+        s_keys[i].quiet_run       = 0u;
+        s_keys[i].learn_active    = false;
+        s_keys[i].idle_ref        = 0;
+        s_keys[i].cal_done        = false;
+        if( !s_keys[i].cal_pinned )
+        {
+            s_keys[i].press_threshold   = s_cfg.press_threshold;
+            s_keys[i].release_threshold = s_cfg.release_threshold;
+        }
+    }
+
+    s_scans          = 0u;
+    s_rejected       = 0u;
+    s_implausible    = 0u;
+    s_scan_in_flight = false;
+    return true;
+}
+
+void nora_touch_get_acquisition( uint32_t *charge_ns, uint32_t *balance_ns,
+                                 uint8_t *cvdcap, uint8_t *acc_count )
+{
+    if( charge_ns )  { *charge_ns  = s_charge_ns; }
+    if( balance_ns ) { *balance_ns = s_balance_ns; }
+    if( cvdcap )     { *cvdcap     = s_cvdcap; }
+    if( acc_count )  { *acc_count  = s_acc_count; }
+}

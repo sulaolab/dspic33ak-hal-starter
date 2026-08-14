@@ -12,6 +12,7 @@
 #include "fw_uca.h"
 #include "led_sw.h"
 #include "app_config.h"
+#include "app_console_line.h"
 #if HAL_STARTER_ENABLE_TDM_SMOKE_DEMO
 #include "tdm_smoke.h"
 #endif
@@ -287,10 +288,20 @@ static void process_line(void)
         return;
     }
 
+    /* Module messages (<kind><module><name><hex pairs>) go to the module that owns
+     * the letter -- today only the open-touch bring-up console, module 'k'. Checked
+     * after the chain above so no existing command can be shadowed by it, and
+     * before the unknown-command reply so a mistyped ?ko still gets an answer from
+     * the module rather than a generic refusal. */
+    if (app_console_line_dispatch(s_line)) {
+        return;
+    }
+
     /* Spell out the *tq polarity here: the payload is the output enable, so 0000
      * silences and 0001 restores. Discovering that from the console beats having
      * to find it in the guide. */
     printf("Unknown command. Commands: *fua5, *fca5, ?fp,\r\n");
+    printf("  open touch (module 'k'): ?ko, ?kl, *kl, *kz, *kp/*kq, *kv/?kv\r\n");
     printf("  *tq0000 (periodic output off) / *tq0001 (on)\r\n");
 }
 

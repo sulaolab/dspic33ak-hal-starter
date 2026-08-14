@@ -37,6 +37,11 @@
 #include "fw_command.h"
 #include "fw_btseq.h"
 #include "fw_uca.h"
+#if HAL_STARTER_ENABLE_TOUCH
+#include "nora_touch.h"
+#include "board_pins.h"
+#endif
+
 #if HAL_STARTER_ENABLE_UART_ASYNC_SELFTEST
 #include "uart_async_selftest.h"
 #endif
@@ -409,6 +414,39 @@ int main(void)
     (void)tdm_neg_ok;   /* consumed only by the smoke gate; avoid unused-variable when smoke is off */
 #endif
 
+
+#if HAL_STARTER_ENABLE_TOUCH
+    /* ---- Open capacitive touch (ITC), module 'k' on the console ----
+     * The electrodes are board facts (board_pins.h) and the ITC clock is a clock-tree
+     * fact (CLKGEN6 is PLL1/1 = STARTER_CLOCK_SYS_HZ, set in starter_clock.c), so both
+     * are stated here rather than inside the HAL. Detection starts immediately at the
+     * shipped thresholds and each pad walks its own threshold down towards its own
+     * measured press as it is used; nothing is kept across a power cycle. The whole
+     * tuning procedure is driven from the console -- same commands as the sonora audio
+     * firmware, so docs/open-touch.md is the same document.
+     *
+     * A refusal is printed and the rest of the starter continues: a board with the
+     * touch pads unpopulated should still boot everything else. */
+    {
+        static const uint8_t touch_pads[BOARD_TOUCH_KEY_COUNT] = {
+            BOARD_TOUCH_CVDAN_KEY0, BOARD_TOUCH_CVDAN_KEY1, BOARD_TOUCH_CVDAN_KEY2
+        };
+        nora_touch_config_t touch_cfg;
+
+        nora_touch_default_config(&touch_cfg);
+        touch_cfg.clock_hz = STARTER_CLOCK_SYS_HZ;
+        if (nora_touch_init(touch_pads, BOARD_TOUCH_KEY_COUNT, &touch_cfg)) {
+            printf(" [TOUCH] open ITC touch started on CVDAN %u/%u/%u"
+                   " -- press/release printed; try ?ko\n",
+                   (unsigned)BOARD_TOUCH_CVDAN_KEY0,
+                   (unsigned)BOARD_TOUCH_CVDAN_KEY1,
+                   (unsigned)BOARD_TOUCH_CVDAN_KEY2);
+        } else {
+            printf(" [TOUCH] start FAILED (ITC refused the configuration)"
+                   " -- existing starter demos continue.\n");
+        }
+    }
+#endif
     /* Main loop: update the LED color from the pot continuously, toggle LED0 once
      * per second (visible liveness without a serial port), and on each 1 s beat
      * run ONE peripheral demo, alternating between them: even beats run the I2C
@@ -425,6 +463,13 @@ int main(void)
         /* Consume console input first. If *fua5 is present this call owns UART1
          * until XMODEM finishes and sets quiet before any demo can print. */
         fw_command_poll();
+#if HAL_STARTER_ENABLE_TOUCH
+        /* Non-blocking: polls the scan in flight and starts the next one. Outside the
+         * quiet boundary on purpose -- detection has to keep running while the console
+         * is being used to tune it, and it is the touch HAL that suppresses its own
+         * event printing, not this loop. */
+        nora_touch_process();
+#endif
         rgb_pot_update();
         if (!fw_command_quiet()) {
             /* This routine can print switch events, so it is part of the console

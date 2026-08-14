@@ -111,4 +111,21 @@
 #define BOARD_TDM_SPI1_SDO_RP     (101u)   /* SDO1 output -> RP101 (RG4)  DataOut  */
 #define BOARD_TDM_SPI1_SDI_RP     (106u)   /* SDI1 input  <- RP106 (RG9)  DataIn   */
 
+/* ---- Capacitive touch electrodes (ITC / CVD) ----
+ * The Curiosity Platform motherboard's three touch pads, named by their CVDANx
+ * analog-input number -- which is what the ITC selects, so it is the only pin
+ * identity the touch HAL can use. Board fact, stated here, exactly as the audio
+ * firmware states it at its own integration point: the HAL knows electrode
+ * numbers only as data passed to nora_touch_init().
+ *
+ * Order defines the key index the application sees: key 0 = TOUCH1, and so on.
+ * Verified on this board; there is no hardware guard electrode available because
+ * GRDAn/GRDBn can only select an immediate CVDANx neighbour and these pads have
+ * no spare ones.
+ */
+#define BOARD_TOUCH_KEY_COUNT     (3u)
+#define BOARD_TOUCH_CVDAN_KEY0    (1u)
+#define BOARD_TOUCH_CVDAN_KEY1    (8u)
+#define BOARD_TOUCH_CVDAN_KEY2    (10u)
+
 #endif /* BOARD_PINS_H */
