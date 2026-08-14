@@ -446,6 +446,7 @@ docs/
   hal_udid.md           UDID helper notes
   touch-addon.md        capacitive touch: what the open implementation is
   open-touch.md         using and tuning the touch pads (console module 'k')
+  open-touch-tuning.md  full tuning manual: sweeps, thresholds, learning, acceptance
   open-touch-sync.md    keeping the vendored touch files in sync with sonora
 ```
 
