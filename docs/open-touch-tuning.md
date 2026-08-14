@@ -3,7 +3,7 @@
 This is the procedure for making the three touch pads behave the way *your*
 product needs them to, and for telling the difference between a pad that is badly
 tuned and a pad that is badly built. It assumes the code as shipped
-([`src/hal_itc/`](../src/hal_itc/) + [`src/hal_touch/`](../src/hal_touch/)) and the
+([`src/hal_touch/`](../src/hal_touch/)) and the
 module `k` console commands listed in [open-touch.md](open-touch.md).
 
 Everything below was measured on a dsPIC33A Curiosity Platform Development Board

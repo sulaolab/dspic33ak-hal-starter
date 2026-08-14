@@ -13,9 +13,10 @@ not-for-production, and its terms do not fit an MIT-0 starter. None of that says
 anything about *touch*; it says something about *that library*. So the touch pads
 are supported here by code this project owns outright.
 
-- **What it is:** `src/hal_itc/` (the Integrated Touch Controller driver: pins,
-  timing, accumulation, raw counts) plus `src/hal_touch/` (baseline tracking,
-  detection with hysteresis and debounce, and per-pad threshold learning).
+- **What it is:** `src/hal_touch/`, in two layers behind one header: the
+  Integrated Touch Controller driver (pins, timing, accumulation, raw counts) and
+  the detection above it (baseline tracking, hysteresis and debounce, and per-pad
+  threshold learning).
 - **Where it came from:** written for the `dspic33ak-audio-dsp-sonora` firmware
   from DS70005591 ch.18 (ITC), the DFP SFR header, and measurements on this same
   board. No vendor touch-library source, header or binary was consulted, and no

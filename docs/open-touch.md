@@ -1,7 +1,7 @@
 # Open capacitive touch — using and tuning it
 
 The three touch pads of the Curiosity Platform motherboard are read by
-`src/hal_itc/` + `src/hal_touch/`, an open implementation this project owns
+`src/hal_touch/`, an open implementation this project owns
 outright. For where it came from and what it deliberately does not do, see
 [touch-addon.md](touch-addon.md).
 

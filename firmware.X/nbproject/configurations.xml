@@ -42,7 +42,7 @@
         <itemPath>../src/console/uart_irq.c</itemPath>
         <itemPath>../src/console/uart_stdio.c</itemPath>
         <itemPath>../src/console/app_console_line.c</itemPath>
-        <itemPath>../src/console/itc_console.c</itemPath>
+        <itemPath>../src/console/touch_console.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f23" displayName="fw_update" projectFiles="true">
         <itemPath>../src/fw_update/fw_btseq.c</itemPath>
@@ -86,7 +86,6 @@
       <logicalFolder name="f24" displayName="hal_nvm" projectFiles="true">
         <itemPath>../src/hal_nvm/nora_nvm_dspic33ak.c</itemPath>
         <itemPath>../src/hal_nvm/nora_nvm.h</itemPath>
-        <itemPath>../src/hal_itc/nora_itc_dspic33ak.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f9" displayName="hal_spi" projectFiles="true">
         <itemPath>../src/hal_spi/nora_spi_dspic33ak.c</itemPath>
@@ -103,6 +102,7 @@
       </logicalFolder>
       <logicalFolder name="f25" displayName="hal_touch" projectFiles="true">
         <itemPath>../src/hal_touch/nora_touch.c</itemPath>
+        <itemPath>../src/hal_touch/nora_itc_dspic33ak.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f5" displayName="hal_uart" projectFiles="true">
         <itemPath>../src/hal_uart/nora_uart_dspic33ak.c</itemPath>
@@ -181,7 +181,7 @@
         <property key="enable-unroll-loops" value="false"/>
         <property key="expand-pragma-config" value="false"/>
         <property key="extra-include-directories"
-                  value="..\src;..\src\clock;..\src\board_components;..\src\console;..\src\fw_update;..\src\hal_clock;..\src\hal_gpio;..\src\hal_uart;..\src\hal_spi;..\src\hal_i2c;..\src\hal_can;..\src\hal_timer;..\src\hal_udid;..\src\hal_nvm;..\src\app;..\src\hal_dma;..\src\hal_spi_i2s_tdm;..\src\hal_itc;..\src\hal_touch"/>
+                  value="..\src;..\src\clock;..\src\board_components;..\src\console;..\src\fw_update;..\src\hal_clock;..\src\hal_gpio;..\src\hal_uart;..\src\hal_spi;..\src\hal_i2c;..\src\hal_can;..\src\hal_timer;..\src\hal_udid;..\src\hal_nvm;..\src\app;..\src\hal_dma;..\src\hal_spi_i2s_tdm;..\src\hal_touch"/>
         <property key="isolate-each-function" value="false"/>
         <property key="keep-inline" value="false"/>
         <property key="oXC16gcc-cnsts-mauxflash" value="false"/>

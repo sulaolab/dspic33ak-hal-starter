@@ -102,7 +102,7 @@
  * Open capacitive touch (ITC) -- default ON.
  *
  * When 1: the three touch pads of the Curiosity Platform motherboard are scanned by
- * the open-source touch HAL (src/hal_itc + src/hal_touch), press/release is printed,
+ * the open-source touch HAL (src/hal_touch), press/release is printed,
  * and the bring-up console of module 'k' is answered (?ko, ?kl, *kz, ...). No vendor
  * touch library is linked and none is needed: this is a from-scratch implementation
  * with the same commands as the sonora firmware it was written in, so the tuning

@@ -20,8 +20,7 @@ Reusable HAL snapshots live in module-specific `src/hal_xxx/` folders:
 | `src/hal_timer/` | Timer1 tick and Timer2 high-resolution timer HAL. |
 | `src/hal_nvm/` | dsPIC33AK RTSP Flash page erase, word/row program, read-back, and active-bank primitives. |
 | `src/hal_dma/` | DMA HAL for low-level channel setup and small IRQ helpers used by higher-level drivers. |
-| `src/hal_itc/` | Integrated Touch Controller (CVD) driver: electrode records, acquisition timing, accumulation, raw signed counts. Stops at the counts deliberately. |
-| `src/hal_touch/` | Capacitive-touch detection above `hal_itc`: baseline tracking, magnitude thresholds with hysteresis and debounce, and per-pad threshold learning. |
+| `src/hal_touch/` | Capacitive touch, whole: the Integrated Touch Controller (CVD) driver -- electrode records, acquisition timing, accumulation, raw signed counts -- and the detection above it: baseline tracking, magnitude thresholds with hysteresis and debounce, and per-pad threshold learning. The driver has no public header of its own; the ITC is reachable only through `nora_touch_hw_*()`, so the peripheral has one owner. |
 | `src/hal_spi_i2s_tdm/` | SPI framed-mode I2S/TDM transport HAL candidate using DMA ping-pong buffers and a project-supplied config header. |
 
 These folders may contain generic, reusable HAL implementations. The distinction
@@ -50,7 +49,7 @@ Code that binds the HALs to this board stays outside the HAL folders:
 |---|---|
 | `src/board.c`, `src/board.h`, `src/board_pins.h` | Curiosity board pin names, PPS wiring, and board bring-up entry points. |
 | `src/board_components/` | Board-specific component helpers built on HALs or minimal device-level code, such as `led_sw.*`, `rgb_pot.*`, and `sst26_min.*`. |
-| `src/console/` | Starter UART integration glue: `printf()` retargeting, UART1 interrupt forwarding, the minimal `*fua5` / `*fca5` command state machine, and the vendored touch bring-up console (`itc_console.c`, module `k`) with the line-to-module-message adapter it needs (`app_console_line.c`). |
+| `src/console/` | Starter UART integration glue: `printf()` retargeting, UART1 interrupt forwarding, the minimal `*fua5` / `*fca5` command state machine, and the vendored touch bring-up console (`touch_console.c`, module `k`) with the line-to-module-message adapter it needs (`app_console_line.c`). |
 | `src/fw_update/` | Dual-partition policy above the NVM HAL: DBFW package + XMODEM-CRC receive, inactive-partition programming/read-back, UCA validation, and BTSEQ commit/reset. |
 | `src/clock/` | Starter-specific clock policy: FRC 8 MHz -> PLL1 200 MHz, application CLKGEN routing, and CLKGEN10 /10 for 20 MHz CAN FD FCAN. |
 | `src/app/` | Bus validation demos and application-level orchestration. |

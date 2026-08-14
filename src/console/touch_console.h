@@ -1,5 +1,5 @@
-#ifndef SONORA_ITC_CONSOLE_H
-#define SONORA_ITC_CONSOLE_H
+#ifndef SONORA_TOUCH_CONSOLE_H
+#define SONORA_TOUCH_CONSOLE_H
 
 /* Provenance: written from DS70005591 ch.18 (ITC) and the DFP SFR header only.
  * No vendor touch-library source, header or binary was consulted.
@@ -59,6 +59,6 @@
  *                               "a requested time does not fit its timer" and
  *                               the previous value is put back)
  */
-void itc_console_onmsg( app_console_msg_t* msg );
+void touch_console_onmsg( app_console_msg_t* msg );
 
-#endif /* SONORA_ITC_CONSOLE_H */
+#endif /* SONORA_TOUCH_CONSOLE_H */

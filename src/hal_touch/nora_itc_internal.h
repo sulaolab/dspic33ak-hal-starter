@@ -1,9 +1,24 @@
-#ifndef NORA_ITC_H
-#define NORA_ITC_H
+#ifndef NORA_ITC_INTERNAL_H
+#define NORA_ITC_INTERNAL_H
 
 /* Provenance: written from DS70005591 ch.18 (ITC) and the DFP SFR header only.
  * No vendor touch-library source, header or binary was consulted.
  * See docs_internal/shared/open_touch/provenance_rules.md.
+ */
+
+/* INTERNAL to the touch HAL. Not an application include file.
+ *
+ * A caller asks this HAL for touch, not for a CVD scan, so the acquisition
+ * peripheral is not part of the public interface: `nora_touch.h` is. Everything
+ * a bring-up console legitimately needs from the layer below — hardware state,
+ * a single scan, raw counts, a register dump, test injection — is reachable
+ * through the `nora_touch_hw_*` entry points in that header, which exist for
+ * exactly that reason. Include this file only from the touch HAL's own
+ * translation units.
+ *
+ * The name keeps `itc` deliberately: ITC is the data sheet's own name for the
+ * block (DS70005591 ch.18) and the SFR prefix, so a file with `itc` in its name
+ * is the layer that sits against the silicon.
  */
 
 #include <stdint.h>
@@ -254,4 +269,4 @@ nora_itc_status_t nora_itc_debug_reg(uint8_t index,
                                      const char **name,
                                      uint32_t *value);
 
-#endif /* NORA_ITC_H */
+#endif /* NORA_ITC_INTERNAL_H */

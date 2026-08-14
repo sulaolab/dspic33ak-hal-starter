@@ -476,9 +476,9 @@ single identifier for both GPIO config and PPS routing on PPS-capable pins.
 The Curiosity board's three touch pads work out of the box, with an open
 implementation written from the family reference manual and bench measurement --
 not Microchip's QTM library, which is proprietary and tool-generated and is not
-part of this MIT-0 starter. `src/hal_itc/` reads the Integrated Touch Controller;
-`src/hal_touch/` turns its counts into press/release and lets each pad learn its
-own threshold in use.
+part of this MIT-0 starter. `src/hal_touch/` reads the Integrated
+Touch Controller and turns its counts into press/release, letting each pad learn
+its own threshold in use.
 
 Touch a pad and the console prints the event; `?ko` shows what detection is
 working with. See [docs/open-touch.md](docs/open-touch.md) for the command set and

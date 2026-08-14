@@ -6,7 +6,7 @@
 #include <stdio.h>
 
 #include "app_console.h"
-#include "itc_console.h"
+#include "touch_console.h"
 
 static bool hex_nibble(char c, uint8_t *out)
 {
@@ -71,7 +71,7 @@ bool app_console_line_dispatch(const char *line)
     }
     msg.data_len = (uint16_t)(hex / 2u);
 
-    itc_console_onmsg(&msg);
+    touch_console_onmsg(&msg);
 
     /* The module reports its own outcome in msg.status; it has already printed
      * whatever the human needs to see, so the status is not echoed a second time

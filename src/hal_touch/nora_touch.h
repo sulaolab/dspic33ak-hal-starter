@@ -343,4 +343,90 @@ bool nora_touch_set_acquisition(uint32_t charge_ns, uint32_t balance_ns,
 void nora_touch_get_acquisition(uint32_t *charge_ns, uint32_t *balance_ns,
                                 uint8_t *cvdcap, uint8_t *acc_count);
 
+/* ===========================================================================
+ * Hardware diagnostics
+ *
+ * This HAL provides touch, and the acquisition peripheral underneath it is not
+ * part of its interface: there is one public header, this one, and the ITC
+ * layer is private to the backend. But bring-up genuinely needs to reach the
+ * hardware — the question "did the peripheral accept what I wrote" is the fork
+ * every touch problem so far has turned on, and an open library has to make its
+ * own correctness demonstrable rather than assert it. So the reaching is done
+ * through named entry points here, with the peripheral's types kept out:
+ * everything below is stated in plain integers and a text string.
+ *
+ * These are for a console and a bench procedure (the tuning manual drives all of
+ * them). An application that only wants presses never calls any of them.
+ * ======================================================================== */
+
+/* Fixed hardware limits, restated here so a caller can size arrays and range-
+ * check an operator's input without the peripheral's header. */
+#define NORA_TOUCH_HW_RECORD_MAX  (32u)  /* electrodes in one scan list         */
+#define NORA_TOUCH_HW_CVDCAP_MAX  (7u)   /* internal CVD capacitor code         */
+#define NORA_TOUCH_HW_ACC_MAX     (15u)  /* accumulation depth exponent, 2^n    */
+
+/* Why the last call answered false, as text. Owned by this HAL, valid until the
+ * next diagnostics call, never NULL. Text rather than a code on purpose: the
+ * only thing a console does with an acquisition-layer error is print it, and a
+ * public error enum would be the peripheral's vocabulary leaking out through a
+ * different door. */
+const char *nora_touch_hw_last_error(void);
+
+typedef struct {
+    bool     configured;
+    bool     hardware_ready;      /* the block reports itself ready            */
+    bool     list_busy;
+    uint8_t  next_record;         /* how far the current scan got              */
+    bool     test_inject_active;
+    uint8_t  record_count;
+    uint8_t  cvdcap;
+    uint8_t  acc_count;
+    uint32_t clock_hz;
+    /* What the requested times became in hardware counts, not what was asked.
+     * Tuning is done against what the hardware got, and a request that rounded
+     * to zero counts is the failure this exists to make visible. */
+    uint16_t charge_counts;
+    uint16_t balance_counts;
+    uint32_t scans_completed;
+    const char *last_status;      /* the acquisition layer's own last result   */
+} nora_touch_hw_info_t;
+
+bool nora_touch_hw_get_info(nora_touch_hw_info_t *info);
+
+/* Programme the acquisition list directly from a caller-supplied electrode set.
+ *
+ * For a board whose electrodes are being discovered — typed in from a schematic
+ * at the console — and for that case only. It takes the list away from the
+ * detection layer, so it refuses while nora_touch_init() is in force rather than
+ * becoming a second owner of one peripheral; use nora_touch_set_acquisition()
+ * to sweep a running list. The electrodes are CVDANx analog-input numbers as the
+ * board's pin table names them, not port bits.
+ *
+ * Software-triggered: nothing is measured until nora_touch_hw_scan_once(). */
+bool nora_touch_hw_configure(uint32_t clock_hz,
+                             const uint8_t *cvdan, uint8_t count,
+                             uint32_t charge_ns, uint32_t balance_ns,
+                             uint8_t cvdcap, uint8_t acc_count);
+
+/* One scan, started and polled to completion. The poll is bounded and the
+ * timeout is reported: a scan that never completes is the interesting failure,
+ * and blocking forever would hide it. Refuses while the detection layer owns
+ * the list, whose own scan it would race for the completion flags. */
+bool nora_touch_hw_scan_once(void);
+
+/* The raw signed per-electrode results of the last scan, in list order. Reading
+ * them consumes the completion state, so read the set you asked for. */
+bool nora_touch_hw_read_raw(int32_t *results, uint8_t results_len);
+
+/* Register readback, walked by index from 0 until it answers false. Answers
+ * "did the peripheral accept the configuration" — the question that separates a
+ * bad configuration from a dead electrode. The caller does the printing. */
+bool nora_touch_hw_debug_reg(uint8_t index, const char **name, uint32_t *value);
+
+/* Test injection: every conversion returns `value` instead of the converter's.
+ * This drives accumulation, the pseudo-differential arithmetic, sign and every
+ * layer above with known numbers, no electrode and no finger — the cheapest
+ * proof that the chain is right, which is why it is API and not a debug hook. */
+bool nora_touch_hw_test_inject(bool enable, uint16_t value);
+
 #endif /* NORA_TOUCH_H */

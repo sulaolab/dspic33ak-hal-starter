@@ -9,7 +9,7 @@
 #include <stdio.h>
 
 #include "nora_touch.h"
-#include "nora_itc.h"
+#include "nora_itc_internal.h"
 
 /*===========================================================================
  * nora_touch.c — raw ITC counts to key events.
@@ -1141,4 +1141,176 @@ void nora_touch_get_acquisition( uint32_t *charge_ns, uint32_t *balance_ns,
     if( balance_ns ) { *balance_ns = s_balance_ns; }
     if( cvdcap )     { *cvdcap     = s_cvdcap; }
     if( acc_count )  { *acc_count  = s_acc_count; }
+}
+
+/*===========================================================================
+ * Hardware diagnostics
+ *
+ * Thin translation, deliberately: these functions add no policy beyond one
+ * ownership check and one bounded poll. The point is that the acquisition
+ * layer's header stops at this file, not that this file reinterprets it -- so
+ * each entry point turns a nora_itc_* status into `false` plus text, and does
+ * nothing else the caller cannot see.
+ *=========================================================================== */
+
+#define NORA_TOUCH_HW_SCAN_POLLS   (200000UL)
+
+static nora_itc_record_config_t s_hw_records[NORA_TOUCH_HW_RECORD_MAX];
+static uint8_t                  s_hw_record_count;
+static bool                     s_hw_configured;
+static const char              *s_hw_error = "ok";
+
+static const char *nora_touch_hw_text( nora_itc_status_t status )
+{
+    switch( status )
+    {
+    case NORA_ITC_OK:                  return "ok";
+    case NORA_ITC_ERR_INVALID_ARG:     return "invalid argument";
+    case NORA_ITC_ERR_UNSUPPORTED:     return "unsupported";
+    case NORA_ITC_ERR_NOT_INITIALIZED: return "not initialized";
+    case NORA_ITC_ERR_ADC_NOT_READY:   return "ADC 5 never raised ADRDY";
+    case NORA_ITC_ERR_NOT_READY:       return "ITCSTAT.DRDY never came up";
+    case NORA_ITC_ERR_TIMING:          return "a requested time does not fit its timer";
+    case NORA_ITC_ERR_BUSY:            return "a scan is in flight";
+    case NORA_ITC_ERR_TIMEOUT:         return "timeout";
+    default:                           return "?";
+    }
+}
+
+/* Record the outcome and answer it in one place, so no path can return false
+ * while leaving the previous call's reason standing as the explanation. */
+static bool nora_touch_hw_result( nora_itc_status_t status )
+{
+    s_hw_error = nora_touch_hw_text( status );
+    return (status == NORA_ITC_OK);
+}
+
+static bool nora_touch_hw_fail( const char *why )
+{
+    s_hw_error = why;
+    return false;
+}
+
+const char *nora_touch_hw_last_error( void )
+{
+    return s_hw_error;
+}
+
+bool nora_touch_hw_get_info( nora_touch_hw_info_t *info )
+{
+    nora_itc_info_t   raw;
+    nora_itc_status_t status;
+
+    if( !info ) { return nora_touch_hw_fail( "invalid argument" ); }
+
+    status = nora_itc_get_info( NORA_TOUCH_LIST, &raw );
+    if( status != NORA_ITC_OK ) { return nora_touch_hw_result( status ); }
+
+    info->configured         = raw.initialized;
+    info->hardware_ready     = raw.hardware_ready;
+    info->list_busy          = raw.list_busy;
+    info->next_record        = raw.next_record;
+    info->test_inject_active = raw.test_inject_active;
+    info->record_count       = raw.record_count;
+    info->cvdcap             = raw.cvdcap;
+    info->acc_count          = raw.acc_count;
+    info->clock_hz           = raw.clock_hz;
+    info->charge_counts      = raw.charge_counts;
+    info->balance_counts     = raw.balance_counts;
+    info->scans_completed    = raw.scans_completed;
+    info->last_status        = nora_touch_hw_text( raw.last_status );
+
+    return nora_touch_hw_result( NORA_ITC_OK );
+}
+
+bool nora_touch_hw_configure( uint32_t clock_hz,
+                              const uint8_t *cvdan, uint8_t count,
+                              uint32_t charge_ns, uint32_t balance_ns,
+                              uint8_t cvdcap, uint8_t acc_count )
+{
+    nora_itc_list_config_t list;
+    uint8_t                i;
+
+    /* The refusal is the feature. Detection is scanning this list continuously,
+     * and reprogramming it from outside would take it over silently -- the same
+     * two-owners-on-one-peripheral failure that is invisible from the console. */
+    if( s_initialized )
+    {
+        return nora_touch_hw_fail( "the detection layer owns the list" );
+    }
+    if( !cvdan || (count == 0u) || (count > NORA_TOUCH_HW_RECORD_MAX) )
+    {
+        return nora_touch_hw_fail( "invalid argument" );
+    }
+
+    for( i = 0u; i < count; i++ )
+    {
+        s_hw_records[i].cvdan   = cvdan[i];
+        s_hw_records[i].guard_a = NORA_ITC_GUARD_NONE;
+        s_hw_records[i].guard_b = NORA_ITC_GUARD_NONE;
+    }
+    s_hw_record_count = count;
+
+    list.clock_hz     = clock_hz;
+    list.records      = s_hw_records;
+    list.record_count = count;
+    list.charge_ns    = charge_ns;
+    list.balance_ns   = balance_ns;
+    list.cvdcap       = cvdcap;
+    list.acc_count    = acc_count;
+    list.trigger      = NORA_ITC_TRIGGER_SOFTWARE;
+    list.period_us    = 0u;
+    list.mode         = NORA_ITC_SCAN_LIST_NO_IRQ;
+
+    s_hw_configured = (nora_itc_init( NORA_TOUCH_LIST, &list ) == NORA_ITC_OK);
+    return nora_touch_hw_result( s_hw_configured ? NORA_ITC_OK
+                                                 : NORA_ITC_ERR_TIMING );
+}
+
+bool nora_touch_hw_scan_once( void )
+{
+    nora_itc_status_t status;
+    uint32_t          polls = NORA_TOUCH_HW_SCAN_POLLS;
+
+    if( s_initialized )
+    {
+        return nora_touch_hw_fail( "the detection layer owns the list" );
+    }
+
+    status = nora_itc_scan_start( NORA_TOUCH_LIST );
+    if( status != NORA_ITC_OK ) { return nora_touch_hw_result( status ); }
+
+    while( !nora_itc_scan_complete( NORA_TOUCH_LIST ) && (polls != 0u) )
+    {
+        polls--;
+    }
+
+    return nora_touch_hw_result( (polls == 0u) ? NORA_ITC_ERR_TIMEOUT
+                                               : NORA_ITC_OK );
+}
+
+bool nora_touch_hw_read_raw( int32_t *results, uint8_t results_len )
+{
+    if( s_initialized )
+    {
+        return nora_touch_hw_fail( "the detection layer owns the list" );
+    }
+    if( !results || (results_len < s_hw_record_count) )
+    {
+        return nora_touch_hw_fail( "invalid argument" );
+    }
+
+    return nora_touch_hw_result( nora_itc_read_all( NORA_TOUCH_LIST, results,
+                                                    results_len ) );
+}
+
+bool nora_touch_hw_debug_reg( uint8_t index, const char **name, uint32_t *value )
+{
+    return nora_touch_hw_result( nora_itc_debug_reg( index, name, value ) );
+}
+
+bool nora_touch_hw_test_inject( bool enable, uint16_t value )
+{
+    return nora_touch_hw_result( enable ? nora_itc_test_inject_enable( value )
+                                        : nora_itc_test_inject_disable() );
 }
