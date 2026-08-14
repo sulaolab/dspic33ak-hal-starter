@@ -1,17 +1,37 @@
-# Capacitive touch add-on
+# Capacitive touch
 
-This starter intentionally does **not** include the capacitive-touch library.
+This starter **includes** capacitive touch, as an open implementation written from
+the family reference manual and bench measurement. It is not the QTouch library and
+does not depend on it.
 
-The Curiosity Platform Development Board has three on-board capacitive touch pads,
-but the touch implementation used by Microchip's demo is generated code plus
-prebuilt QTouch Modular Library objects. Those files are not part of this MIT-0
-starter.
+That is a change from earlier revisions of this page, which said the starter
+deliberately shipped no touch support. The reason it gave was correct at the time
+and is still correct about the library it was talking about: Microchip's touch
+support for this board is tool-generated code plus prebuilt QTouch Modular Library
+objects (`qtm_*.X.a`), the demo's own notes call it pre-release and
+not-for-production, and its terms do not fit an MIT-0 starter. None of that says
+anything about *touch*; it says something about *that library*. So the touch pads
+are supported here by code this project owns outright.
 
-## Official reference source
+- **What it is:** `src/hal_itc/` (the Integrated Touch Controller driver: pins,
+  timing, accumulation, raw counts) plus `src/hal_touch/` (baseline tracking,
+  detection with hysteresis and debounce, and per-pad threshold learning).
+- **Where it came from:** written for the `dspic33ak-audio-dsp-sonora` firmware
+  from DS70005591 ch.18 (ITC), the DFP SFR header, and measurements on this same
+  board. No vendor touch-library source, header or binary was consulted, and no
+  vendor detection algorithm was inspected. The file headers state this per file.
+- **What it does not do:** drift compensation over temperature and humidity,
+  wet-finger rejection, frequency hopping, scrollers. Those are the integrator's,
+  and the header says so rather than implying coverage it does not have.
 
-For reference, Microchip provides an official **Out of Box Demo** repository for
-the dsPIC33A Curiosity Platform Development Board. In this page, **OOB** means
-**Out of Box Demo**.
+Usage, the console commands, and the tuning procedure are in
+[open-touch.md](open-touch.md).
+
+## Official reference source (for the board, not for the code)
+
+Microchip's **Out of Box Demo** ("OOB") for the dsPIC33A Curiosity Platform
+Development Board remains the reference for what the board can do, and is worth
+having open when comparing behaviour:
 
 - EV74H48A Curiosity Platform Development Board:
   https://www.microchip.com/en-us/development-tool/EV74H48A
@@ -20,48 +40,17 @@ the dsPIC33A Curiosity Platform Development Board. In this page, **OOB** means
 - dsPIC33AK512MPS512 DIM OOB demo:
   https://github.com/microchip-pic-avr-examples/dspic33a-curiosity-oob/tree/main/dspic33ak512mps512_dim
 
-In that OOB demo, the touch-related generated files are located under:
+Its touch files live under `dspic33ak512mps512_dim/dspic33ak512mps512_dim.X/mcc_generated_files/touch/`
+(`touch.c`, `qtm_*.h`, `lib/qtm_*.X.a`, `datastreamer/`).
 
-```text
-dspic33ak512mps512_dim/
-  dspic33ak512mps512_dim.X/
-    mcc_generated_files/
-      touch/
-```
+**Those files were not used to write this, and should not be used to modify it.**
+Comparing the two firmwares' behaviour from the console — does a light tap
+register, how many taps in ten are missed — is legitimate and is how this
+implementation was scored. Reading the vendor headers or disassembling the
+prebuilt objects is not: it would put provenance the starter cannot license into
+a repository that is MIT-0 precisely so anyone can take it.
 
-The relevant files include:
+## Removing it
 
-```text
-mcc_generated_files/touch/touch.h
-mcc_generated_files/touch/src/touch.c
-mcc_generated_files/touch/include/qtm_*.h
-mcc_generated_files/touch/datastreamer/...
-mcc_generated_files/touch/lib/qtm_*.X.a
-```
-
-## Why this starter does not include it
-
-The Microchip OOB demo notes that the touch library in
-`mcc_generated_files/touch` contains pre-release code intended solely for
-demonstration purposes and is not intended for production use.
-
-For that reason, this starter keeps capacitive touch as an optional add-on
-instead of vendoring the generated touch library and prebuilt QTouch objects
-directly.
-
-Do not vendor or copy the touch library into this MIT-0 starter.
-
-## How to experiment with touch
-
-If you want to experiment with the three on-board touch pads:
-
-1. Open the Microchip OOB demo for `dspic33ak512mps512_dim`.
-2. Inspect the generated touch files under `mcc_generated_files/touch/`.
-3. Use the OOB demo as the reference for touch pad setup, QTouch library linkage,
-   and optional Data Visualizer streaming.
-4. Keep the imported touch code clearly separated from this starter's MIT-0 HAL
-   examples.
-
-This starter focuses on small, readable HAL bring-up code. Capacitive touch is
-left as a documented integration path because the official demo depends on
-generated files and Microchip-provided QTouch library objects.
+Set `HAL_STARTER_ENABLE_TOUCH` to 0 in `src/app/app_config.h`. The touch code
+drops out of the image and the three CVDAN inputs are free.

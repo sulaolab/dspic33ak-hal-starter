@@ -403,10 +403,11 @@ void itc_console_onmsg( app_console_msg_t* msg )
             if( !st.initialized )
             {
                 /* Not a failure to explain away: the detection layer only exists
-                 * in a build made with -Define ENA_OPEN_TOUCH_EXCLUSIVE=1, and
+                 * in a build with touch detection enabled (sonora:
+                 * -Define ENA_OPEN_TOUCH_EXCLUSIVE=1), and
                  * *ki reprogramming the same list is what would break it. */
                 printf( " ?ko: nora_touch not running"
-                        " (needs ENA_OPEN_TOUCH_EXCLUSIVE build)\n" );
+                        " (touch detection is not running in this build)\n" );
                 msg->status = APP_CONSOLE_ERR_OPERATION_FAILED;
                 break;
             }
@@ -496,7 +497,7 @@ void itc_console_onmsg( app_console_msg_t* msg )
             if( !st.initialized )
             {
                 printf( " ?kl: nora_touch not running"
-                        " (needs ENA_OPEN_TOUCH_EXCLUSIVE build)\n" );
+                        " (touch detection is not running in this build)\n" );
                 msg->status = APP_CONSOLE_ERR_OPERATION_FAILED;
                 break;
             }
@@ -548,7 +549,7 @@ void itc_console_onmsg( app_console_msg_t* msg )
             if( !st.initialized )
             {
                 printf( " ?kv: nora_touch not running"
-                        " (needs ENA_OPEN_TOUCH_EXCLUSIVE build)\n" );
+                        " (touch detection is not running in this build)\n" );
                 msg->status = APP_CONSOLE_ERR_OPERATION_FAILED;
                 break;
             }
@@ -607,7 +608,7 @@ void itc_console_onmsg( app_console_msg_t* msg )
             if( !st.initialized )
             {
                 printf( " *kz: nora_touch not running"
-                        " (needs ENA_OPEN_TOUCH_EXCLUSIVE build)\n" );
+                        " (touch detection is not running in this build)\n" );
                 msg->status = APP_CONSOLE_ERR_OPERATION_FAILED;
                 break;
             }
@@ -641,7 +642,7 @@ void itc_console_onmsg( app_console_msg_t* msg )
             if( !st.initialized )
             {
                 printf( " *k%c: nora_touch not running"
-                        " (needs ENA_OPEN_TOUCH_EXCLUSIVE build)\n",
+                        " (touch detection is not running in this build)\n",
                         (char)msg->name );
                 msg->status = APP_CONSOLE_ERR_OPERATION_FAILED;
                 break;
