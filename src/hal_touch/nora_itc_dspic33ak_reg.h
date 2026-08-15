@@ -2,7 +2,6 @@
  * header p33AK512MPS512.h only. No vendor touch-library source, header or
  * binary was consulted; the data sheet's Example 18-4 was read for facts about
  * the silicon and not transcribed.
- * See docs_internal/shared/open_touch/provenance_rules.md.
  */
 
 /* Integrated Touch Controller register layer -- dsPIC33AK backend.
@@ -52,8 +51,7 @@
 #define ITC_REC_HALF_MASK        (0x0000FFFFu)
 
 /* ---------------------------------------------------------------------------
- * Command-word encodings (DS70005591 §18.3 register tables; recorded in
- * docs_internal/shared/open_touch/itc_hardware_reference.md §8).
+ * Command-word encodings (DS70005591 §18.3 register tables).
  * ------------------------------------------------------------------------- */
 
 /* SDATACMDx */

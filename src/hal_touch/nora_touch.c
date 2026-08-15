@@ -1,7 +1,6 @@
 /* Provenance: written from DS70005591 ch.18 (ITC), the DFP SFR header, and
  * measurements taken on this board. No vendor touch-library source, header or
  * binary was consulted, and no vendor detection algorithm was inspected.
- * See docs_internal/shared/open_touch/provenance_rules.md.
  */
 
 #include <stdint.h>
@@ -24,7 +23,7 @@
  * because nora_touch_set_acquisition() has to re-apply the list long after
  * nora_touch_init() returned. */
 
-/* The reference settings from the bench sweeps (itc_hardware_reference.md §10):
+/* The reference settings from the bench sweeps:
  * all three analog knobs saturate, so these sit just past their knees, and the
  * signal-to-noise is bought with accumulation depth instead.
  *

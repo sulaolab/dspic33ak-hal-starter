@@ -3,7 +3,6 @@
 
 /* Provenance: written from DS70005591 ch.18 (ITC) and the DFP SFR header only.
  * No vendor touch-library source, header or binary was consulted.
- * See docs_internal/shared/open_touch/provenance_rules.md.
  */
 
 #include "app_console.h"

@@ -1,6 +1,5 @@
 /* Provenance: written from DS70005591 ch.18 (ITC) and the DFP SFR header only.
  * No vendor touch-library source, header or binary was consulted.
- * See docs_internal/shared/open_touch/provenance_rules.md.
  */
 
 #include <stdint.h>
@@ -31,8 +30,9 @@
  * manual's first chapter is a procedure driven entirely from here.
  *=========================================================================== */
 
-/* CLKGEN6 is raised to 200 MHz by sonora_clock_boot_init() and the ITC inherits
- * it; this HAL owns no clock, so the frequency is stated rather than queried.
+/* CLKGEN6 is raised to 200 MHz by the project's clock boot code and the ITC
+ * inherits it; this HAL owns no clock, so the frequency is stated rather than
+ * queried.
  * If the boot clock ever changes, this constant is the one place to follow it —
  * and getting it wrong shows up as wrong timer counts in "?ki", not as silence. */
 #define TOUCH_CONSOLE_CLOCK_HZ     (200000000UL)

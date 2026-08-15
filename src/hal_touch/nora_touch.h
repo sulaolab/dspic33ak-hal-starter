@@ -4,9 +4,9 @@
 /* Provenance: written from DS70005591 ch.18 (ITC), the DFP SFR header, and
  * measurements taken on this board. No vendor touch-library source, header or
  * binary was consulted, and no vendor detection algorithm was inspected: the
- * thresholds below are derived from the baseline/noise/delta figures recorded in
- * docs_internal/shared/open_touch/itc_hardware_reference.md §10.
- * See docs_internal/shared/open_touch/provenance_rules.md.
+ * thresholds below are derived from this board's own measured figures -- idle
+ * magnitude in the low hundreds against press peaks in the thousands -- and each
+ * one carries its measurement in the comment beside it.
  */
 
 #include <stdint.h>
@@ -160,7 +160,7 @@ void nora_touch_default_config(nora_touch_config_t *cfg);
 /* Configure the ITC for the given electrodes and arm detection.
  *
  * cvdan[] holds CVDANx analog-input numbers — a fact about the board, so the
- * caller supplies them; see itc_hardware_reference.md §9 for this board's map.
+ * caller supplies them from its own board layer.
  * Returns false if the ITC refused the configuration, in which case nothing is
  * armed and nora_touch_process() does nothing.
  */

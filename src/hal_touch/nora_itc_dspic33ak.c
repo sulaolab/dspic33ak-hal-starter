@@ -2,7 +2,6 @@
  * header p33AK512MPS512.h only. No vendor touch-library source, header or
  * binary was consulted; the data sheet's Example 18-4 was read for facts about
  * the silicon and not transcribed.
- * See docs_internal/shared/open_touch/provenance_rules.md.
  */
 
 #include "nora_itc_internal.h"
@@ -686,19 +685,19 @@ nora_itc_status_t nora_itc_read_all(nora_itc_list_t list, int32_t *results,
  * Interrupt
  *
  * One vector serves all three lists; ITCSTAT.INT0/1/2 says which fired. Writes
- * to IFS10 / IEC10 / IPC40 name one bit with a compile-time-constant value, as
- * docs_internal/shared/irq_register_atomicity_nora.md requires — the shared
+ * to IFS10 / IEC10 / IPC40 name one bit with a compile-time-constant value,
+ * because the compiler emits a single-bit atomic write only then: the shared
  * word carries other subsystems' bits, and a read-modify-write of the whole
  * word can drop one of theirs.
  *
- * The ISR is compiled only under NORA_ITC_USE_INTERRUPT, because the vendor
- * touch library that this subsystem exists to replace also defines
- * _ITCInterrupt: with both in the image the link fails on a duplicate symbol.
- * That is not a defect to work around — the two cannot share the ITC either,
- * so exactly one of them owns touch in any given build. Until the vendor path
- * is removed from the project, this HAL is brought up by polling
- * (nora_itc_scan_complete), which is what Phase 0 and the console want anyway,
- * and nora_itc_irq_enable() refuses instead of half-working.
+ * The ISR is compiled only under NORA_ITC_USE_INTERRUPT. This HAL is an
+ * independent implementation that drives the ITC directly, and any other code
+ * that defines _ITCInterrupt in the same image fails the link on a duplicate
+ * symbol; the two could not share the peripheral either, so exactly one owner
+ * of touch per build is the rule and not a workaround. Bring-up is by polling
+ * (nora_itc_scan_complete), which is what the console wants anyway, and
+ * nora_itc_irq_enable() refuses instead of half-working when the ISR is not
+ * compiled in.
  * ------------------------------------------------------------------------- */
 #if defined(NORA_ITC_USE_INTERRUPT)
 nora_itc_status_t nora_itc_irq_enable(nora_itc_list_t list, uint8_t priority,
@@ -861,7 +860,7 @@ typedef struct {
 
 static const itc_debug_reg_t itc_debug_regs[] = {
     /* The comparator hit bits are ADHIT, not "ITCHIT": the name this document
-     * set once used does not exist in the DFP header. See §7 of the reference. */
+     * set once used does not exist in the DFP header. */
     ITC_DBG(ITCCON1),   ITC_DBG(ITCCON2),   ITC_DBG(ITCSTAT),  ITC_DBG(ADHIT),
     ITC_DBG(ITCLS0CON), ITC_DBG(ITCLS0SEQ), ITC_DBG(ITCLS0TMR),
     ITC_DBG(ITCLS0STAT), ITC_DBG(ITCLS0MUL),

@@ -3,7 +3,6 @@
 
 /* Provenance: written from DS70005591 ch.18 (ITC) and the DFP SFR header only.
  * No vendor touch-library source, header or binary was consulted.
- * See docs_internal/shared/open_touch/provenance_rules.md.
  */
 
 /* INTERNAL to the touch HAL. Not an application include file.
@@ -38,14 +37,14 @@
  *   - CVD pseudo-differential acquisition only (the sole documented use)
  *   - raw signed per-record results; no baseline, filter, threshold or gesture
  *   - no pin ownership: the caller sets TRIS/LAT/ANSEL for its electrodes
- *   - no clock ownership: CLKGEN6 is raised by sonora_clock_boot_init() and the
- *     ITC inherits it (see docs_internal/shared/open_touch/
- *     itc_hardware_reference.md §3). This HAL only *reads* the frequency it was
- *     told, to convert microseconds into timer counts.
+ *   - no clock ownership: CLKGEN6 is raised by the project's clock boot code
+ *     before this HAL is initialised, and the ITC inherits it. This HAL only
+ *     *reads* the frequency it was told, to convert microseconds into timer
+ *     counts.
  *   - AK512 only. dsPIC33AK128MC106 has no ITCCON1; there is no fallback.
  *
- * Detection, filtering and the scroller belong in nora_touch (Phase 2+), which
- * consumes this.
+ * Detection and filtering belong in nora_touch, which consumes this. Gestures
+ * and scrollers belong above both -- see the Non-goals in nora_touch.h.
  */
 
 /* ---------------------------------------------------------------------------
@@ -125,7 +124,7 @@ typedef struct {
  * Times are given in nanoseconds and converted here against clock_hz, because
  * the data sheet's example assumes ~320 MHz and this board runs the ITC's ADC
  * clock at 200 MHz. A copied timer count would be wrong by 1.6x and would look
- * like a marginal electrode. See itc_hardware_reference.md §3.
+ * like a marginal electrode.
  * ------------------------------------------------------------------------- */
 typedef struct {
     /* Frequency of the clock feeding ADC 5 / the ITC, in hertz. Passed in, not
@@ -210,8 +209,9 @@ nora_itc_status_t nora_itc_read_all(nora_itc_list_t list,
  *
  * _ITCIF / _ITCIE / _ITCIP live in IFS10 / IEC10 / IPC40; there is no
  * _ITCxVECTOR-style name. Writes to those shared words must name one bit with a
- * compile-time-constant value — see docs_internal/shared/
- * irq_register_atomicity_nora.md — which is why enabling the interrupt is a
+ * compile-time-constant value: the compiler emits a single-bit atomic write
+ * only then, and otherwise read-modify-writes the whole shared word and can
+ * drop another subsystem's bit. That is why enabling the interrupt is a
  * function here and not the caller's register write.
  * ------------------------------------------------------------------------- */
 typedef void (*nora_itc_scan_callback_t)(nora_itc_list_t list);
