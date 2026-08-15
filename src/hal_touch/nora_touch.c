@@ -31,8 +31,25 @@
  * spread: the analog knobs are flatter than the first sweep reported (the tail does
  * not move at all across CVDCAP 0-7, charge 500-5000 ns or balance 250-4000 ns),
  * and depth is worth less than it first reported -- ~3x from 2^4 to 2^8, not ~40x,
- * because the absolute tail grows 5x while the count grows 16x. Still the only
- * lever there is, which is why this stays at the maximum. */
+ * because the absolute tail grows 5x while the count grows 16x.
+ *
+ * Two corrections, 2026-08-15 (itc_hardware_reference.md §12), because the text
+ * above was wrong in a way that closed off real levers:
+ *
+ *  - 2^8 is NOT "the maximum". ACCCNT[3:0] accepts up to 15, and ITCRESx is
+ *    32-bit signed, so 2^15 would not overflow either. What stops us is the scan
+ *    rate: 2^8 gives ~146 scan/s and every further doubling halves it, which
+ *    collides with the 4-scan moving average below and with the ~5-scan plateau
+ *    of a short real tap. The constraint is this file, not the hardware.
+ *
+ *  - The sweeps those flat results came from were taken under a measurement
+ *    condition the data sheet rules out: all three electrodes were floating when
+ *    idle (TRISx = 1, now fixed at the integration point in main.c, DS p.1487),
+ *    and the board's touch shield copper was being held statically High by
+ *    BOARD_DBG_PIN_E4 through R10 = 100 ohm. So "the knobs are flat" is a
+ *    statement about that broken condition, not about this hardware, and CVDCAP
+ *    is worth re-sweeping once both are corrected -- scored on
+ *    min(light-touch mag) - max(idle tail), not on the idle tail alone. */
 #define NORA_TOUCH_CHARGE_NS   (2000UL)
 #define NORA_TOUCH_BALANCE_NS  (1000UL)
 #define NORA_TOUCH_CVDCAP      (4u)
@@ -141,7 +158,19 @@
  * conversion cannot manufacture a sample, and CAND_MIN keeps the candidate above
  * the idle magnitudes actually measured.
  *
- * CAND_MIN is 600 and not the 400 first tried, and the difference was measured,
+ * CAND_MIN is 800, and it has been raised twice by the same argument: each time,
+ * a longer idle run produced magnitudes the previous number sat inside. 600 was
+ * set from a run of minutes; over a 3 h 7 min soak on 2026-08-15 two pads produced
+ * quiet-pad excursions of 679 and 711, i.e. 600 was again inside the noise, and
+ * the samples they fed the learner were noise recorded as presses. The lightest
+ * touch measured is 780 and real taps fire at 826..1,520, so 800 still excludes
+ * nothing a finger does -- but note that 780 says the headroom above is now thin,
+ * and a third rise would start refusing real presses. If a longer soak clears 800,
+ * the answer is no longer this constant: it is a slower idle_ref or a pad that
+ * needs its own pinned pair.
+ *
+ * The history, kept because the reasoning is what transfers: 600 was not the 400
+ * first tried, and that difference was measured,
  * not argued. 400 came from the A.7 trace, whose idle windows reached 317. Over a
  * longer idle run on the same board the tracked extremes are wider -- |delta| to
  * 895 and four-scan magnitudes past 470 -- so a 400 gate sits *inside* the noise:
@@ -149,15 +178,18 @@
  * the clamp pinned press at its floor, and the board then fired events with
  * nobody touching it (observed 2026-08-14, "press, mag 402" on an untouched pad).
  * The gate has to clear the noise the pad actually produces over minutes, not the
- * noise it produced during one seventeen-scan trace. 600 does, and the lightest
- * touch measured is 780, so nothing a finger does is excluded.
+ * noise it produced during one seventeen-scan trace -- and, as the soak above then
+ * showed, over hours and not merely minutes.
  *
  * LEARN_RUN is 3 for the same reason: a real touch spans dozens of scans, so
  * asking for three consecutive windows costs a press nothing, while a noise
- * excursion that clears 600 for one window rarely clears it for three.
+ * excursion that clears the candidate for one window rarely clears it for three.
+ * Rarely, and not never: the two 2026-08-15 excursions did clear three, which is
+ * the other half of why the constant had to move rather than the run length.
  *
- * press = median(samples) * NUM/DEN, clamped into
- * [idle_ref * FLOOR_MULT, the configured default].
+ * press = second-smallest(samples) * NUM/DEN, capped at the configured default and
+ * then raised to max(FLOOR_MIN, idle_ref * FLOOR_MULT) -- floor last, so the floor
+ * outranks the cap.
  *
  *   sample  the second-smallest recorded press (the smallest, below four
  *           samples), because the threshold must clear the weakest press rather
@@ -176,14 +208,16 @@
  *           while still leaving 1.65x to the lightest press measured.
  *   ceiling the configured default is *known* to work on this hardware, so
  *           learning is never allowed to make a pad less sensitive than the value
- *           it shipped with. It may only move down, towards lighter touches.
- *   floor   max(FLOOR_MIN, three times the pad's own quiet magnitude), because
- *           below that the key presses itself. FLOOR_MIN is 500 -- the pair a
- *           bench operator hand-tuned on this board -- and it is there because the
- *           relative floor alone was not enough: with idle_ref at 74 the floor was
- *           222, so the clamp did nothing to stop the noise-fed run above. This is
- *           the one place idle noise still has a vote, and it is a veto, not the
- *           rule.
+ *           it shipped with -- unless the floor says otherwise, which is why the
+ *           floor is applied after it.
+ *   floor   max(FLOOR_MIN, FLOOR_MULT times the pad's own quiet magnitude), because
+ *           below that the key presses itself. Both halves are needed and neither
+ *           is sufficient: an absolute clamp inside the noise band turns every
+ *           noise improvement into a loss of protection (measured: 500 gave 21
+ *           false presses in 30 min on an untouched board, and the *noisier*
+ *           configuration had had none), while a purely relative floor collapses
+ *           with idle_ref -- at idle 74 it was 222, which stopped nothing. See
+ *           FLOOR_MIN / FLOOR_MULT for the soak numbers behind 700 and 6.
  */
 /* Presses before the pair is set for the first time -- a minimum, not a quota.
  * The pair is recomputed on every press after this one, over a median of up to
@@ -200,18 +234,54 @@
  *
  * The cost of deciding on three samples instead of five is bounded rather than
  * argued: the ceiling in nora_touch_learn_apply() is the configured pair, so an
- * unlucky median can only make the pad *more* sensitive than shipped, the floor
- * keeps it above both 500 and three times its own idle magnitude, and the next press recomputes it
- * from one more sample. */
+ * unlucky median cannot take the pad under the floor -- FLOOR_MIN, or FLOOR_MULT
+ * times its own idle magnitude, whichever is larger -- and the next press
+ * recomputes it from one more sample. */
 #define NORA_TOUCH_LEARN_PRESSES     (3u)
 #define NORA_TOUCH_LEARN_SAMPLES_MAX (8u)
-#define NORA_TOUCH_LEARN_CAND_MIN    (600)
+#define NORA_TOUCH_LEARN_CAND_MIN    (800)
 #define NORA_TOUCH_LEARN_CAND_MULT   (4)
 #define NORA_TOUCH_LEARN_RUN         (3u)
 #define NORA_TOUCH_LEARN_NUM         (35)
 #define NORA_TOUCH_LEARN_DEN         (100)
-#define NORA_TOUCH_LEARN_FLOOR_MIN  (500)
-#define NORA_TOUCH_LEARN_FLOOR_MULT  (3)
+/* The floor: max(FLOOR_MIN, idle_ref * FLOOR_MULT), and both halves moved on
+ * 2026-08-15 because 500/3 was measured to invert -- improving the noise floor
+ * *removed* protection. The mechanism, from the 30-minute soaks:
+ *
+ *   CVDAN10 was quiet in the 20:29 baseline *because its noise was high*.
+ *   idle_ref 236 * 3 = 708 beat FLOOR_MIN, so its threshold was the shipped 700
+ *   and it saw zero false presses. Grounding the idle electrodes (DS70005591C
+ *   p.1487) then cut idle_ref to 123, 369 fell under 500, the absolute clamp won,
+ *   and the threshold landed *inside* the pad's own noise band (measured 502..596)
+ *   -- fifteen false presses in thirty minutes on an untouched board, where the
+ *   noisier configuration had had none.
+ *
+ * So an absolute clamp that sits inside the noise band turns every noise
+ * improvement into a loss of protection. 700 is the smallest value the hardware
+ * has been measured clean at: 700 gave 0 events in 31 min, 900 gave 0 in 34 min
+ * (08-14) and 31 min (08-15), 500 gave 21 in 30 min. It is also still under every
+ * deliberate tap -- the lightest measured was 1,085 after the RE4 shield fix and
+ * 528 before it, and the only taps that ever came under 700 were the 4th/5th of a
+ * fast six-tap burst, i.e. partial contact.
+ *
+ * MULT is 6 rather than 3 so the relative half keeps a vote at the noise levels
+ * this board actually shows: with FLOOR_MIN at 700, a MULT of 3 would need
+ * idle_ref past 233 to matter at all, which is above anything measured since the
+ * electrodes were grounded (66..146). Six puts the crossover at 117, so a pad
+ * whose noise creeps up is still protected above the flat 700 -- which is exactly
+ * what saved CVDAN10 in the baseline, and the capability this pair is meant to
+ * preserve rather than replace.
+ *
+ * Consequence, deliberately accepted: with FLOOR_MIN equal to the shipped default
+ * (700), learning can no longer make a pad *more* sensitive than shipped -- the
+ * floor and the ceiling meet. Downward learning below 700 was measured unsafe on
+ * this hardware (it is what produced the 21 events), so this is the point rather
+ * than a side effect; what learning still does is scale release with press, raise
+ * a noisy pad above 700, and clear the cold gate. An integrator who needs a
+ * lighter pad than 700 sets it explicitly -- nora_touch_set_key_thresholds pins
+ * the pair and outranks the learner. */
+#define NORA_TOUCH_LEARN_FLOOR_MIN  (700)
+#define NORA_TOUCH_LEARN_FLOOR_MULT  (6)
 
 /* Release as a fraction of press, so hysteresis scales with a learned-down pad
  * instead of being lost by it. Learning it separately is what A.6 got wrong: a
@@ -271,6 +341,11 @@ typedef struct {
     int32_t  learn_mag[NORA_TOUCH_LEARN_SAMPLES_MAX]; /* press amplitudes seen  */
     uint8_t  learn_n;
     bool     cal_done;
+    /* True until this pad has reported a press of its own -- the cold gate. Stored
+     * rather than derived from learn_n, and the difference was measured: see the
+     * cold-gate block below for the 2026-08-15 soak in which learn_n reached 1 on
+     * noise alone, twice, with nobody in the room. */
+    bool     cold_gate;
     bool     cal_pinned;        /* integrator set the pair; learning defers     */
     int32_t  peak;              /* max delta since reset — see the header       */
     int32_t  trough;            /* min delta since reset                        */
@@ -343,6 +418,13 @@ void nora_touch_default_config( nora_touch_config_t *cfg )
      * This replaces the idle-noise calibration of A.6, which was measured wrong:
      * the pad with the smallest noise tail needed the highest threshold. */
     cfg->learn_presses     = NORA_TOUCH_LEARN_PRESSES;
+    /* Cold gate -- see nora_touch_config_t for the measurement it comes from. 900
+     * clears the 705 an untouched pad reached on 2026-08-15 and sits under the
+     * 826..1,520 the same board's real taps fired at; 4 scans (~27 ms) is the
+     * longest press debounce that a short tap's ~5-scan plateau still survives,
+     * and is well inside the ~50 ms a human reads as instant. */
+    cfg->cold_press_threshold   = 900;
+    cfg->cold_debounce_scans    = 4u;
     cfg->verbose           = true;
     /* No clock: the board states it. See nora_touch_config_t.clock_hz -- a default
      * here would be right on one board and silently wrong on every other. */
@@ -461,6 +543,7 @@ bool nora_touch_init( const uint8_t *cvdan, uint8_t key_count,
         s_keys[i].learn_active     = false;
         s_keys[i].learn_n          = 0u;
         s_keys[i].cal_done         = false;
+        s_keys[i].cold_gate        = true;
         s_keys[i].cal_pinned       = false;
         s_keys[i].event            = NORA_TOUCH_EVENT_NONE;
     }
@@ -476,6 +559,59 @@ bool nora_touch_init( const uint8_t *cvdan, uint8_t key_count,
     s_initialized = true;
     nora_touch_arm_scan();
     return true;
+}
+
+/* --- cold gate --------------------------------------------------------------
+ * The gate lifts on the pad's first press *event*, and this was first written the
+ * other way -- lifting on the first recorded learn sample, on the assumption that
+ * a sample means a finger. Measured 2026-08-15, it does not: over a 3 h 7 min soak
+ * with nobody in the room, two of the three pads recorded a sample and lifted
+ * their own gate (CVDAN10 at mag 679 after 7 min, CVDAN8 at mag 711 after 15 min)
+ * while the event side, correctly, reported nothing at all. The learning path is
+ * deliberately more permissive than detection -- that is what lets a pad learn
+ * from a touch too light to report -- so it is exactly the wrong thing to ask
+ * "was that a human". Only an event answers that, so only an event lifts the gate.
+ *
+ * Hence a stored flag rather than a function of learn_n: the two now mean
+ * different things, and the flag is cleared at the one place a press is reported.
+ * It has to be re-armed everywhere the learning state is cleared, and it is --
+ * init, nora_touch_calibrate() and nora_touch_set_acquisition().
+ *
+ * Independent of learn_presses on purpose: with learning switched off the shipped
+ * pair never moves, and a pad that has never been touched should still be the
+ * stricter of the two. The gate is about whether a human has arrived, not about
+ * calibration.
+ *
+ * Both accessors are one-sided: the cold pair may only make a pad stricter. A
+ * configuration whose cold values are the weaker ones is a mistake that would
+ * raise sensitivity before anything is known about the pad, which is the opposite
+ * of what the gate is for, so it is ignored rather than obeyed.
+ */
+static bool nora_touch_key_is_cold( const nora_touch_key_t *k )
+{
+    return ( (s_cfg.cold_press_threshold > 0) &&
+             !k->cal_pinned &&
+             k->cold_gate );
+}
+
+static int32_t nora_touch_key_press_threshold( const nora_touch_key_t *k )
+{
+    if( nora_touch_key_is_cold( k ) &&
+        (s_cfg.cold_press_threshold > k->press_threshold) )
+    {
+        return s_cfg.cold_press_threshold;
+    }
+    return k->press_threshold;
+}
+
+static uint8_t nora_touch_key_debounce_scans( const nora_touch_key_t *k )
+{
+    if( nora_touch_key_is_cold( k ) &&
+        (s_cfg.cold_debounce_scans > s_cfg.debounce_scans) )
+    {
+        return s_cfg.cold_debounce_scans;
+    }
+    return s_cfg.debounce_scans;
 }
 
 /* Median of what the pad has taught us, then the arithmetic and its two limits.
@@ -524,10 +660,21 @@ static void nora_touch_learn_apply( nora_touch_key_t *k )
 
     floor_thr = k->idle_ref * NORA_TOUCH_LEARN_FLOOR_MULT;
     if( floor_thr < NORA_TOUCH_LEARN_FLOOR_MIN ) { floor_thr = NORA_TOUCH_LEARN_FLOOR_MIN; }
-    if( press < floor_thr )             { press = floor_thr; }
-    /* Never less sensitive than the configured value, which is the one already
-     * proven on hardware. Learning may only move a pad towards lighter touches. */
+
+    /* Ceiling first, floor last, and the order is the whole point: the floor is a
+     * safety limit and the ceiling is a preference, so the floor has to outrank it.
+     * Applied the other way round -- floor then ceiling, as this did until
+     * 2026-08-15 -- the configured default silently undoes the floor, and
+     * idle_ref * MULT can then never raise a threshold above the shipped value no
+     * matter how noisy the pad gets. That is what made the baseline's protection of
+     * CVDAN10 (idle 236 * 3 = 708, clamped straight back to 700) look like it was
+     * working when it had no headroom at all.
+     *
+     * Ceiling: never less sensitive than the configured value, which is the one
+     * already proven on hardware -- except where the pad's own noise says that
+     * value would press itself. */
     if( press > s_cfg.press_threshold ) { press = s_cfg.press_threshold; }
+    if( press < floor_thr )             { press = floor_thr; }
 
     k->press_threshold   = press;
     k->release_threshold = (press * NORA_TOUCH_LEARN_REL_NUM) / NORA_TOUCH_LEARN_REL_DEN;
@@ -750,19 +897,48 @@ static void nora_touch_update_key( nora_touch_key_t *k )
         /* Track the baseline only while released — see the header. */
         k->baseline += (k->raw - k->baseline) >> s_cfg.baseline_shift;
 
-        if( k->mag >= k->press_threshold )
+        /* Through the accessors, not the stored pair: until this pad has recorded
+         * a press it detects on the cold gate. Only the press side is gated -- a
+         * press already reported must be able to end at its own release threshold,
+         * whatever decided it. */
+        if( k->mag >= nora_touch_key_press_threshold( k ) )
         {
             k->debounce++;
-            if( k->debounce >= s_cfg.debounce_scans )
+            if( k->debounce >= nora_touch_key_debounce_scans( k ) )
             {
+                /* Read the pair that decided this press before the gate is
+                 * cleared, so the line below reports what was actually in force
+                 * rather than what will be in force from the next scan on. */
+                int32_t was_thr  = nora_touch_key_press_threshold( k );
+                uint8_t was_db   = nora_touch_key_debounce_scans( k );
+                bool    was_cold = nora_touch_key_is_cold( k );
+
                 k->pressed          = true;
                 k->debounce         = 0u;
                 k->event            = NORA_TOUCH_EVENT_PRESSED;
                 if( k->presses < 0xFFFFu ) { k->presses++; }
+                /* A reported press is the only evidence that a human is here, so
+                 * it is the only thing that lifts the gate. Cleared before the
+                 * printf so an early return could not leave the pad cold with the
+                 * log already claiming otherwise. */
+                k->cold_gate        = false;
                 if( s_cfg.verbose )
                 {
                     printf( " NORA_TOUCH(CVDAN%u): press, mag %ld\n",
                             (unsigned)k->cvdan, (long)k->mag );
+                    /* Second line, after the event's own: the first press is also
+                     * the moment the pad becomes as sensitive as the shipped pair,
+                     * and while it was cold the log showed only an absence -- the
+                     * light touches it declined to report. Kept off the event line
+                     * so that line stays the shape appendix A scores against. */
+                    if( was_cold )
+                    {
+                        printf( " NORA_TOUCH(CVDAN%u): cold gate off"
+                                " (press %ld -> %ld, debounce %u -> %u)\n",
+                                (unsigned)k->cvdan,
+                                (long)was_thr, (long)k->press_threshold,
+                                (unsigned)was_db, (unsigned)s_cfg.debounce_scans );
+                    }
                 }
             }
         }
@@ -1025,6 +1201,10 @@ bool nora_touch_calibrate( void )
         s_keys[i].quiet_run    = 0u;
         s_keys[i].learn_active = false;
         s_keys[i].cal_done     = false;
+        /* Re-armed with the rest of it: *kl is "forget what this pad taught us",
+         * and a pad whose evidence has been thrown away has not been touched as far
+         * as anything here can tell. */
+        s_keys[i].cold_gate    = true;
         if( !s_keys[i].cal_pinned )
         {
             s_keys[i].press_threshold   = s_cfg.press_threshold;
@@ -1052,7 +1232,11 @@ bool nora_touch_get_calibration( uint8_t key, nora_touch_calibration_t *out )
     out->idle_ref          = s_keys[key].idle_ref;
     out->samples           = s_keys[key].learn_n;
     out->needed            = s_cfg.learn_presses;
-    out->press_threshold   = s_keys[key].press_threshold;
+    /* The pair in force, which on a pad that has not been pressed yet is the cold
+     * one -- reporting the stored value here would have ?kl print a threshold the
+     * pad is not detecting at. */
+    out->cold_gate         = nora_touch_key_is_cold( &s_keys[key] );
+    out->press_threshold   = nora_touch_key_press_threshold( &s_keys[key] );
     out->release_threshold = s_keys[key].release_threshold;
     return true;
 }
@@ -1119,6 +1303,9 @@ bool nora_touch_set_acquisition( uint32_t charge_ns, uint32_t balance_ns,
         s_keys[i].learn_active    = false;
         s_keys[i].idle_ref        = 0;
         s_keys[i].cal_done        = false;
+        /* Same reasoning one line up, applied to the gate: a press reported under
+         * the old timings does not vouch for the pad under the new ones. */
+        s_keys[i].cold_gate       = true;
         if( !s_keys[i].cal_pinned )
         {
             s_keys[i].press_threshold   = s_cfg.press_threshold;

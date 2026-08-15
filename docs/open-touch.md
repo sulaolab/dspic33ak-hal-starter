@@ -80,8 +80,10 @@ split into two events.
    consider normal.
 3. `?ko` — `n` should equal the number of taps for every pad. More than that means
    taps are splitting; fewer means taps are being missed.
-4. `?kl` — shows what each pad settled on. Pads on one board legitimately differ;
-   on the reference board they land around 500/250, 500/250 and 543/271.
+4. `?kl` — shows what each pad settled on. Pads on one board legitimately differ,
+   but a learned pair can never go below `max(700, idle_ref × 6)`, so on a quiet
+   board all three read 700/350. (Before the 2026-08-16 floor change the same
+   reference board landed around 500/250, 500/250 and 543/271.)
 
 If a pad misses taps, do not reach for the thresholds first: run `*kv` to arm the
 trace, tap, and `?kv` to see whether the signal was there at all. A threshold moved

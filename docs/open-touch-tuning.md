@@ -318,8 +318,8 @@ application:
 
 | | value | fires events | learns |
 |---|---|---|---|
-| candidate | `max(idle_ref × 4, 600)` | no | yes |
-| press | starts at the configured 700, moves down only | yes | no |
+| candidate | `max(idle_ref × 4, 800)` | no | yes |
+| press | starts at the configured 700; the floor keeps it there unless the pad's own noise pushes it higher | yes | no |
 
 An excursion above the candidate that holds for 3 scans is recorded at its peak
 magnitude when it ends. Nothing on that path consults the press threshold, which is
@@ -343,7 +343,8 @@ failure mode to test for.
 
 ```
 press   = ( second-smallest of the last up to 8 press magnitudes ) × 35/100
-          clamped to [ max(idle_ref × 3, 500) , the configured press threshold ]
+          capped at the configured press threshold,
+          then raised to max( 700, idle_ref × 6 )   <- floor applied last
 release = press / 2
 ```
 
@@ -354,8 +355,23 @@ Each clause answers a specific way this could go wrong:
 | a **low-order** statistic, not the median | the median ties the threshold to how hard the operator happened to press. A run of ordinary firm taps gave medians past 1,556 on all three pads, so 35–45 % of them cleared the shipped 700, the ceiling held, and learning did nothing at all. What the threshold must sit under is the **weakest** press the pad will see — the bottom of the sample set, not its middle. |
 | second-smallest once there are ≥ 4 samples (smallest below that) | a single unusually light or clipped excursion dragging the pad down on its own |
 | × 35/100 | a threshold that sits on top of the taps it must accept |
-| ceiling = the configured value | learning ever making a pad **less** sensitive than the value already proven on this hardware. It may only move towards lighter touches. |
-| floor = `max(idle_ref × 3, 500)` | a pad pressing itself. This is the only vote idle noise still gets, and it is a veto rather than the rule. |
+| ceiling = the configured value | learning ever making a pad **less** sensitive than the value already proven on this hardware — except where the floor below says that value would press itself. |
+| floor = `max(700, idle_ref × 6)`, **applied after the ceiling** | a pad pressing itself. This is the only vote idle noise still gets, and it is a veto rather than the rule — so it has to outrank the ceiling. Applied in the other order the ceiling silently undoes it: with the floor's own minimum equal to the shipped default, floor-then-ceiling pins every learned pair at exactly the default and `idle_ref × 6` becomes dead code. |
+
+The two constants were measured, and both moved on 2026-08-16 (`FLOOR_MIN` 500 → 700,
+`FLOOR_MULT` 3 → 6) on the sonora board after an unrelated noise improvement dropped
+`idle_ref` far enough that the *absolute* part of the floor became the binding one and
+landed inside the noise band: 30 minutes of quiet produced 21 false presses at 500,
+and none at 700. 700 is the smallest value measured clean, and it still sits under
+every deliberate tap on that board (the lightest was 1,085; only the fourth and fifth
+tap of a fast six-tap burst ever fell below it). `FLOOR_MULT` 6 rather than 3 because
+with a 700 minimum, ×3 would not bind until `idle_ref` passed 233, well above anything
+observed; ×6 puts the crossover at 117.
+
+The deliberate cost: a pad can no longer learn its way below 700. That is the point —
+the values it would have learned below 700 are the ones that could not be told apart
+from idle noise by amplitude. A product that needs a lower pair sets it explicitly
+through `nora_touch_set_key_thresholds()`, which outranks learning.
 | `release = press / 2`, derived | a release level learned separately landed inside the noise band. Hysteresis now scales with a learned-down pad instead of being lost by it. |
 
 ### 3.3 Three presses is a minimum, not a quota
@@ -396,6 +412,11 @@ layer, and keep that decision out of the HAL where the argument above still hold
    key 2  8/3 presses  idle 95  press 500  release 250  learned
 ```
 
+That capture is from **before the 2026-08-16 floor change**, and it is kept because
+the shape of the line is what this section is about. The three pairs in it can no
+longer occur: every one is below the 700 floor, so the same run today reports
+`press 700 / release 350` on all three unless a pad's own `idle_ref` exceeds 117.
+
 `samples/needed` comes before the thresholds on purpose: a pad short of its minimum
 is *unfinished*, not insensitive, and that is the difference between "this pad is
 broken" and "tap it twice more". `idle` sits beside `press` because the ratio
@@ -426,7 +447,8 @@ that board.
    splitting; **fewer** means taps are being missed.
 5. `?kl` — the pair each pad settled on.
 
-Reference result on this board, ten taps per pad from a cold boot:
+Reference result on this board, ten taps per pad from a cold boot — **measured before
+the 2026-08-16 floor change, and not yet re-run since**:
 
 | | `n` | learned press / release | idle |
 |---|---|---|---|
@@ -434,8 +456,19 @@ Reference result on this board, ten taps per pad from a cold boot:
 | key 1 `CVDAN8` | 10 | 627 / 313 | 98 |
 | key 2 `CVDAN10` | 10 | 500 / 250 | 95 |
 
-Hand-tuned best on the same board was 500 / 250, so all three pads are inside the
+Hand-tuned best on the same board was 500 / 250, so all three pads were inside the
 ±20 % band, and the run had no misses and no splits.
+
+**The ±20 % clause needs reading with the floor in mind.** All three of those pairs
+are below the 700 floor, so the same run now converges to 700 / 350 and no longer
+lands within ±20 % of a hand-tuned 500. That is not a regression to chase: the clause
+exists to catch a learner that converges somewhere unrelated to the pad, and the floor
+is a deliberate veto placed above the hand-tuned value. Compare the value **before**
+the floor is applied, and treat 700 / 350 as the expected outcome on a quiet board.
+The miss and split counts (`n` = taps, from the third tap onwards) are the parts of
+the criterion the floor does not touch, and they remain the pass/fail. A counted-tap
+run on this board with the new floor has not been done — the change was measured on
+the sonora board.
 
 **If a pad misses taps, do not reach for the thresholds first.** Run `*kv` to arm
 the scan-rate trace, tap, and `?kv` to see whether the signal was there at all —

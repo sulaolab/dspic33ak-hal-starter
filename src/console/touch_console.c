@@ -2,6 +2,7 @@
  * No vendor touch-library source, header or binary was consulted.
  */
 
+#include <xc.h>          /* ANSELA/TRISA/LATA for the ?kd electrode-state dump */
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -11,7 +12,7 @@
 /* One header. The acquisition peripheral is private to the touch HAL, and the
  * hardware this console pokes at is reached through its nora_touch_hw_* entry
  * points -- see the diagnostics section of nora_touch.h. */
-#include "nora_touch.h"
+#include "hal_touch/nora_touch.h"
 
 /* Nothing below is compiled without touch -- touch_console.h supplies the
  * "unknown module" stub in that case, and it explains why. Guarding the body
@@ -195,6 +196,27 @@ static void touch_console_print_regs( void )
         }
         printf( " %-11s %08lX\n", name, (unsigned long)value );
     }
+
+    /* Port A as well, because the electrode pins' idle state is part of the
+     * measurement condition and NOT visible in any ITC register. DS70005591C
+     * p.1487: a CVD pin must be ANSELx = 1 / TRISx = 0, and the ITC returns pin
+     * control to TRIS/LAT whenever the pin is idle between scans -- so a pad left
+     * at the POR default TRISx = 1 floats, and the data sheet warns that
+     * robustness then "degrade[s] significantly even with a light noise". That is
+     * exactly the bug found on 2026-08-15 (itc_hardware_reference.md §12.2), and
+     * it was invisible for months because nothing printed these three words.
+     *
+     * The three pads live on port A: RA1 (CVDAN1), RA8 (CVDAN8), RA10 (CVDAN10),
+     * i.e. check bits 1, 8 and 10 -> mask 0x00000502. Want:
+     *   ANSELA & 0x502 == 0x502   (analog)
+     *   TRISA  & 0x502 == 0        (outputs)
+     *   LATA   & 0x502 == 0        (driven low when idle)
+     * Bits 11, 9 and 2 are the redundant channels and must stay TRIS = 1 -- see
+     * the hazard note in §12.2 before "fixing" them. */
+    printf( " ANSELA      %08lX\n", (unsigned long)ANSELA );
+    printf( " TRISA       %08lX\n", (unsigned long)TRISA  );
+    printf( " LATA        %08lX\n", (unsigned long)LATA   );
+    printf( " (pads RA1/RA8/RA10 = mask 00000502: want ANSEL 502, TRIS 0, LAT 0)\n" );
 }
 
 void touch_console_onmsg( app_console_msg_t* msg )
@@ -503,6 +525,7 @@ void touch_console_onmsg( app_console_msg_t* msg )
                         (long)cal.idle_ref,
                         (long)cal.press_threshold, (long)cal.release_threshold,
                         cal.pinned     ? "PINNED (set by the integrator)" :
+                        cal.cold_gate  ? "COLD (strict until the first press)" :
                         cal.calibrated ? "learned" : "learning" );
             }
         }

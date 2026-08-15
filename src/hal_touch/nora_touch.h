@@ -145,6 +145,61 @@ typedef struct {
      */
     uint8_t  learn_presses;
 
+    /* Cold gate: the stricter pair a pad detects at until it has recorded its
+     * first press, or 0 / 0 to detect at the shipped values from the first scan.
+     *
+     * The problem it answers was observed on hardware (2026-08-15): a board left
+     * alone after power-up fired isolated press/release pairs with nobody near it,
+     * at magnitudes 523 and 705. Neither is a glitch a debounce can reach --
+     * reconstructed from the event timestamps the excursion held above threshold
+     * for some 8 scans, and a debounce long enough to reject that (>= 8, ~55 ms)
+     * also rejects a short real tap, whose above-threshold plateau is only about
+     * 5 scans once the 4-scan magnitude window has eaten each end. So the length
+     * of the excursion cannot separate them, and the amplitude has to.
+     *
+     * It can, because there is a gap. The same board's real taps fired at
+     * magnitudes 826..1,520 and its lightest measured touch was 780, against the
+     * 705 the noise reached: 900 sits above every idle excursion seen and below
+     * every press but the very lightest.
+     *
+     * This costs the learner nothing, which is the reason it is worth doing. The
+     * candidate gate (NORA_TOUCH_LEARN_CAND_MIN in the .c) is what records press
+     * amplitudes, it is separate from detection, and it never fires an event -- so
+     * a pad still gathering evidence there while refusing to report anything under
+     * 900 calibrates at exactly the speed it always did. The whole price is paid by
+     * the first touch, which may not register: already the accepted trade for
+     * self-calibration (operator, 2026-08-14).
+     *
+     * The gate lifts on the pad's first press *event* -- not on a recorded sample,
+     * and not on a full calibration. The distinction is not pedantry, it is the bug
+     * this was shipped with for one afternoon: lifting on the first sample was tried
+     * and measured wrong on 2026-08-15, when a 3 h soak with nobody in the room saw
+     * two pads record a sample from their own noise (mag 679 and 711) and disarm
+     * themselves, while the event side stayed correctly silent. The learning path is
+     * *meant* to be more permissive than detection, so it cannot also be the thing
+     * that decides a human is present. Only an event can.
+     *
+     * From the first event the pad detects at the shipped pair, and at
+     * learn_presses the learned pair takes over as before. One event is trusted to
+     * say "a human is here", which is all this decides; it is deliberately not
+     * trusted to set a threshold, because a single light excursion would then pin
+     * the pad low.
+     *
+     * Both values may only make a pad *stricter* -- a cold pair below the shipped
+     * one, or a cold debounce shorter than debounce_scans, is ignored rather than
+     * quietly increasing sensitivity before anything has been learned. An
+     * explicitly pinned pair (nora_touch_set_key_thresholds) switches the gate off
+     * for that pad: the integrator's number is meant to be the one in force.
+     * nora_touch_calibrate() and nora_touch_set_acquisition() re-arm it, both
+     * because a pad whose evidence has just been discarded has not, as far as
+     * anything here can tell, been touched. Nothing survives a power cycle,
+     * deliberately, as with the rest of the learning state.
+     *
+     * Independent of learn_presses: with learning off the shipped pair never moves,
+     * and a pad nobody has touched should still be the stricter of the two. */
+    int32_t  cold_press_threshold;
+    uint8_t  cold_debounce_scans;
+
     /* Print a line per event, in the same shape as the vendor demo's, so the
      * behavioural comparison against the vendor demo can be scored
      * from one console log either way. Also prints each pad's measured tail and
@@ -295,6 +350,11 @@ typedef struct {
     uint8_t  needed;          /* learn_presses: how many before the rule applies */
     int32_t  press_threshold; /* in force now (learned, configured, or pinned)   */
     int32_t  release_threshold;
+    /* True while the pad is still on the cold gate, i.e. press_threshold above is
+     * cold_press_threshold and not the configured or learned value. Reported
+     * because the two states are indistinguishable from the event log -- a cold
+     * pad and an insensitive pad both just fail to report a light touch. */
+    bool     cold_gate;
 } nora_touch_calibration_t;
 
 /* --- scan-resolution trace -------------------------------------------------
