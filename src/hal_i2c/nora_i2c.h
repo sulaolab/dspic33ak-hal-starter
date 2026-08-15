@@ -61,7 +61,15 @@ typedef uint32_t (*nora_i2c_get_ms_fn)(void);
 /* Shared lifecycle / query API -------------------------------------------- */
 
 /*
- * Deinitialize the selected I2C instance (master or slave).
+ * Deinitialize the selected I2C instance -- the MASTER role.
+ *
+ * It sits in this shared header because the peripheral is one thing and the
+ * name is older than the two-role split, but it is the counterpart of
+ * nora_i2c_init() only. An instance brought up with nora_i2c_slave_init() is
+ * released by nora_i2c_slave_deinit(); calling this on one answers
+ * NORA_I2C_ERR_NOT_INITIALIZED even though nora_i2c_is_initialized() below
+ * reports true for it, because that query covers either role and this call
+ * does not.
  *
  * If deinit recovers a stale pending transaction, it may return the recovery
  * status while still forcing the peripheral off and clearing HAL state.
@@ -81,6 +89,11 @@ nora_i2c_status_t nora_i2c_set_interrupt_priority(
     nora_i2c_instance_t inst,
     uint8_t priority);
 
+/*
+ * True once the instance has been initialized in EITHER role. Use
+ * nora_i2c_slave_is_active() to tell the roles apart -- and note that
+ * nora_i2c_deinit() above releases only the master one.
+ */
 bool nora_i2c_is_initialized(
     nora_i2c_instance_t inst);
 

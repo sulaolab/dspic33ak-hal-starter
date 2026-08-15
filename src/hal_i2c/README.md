@@ -18,7 +18,7 @@ Include only the role headers required by the caller:
 - `nora_i2c.h` — shared instance, status, lifecycle, and interrupt-priority API
 - `nora_i2c_master.h` — blocking master transactions, controlled no-STOP
   sequences, low-level primitives, and interrupt helpers
-- `nora_i2c_slave.h` — 7-bit callback-driven slave API and ISR delegates
+- `nora_i2c_slave.h` — 7-bit callback-driven slave API and its ISR delegate
 
 These headers use only NORA types. They do not include compiler device headers,
 SFR names, or dsPIC33AK register definitions.
@@ -38,6 +38,19 @@ The current implementation is the dsPIC33AK backend:
 The last two headers and the register header are backend-internal. They are not
 application include files. A CK backend may implement the same public API while
 using a different controller inventory, register map, and interrupt binding.
+
+### Interrupt vectors belong to the backend
+
+`nora_i2c_dspic33ak_device.c` defines the `_I2CxInterrupt` vectors (and the
+RX/TX pair) for the instances the target has, and each one calls the slave
+engine. An application does not write I2C vector functions; if it defines one
+itself the link fails on the duplicate symbol, which is the intended signal.
+
+This is what makes a slave application source-portable: the number of interrupt
+sources per controller is silicon count (four on AK, a single `SI2Cx` on CK), so
+a portable caller must not be the one binding them. Only
+`nora_i2c_slave_event_irq()` is public, so a custom vector or a host-side test
+can still drive the service routine.
 
 ## Board and application policy
 

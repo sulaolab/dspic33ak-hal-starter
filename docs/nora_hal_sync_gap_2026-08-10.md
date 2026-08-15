@@ -235,3 +235,33 @@ destination in this work at all.
 Now that groups 1–3 have landed, the §18 blob-identity seal can be re-run. Its sonora
 coordinate (`e64b3fe`) is a *merged* commit rather than a branch tip, so use `9f9d380`;
 see the note added to §18.
+
+## 5. §2 closed — 2026-08-12
+
+The "cheap two" of §4 and the rest of §2 are done. The starter was synced to sonora
+`main` `ab5f355` in one commit (`8abf10c`, 13 files, every one blob-verified identical
+to sonora):
+
+- `hal_gpio/`: `nora_gpio.h`, `nora_pps.h`, `nora_pps_dspic33ak.c` refreshed;
+  `nora_gpio_table.h`, `nora_gpio_table_dspic33ak.c`, `README.md` added.
+- `hal_i2c/`: all 5 sources + `README.md` refreshed.
+- `hal_dma/README.md` added.
+- `firmware.X/nbproject/configurations.xml`: `nora_gpio_table_dspic33ak.c` registered —
+  the MPLAB project file is part of the port, exactly as §2 warned it is part of a
+  rename.
+
+`nora_gpio_table.{h,c}` were taken in rather than treated as integration-only: the
+module gives its own reason (API parity with the dsPIC33CK NORA HAL), and a public HAL
+implements what other family members implement even with no caller here.
+
+`hal_spi_i2s_tdm/README.md` stays divergent on purpose — the difference is §10 plus the
+de-codenaming, with no new content since the seal. `src/hal_*/UPSTREAM.md` remains
+starter-local and unpublished.
+
+Verified: `buildtools/build.ps1 -Full` on this tree — 0 errors, links,
+94,172 B program (35%) / 11,194 B data (17%), with `nora_gpio_table_dspic33ak.o` in the
+build. The port was then re-published to the 7 snapshots and on into the 5 CMSIS-Driver
+repos; the full record is §6 of the audio project's
+`docs/cmsis_verification_prep_2026-08-12.md`.
+
+**§4 "Left" now reads:** only the `hal_clock` hardware check remains. §2 is closed.

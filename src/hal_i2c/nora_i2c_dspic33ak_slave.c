@@ -62,6 +62,18 @@ nora_i2c_status_t nora_i2c_slave_init(
         return NORA_I2C_ERR_NOT_PRESENT;
     }
 
+    /*
+     * The mirror of the guard in nora_i2c_init(): an instance live as a master
+     * must be released with nora_i2c_deinit() before it can answer as a slave.
+     * Taking it here would leave the master engine's initialized flag and its
+     * pending-transaction state behind, so a later master call would act on a
+     * peripheral this engine has reprogrammed. Re-initializing the slave role
+     * itself stays allowed.
+     */
+    if (nora_i2c_get_role(inst) == NORA_I2C_ROLE_MASTER) {
+        return NORA_I2C_ERR_BUSY;
+    }
+
     /* Configure with the module disabled. */
     nora_i2c_reg_clear(r->CON1, NORA_I2C_CON1_ON);
 
