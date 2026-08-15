@@ -110,9 +110,10 @@ for up, here in pairs:
 PY
 ```
 
-Last run: **7 of 7 identical** against sonora `fix/open-touch-published-comments`
-= `15c63e1` (2026-08-15), the branch that made the published comments
-self-contained; it is cut from sonora `main` = `d2b8f9c` and changes comments only.
+Last run: **7 of 7 identical** against sonora `main` = `2653def` (2026-08-15).
+The two commits that made the published comments self-contained (`ab970a0`,
+`2653def`) were developed on a branch, rebased onto `main` = `40baee2`, and landed
+there; they change comments only, so the vendored bytes here did not move.
 
 Those comments no longer cite anything a reader of this repository cannot open:
 no `docs_internal/` paths, and no section numbers from the *internal* tuning
