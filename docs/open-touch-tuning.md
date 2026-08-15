@@ -422,10 +422,41 @@ is *unfinished*, not insensitive, and that is the difference between "this pad i
 broken" and "tap it twice more". `idle` sits beside `press` because the ratio
 between them is the margin — and it is the number that differs between two boards.
 
+The last column is the pad's state, and a third value belongs there:
+`COLD (strict until the first press)`. See §3.6.
+
 `*kl` forgets the samples **and** restores the configured pair. Restoring matters:
 the ceiling is the configured value, so relearning from an already-learned pair
 would be a second descent rather than a fresh start. No hands-off window is needed;
 this command measures nothing, it only forgets.
+
+### 3.6 The cold gate: stricter until a pad's first event
+
+A pad that has never reported a press has no evidence that a human is near it, and
+the learner cannot supply any — learning consumes presses, so before the first one
+there is nothing to consume. Until then each pad runs on a second, **stricter** pair:
+`cold_press_threshold` (900) and `cold_debounce_scans`, and `?kl` reports it as
+`COLD (strict until the first press)` rather than `learned`.
+
+Why an event and not a quiet interval decides it: idle noise cannot tell you a finger
+is present, so no amount of quiet is evidence. One event is trusted to say "a human
+is here" — and *only* that. It is deliberately not trusted to set a threshold, since a
+single light excursion would then pin the pad low.
+
+The rules around it are all in one direction:
+
+| | |
+|---|---|
+| both cold values may only make a pad **stricter** | a cold pair below the shipped one, or a cold debounce shorter than `debounce_scans`, is ignored rather than quietly raising sensitivity before anything is known |
+| an explicitly pinned pair switches the gate off for that pad | `nora_touch_set_key_thresholds()` is the integrator's number, and it is meant to be the one in force |
+| `nora_touch_calibrate()` and `nora_touch_set_acquisition()` re-arm it | a pad whose evidence was just discarded has not, as far as anything here can tell, been touched |
+| nothing survives a power cycle | as with the rest of the learning state |
+
+Independent of `learn_presses`: with learning off the shipped pair never moves, and a
+pad nobody has touched should still be the stricter of the two.
+
+**When reading a log, `COLD` and "insensitive" look identical** — both are a pad that
+failed to report a light touch. That is why the state is reported at all.
 
 ---
 
