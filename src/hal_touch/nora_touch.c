@@ -28,7 +28,7 @@
  * signal-to-noise is bought with accumulation depth instead.
  *
  * Re-measured 2026-08-14 against the tracked noise tail rather than a six-sample
- * spread: the analog knobs are flatter than chapter 1 first reported (the tail does
+ * spread: the analog knobs are flatter than the first sweep reported (the tail does
  * not move at all across CVDCAP 0-7, charge 500-5000 ns or balance 250-4000 ns),
  * and depth is worth less than it first reported -- ~3x from 2^4 to 2^8, not ~40x,
  * because the absolute tail grows 5x while the count grows 16x. Still the only
@@ -50,7 +50,7 @@
  * Not defensive padding — measured 2026-08-14. Seeding from the very first scan
  * after *kc03 produced a baseline 24,000 counts away from where the count then
  * settled, so all three keys came up PRESSED and stayed there. The cause is
- * already in the manual as a fact about the peripheral (a record's first few
+ * already known as a fact about the peripheral (a record's first few
  * repeats read low, which is why the count is not linear in accumulation depth);
  * what was missing was the consequence, that the first scan after a reconfigure
  * is not a measurement. At ~5 ms/scan this costs 40 ms once. */
@@ -116,7 +116,7 @@
 /* --- per-pad learning (header: learn_presses) -------------------------------
  *
  * The pad teaches the library its own press amplitude, because measuring the
- * quiet pad cannot: appendix A.6 tried exactly that -- thresholds from each pad's
+ * quiet pad cannot: that was tried on 2026-08-14 -- thresholds from each pad's
  * idle noise tail -- and it was measured wrong on hardware. Pad 1 had the
  * *smallest* tail and needed the *highest* threshold, so the tail does not
  * predict the press. Only a press predicts the press.
@@ -316,7 +316,7 @@ void nora_touch_default_config( nora_touch_config_t *cfg )
 
     /* These are magnitudes -- the mean of |delta| over NORA_TOUCH_MAG_SCANS -- and
      * not signed deltas. The change came from a scan-resolution trace taken on
-     * 2026-08-14 (manual appendix A A.7): while a pad is touched its delta does not
+     * 2026-08-14: while a pad is touched its delta does not
      * sit high, it *alternates*, swinging between -4,180 and +2,346 on consecutive
      * scans (9 sign flips in 17 scans). A signed threshold with a two-scan debounce
      * therefore almost never sees two agreeing scans, which is why pads answered
@@ -331,7 +331,7 @@ void nora_touch_default_config( nora_touch_config_t *cfg )
     cfg->release_threshold = 350;
     cfg->debounce_scans         = 2u;
     /* 4 scans (~20 ms) of sustained sub-threshold delta before a release, against
-     * the measured 11 ms dip that split taps in appendix A §A.1. */
+     * the measured 11 ms dip that split four taps out of ten in the bench run. */
     cfg->release_debounce_scans = 4u;
     cfg->baseline_shift    = 6u;
     /* On by default, and it has to be: the shipped pair is a compromise across

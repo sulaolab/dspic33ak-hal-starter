@@ -24,10 +24,10 @@
  *
  * Bring-up console for the open capacitive-touch HAL (module 'k').
  *
- * This is deliberately a raw-count console. Phase 0's whole job is to show that
+ * This is deliberately a raw-count console. Bring-up's whole job is to show that
  * the ITC produces plausible, repeatable, finger-responsive numbers, and every
  * layer of interpretation added on top of that hides the evidence. The tuning
- * manual's first chapter is a procedure driven entirely from here.
+ * manual's opening procedure is driven entirely from here.
  *=========================================================================== */
 
 /* CLKGEN6 is raised to 200 MHz by the project's clock boot code and the ITC
@@ -591,7 +591,7 @@ void touch_console_onmsg( app_console_msg_t* msg )
 
     /* The value is a *magnitude* -- the mean of |raw - baseline| over the last
      * few scans -- not a signed delta. A number from before that change is
-     * roughly 3x too large; see nora_touch.h and manual appendix A A.7. */
+     * roughly 3x too large; see nora_touch.h. */
     case 'p':   /* *kp <hi> <lo> : press threshold, magnitude counts   */
     case 'q':   /* *kq <hi> <lo> : release threshold, magnitude counts  */
         if( payload_len != 2u )

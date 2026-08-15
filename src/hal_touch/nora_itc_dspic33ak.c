@@ -295,7 +295,7 @@ static void itc_program_math_sequence(void)
      * must be set iff the acquisition command's SECOND is, and ACCn must be set
      * whenever ACCCNT != 0. This HAL always accumulates (ACCEN is required even
      * for a single measurement), so ACCn is unconditional. CMPn is clear
-     * because Phase 0 leaves the comparator off, CM = 0. */
+     * because this HAL leaves the comparator off, CM = 0. */
     for (group = 0u; group <= 2u; group += 2u) {
         uint32_t base = (uint32_t)group * MAP_GROUP_STRIDE;
 
@@ -463,7 +463,7 @@ nora_itc_status_t nora_itc_init(nora_itc_list_t list,
      * count and sequence numbers change scans a half-described panel. */
     *regs->CON &= ~((1uL << LSCON_TRGEN_BIT) | (1uL << LSCON_SAMP_BIT));
 
-    /* Phase 0 connects no pins together — ITCLSxMUL is the mutual-capacitance
+    /* Self-capacitance connects no pins together — ITCLSxMUL is the mutual-capacitance
      * / gang-drive knob and self-cap wants it empty. */
     *regs->MUL = 0u;
 

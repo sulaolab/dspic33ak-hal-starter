@@ -38,9 +38,9 @@
  * be two sources of truth for one behaviour.
  *
  * What it is not: drift compensation over temperature and humidity, wet-finger
- * rejection, frequency hopping, or a scroller. Those are the integrator's, per
- * the manual's scope statement, and pretending otherwise here would be the one
- * dishonest thing this library could do.
+ * rejection, frequency hopping, or a scroller. Those are the integrator's, and
+ * saying so is deliberate: pretending otherwise here would be the one dishonest
+ * thing this library could do.
  *
  * Scanning is non-blocking. nora_touch_process() polls the scan it started last
  * time and starts the next one, so the main loop never busy-waits on a scan that
@@ -74,7 +74,7 @@ typedef struct {
      * NOT compared against the signed delta, and that distinction is the whole
      * reason light touches work at all.
      *
-     * A scan-resolution trace (manual appendix A §A.7) showed that a touched pad's
+     * A scan-resolution trace taken on 2026-08-14 showed that a touched pad's
      * delta does not sit high — it alternates, -4,180 then +2,346 on consecutive
      * scans, nine sign flips in seventeen. Any signed threshold with a
      * consecutive-scan debounce therefore rejects most real touches while the
@@ -96,7 +96,7 @@ typedef struct {
      * single bad conversion, at 1 scan (~5 ms) of latency each.
      *
      * The two directions get separate counts because they fail differently, and
-     * measurably so: with 2 scans both ways, appendix A §A.1 caught four taps out
+     * measurably so: with 2 scans both ways, the bench run caught four taps out
      * of ten split into two events, every one of them a release 11 ms (two scans)
      * after the press at an unchanged delta. A momentary dip during the press
      * stroke was being read as a lift. Lengthening only the release side buys
@@ -117,7 +117,7 @@ typedef struct {
      * is recomputed on every press after that, so the estimate keeps improving
      * without the threshold waiting for it.
      *
-     * This is the answer to the problem appendix A §A.2 states: every threshold
+     * This is the answer to the problem the bench runs exposed: every threshold
      * in this file was measured on one board with one finger, and the pads on
      * that one board already differ enough that one of them dropped 2 taps in 10
      * at a threshold the other two never missed at. A constant cannot follow
@@ -125,7 +125,7 @@ typedef struct {
      * do what the library is for.
      *
      * The obvious way to do it — measure each quiet pad and scale its noise —
-     * was tried and measured *wrong* (§A.6): pad 1 had the smallest noise tail
+     * was tried and measured *wrong*: pad 1 had the smallest noise tail
      * and needed the highest threshold. Idle noise does not predict a press.
      * Only a press predicts a press, so the pad learns from being touched.
      *
@@ -140,13 +140,13 @@ typedef struct {
      *
      * Nothing is stored across a power cycle, deliberately. What the board does
      * at boot then never depends on what happened before it, which is worth more
-     * than saving the user five taps (see the manual's §A.9). The rule itself,
+     * than saving the user five taps. The rule itself,
      * its limits and their measured basis are at NORA_TOUCH_LEARN_* in the .c.
      */
     uint8_t  learn_presses;
 
     /* Print a line per event, in the same shape as the vendor demo's, so the
-     * behavioural comparison in the tuning manual's appendix A can be scored
+     * behavioural comparison against the vendor demo can be scored
      * from one console log either way. Also prints each pad's measured tail and
      * derived thresholds once per calibration, which is the only way to see that
      * two boards differ without instrumenting anything. */
@@ -216,8 +216,8 @@ void nora_touch_get_status(nora_touch_status_t *status);
  * to find out how close a light touch came is to lower the threshold and see —
  * which changes the thing being measured. peak answers "how much signal does
  * this electrode really give", trough answers "how far does it wander with
- * nobody there", and the ratio between them is the sensitivity the manual asks
- * for.
+ * nobody there", and the ratio between them is the sensitivity the tuning
+ * procedure asks for.
  */
 typedef struct {
     uint8_t  cvdan;
@@ -256,7 +256,7 @@ bool nora_touch_set_thresholds(int32_t press_threshold, int32_t release_threshol
 
 /* The same, for one key, overriding the pair above from here on.
  *
- * Pads on one board are not equally sensitive: in appendix A §A.1 the three pads
+ * Pads on one board are not equally sensitive: in the bench run the three pads
  * of the Curiosity Platform accepted taps down to 2,004 / 2,120 / 2,935 counts,
  * so a single press threshold of 2,000 sat right on top of pad 1's lightest taps
  * and dropped two of ten while the other pads never missed. Which pad needs what
@@ -328,7 +328,7 @@ void nora_touch_get_thresholds(int32_t *press_threshold, int32_t *release_thresh
  *
  * This exists so an acquisition sweep can be run against the *tracked* noise
  * figure (?ko peak/trough over tens of thousands of scans) instead of a
- * six-sample spread, which chapter 1 of the manual found underestimates the tail
+ * six-sample spread, which the first sweep found underestimates the tail
  * by ~3x. Without it a sweep has to go through *ki, which reprogrammes the same
  * list from the console's own record set and silently takes it away from this
  * layer.

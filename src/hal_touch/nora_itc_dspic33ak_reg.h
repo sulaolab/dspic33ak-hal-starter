@@ -126,7 +126,7 @@
 #define MAP_SPLIT_8CMD      (2u)
 
 /* Sequence numbers are 4..7 (0..3 name the four command blocks themselves).
- * Phase 0 uses one acquisition sequence and one math sequence, both 4. */
+ * This HAL uses one acquisition sequence and one math sequence, both 4. */
 #define ITC_SEQ_ACQUISITION (4u)
 #define ITC_SEQ_MATH        (4u)
 

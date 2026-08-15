@@ -89,7 +89,7 @@ typedef enum {
 
 /* ITCLSxCON.MODE. Only the two whole-list modes are exposed: a per-record
  * interrupt buys nothing for a panel scan, and the comparator-gated modes
- * belong with the comparator, which Phase 0 does not use. Mode 3 does not
+ * belong with the comparator, which this HAL does not use. Mode 3 does not
  * exist in the data sheet's table. */
 typedef enum {
     NORA_ITC_SCAN_LIST_NO_IRQ  = 0,   /* MODE = 4: all records, no interrupt   */
@@ -186,7 +186,7 @@ nora_itc_status_t nora_itc_deinit(nora_itc_list_t list);
 nora_itc_status_t nora_itc_scan_start(nora_itc_list_t list);
 
 /* True once every record in the list has produced a result. Polling form, for
- * Phase 0 and for the console; the interrupt form is nora_itc_irq_*. */
+ * bring-up and for the console; the interrupt form is nora_itc_irq_*. */
 bool nora_itc_scan_complete(nora_itc_list_t list);
 
 /* Read one record's signed result (ITCRESx, Sample A - Sample B).

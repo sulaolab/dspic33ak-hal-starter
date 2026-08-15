@@ -111,8 +111,13 @@ PY
 ```
 
 Last run: **7 of 7 identical** against sonora `fix/open-touch-published-comments`
-= `90aabf6` (2026-08-15), the branch that made the published comments
+= `15c63e1` (2026-08-15), the branch that made the published comments
 self-contained; it is cut from sonora `main` = `d2b8f9c` and changes comments only.
+
+Those comments no longer cite anything a reader of this repository cannot open:
+no `docs_internal/` paths, and no section numbers from the *internal* tuning
+manual. References to the tuning manual itself stay, and resolve to
+[open-touch-tuning.md](open-touch-tuning.md).
 
 The `\r\n` normalisation is not cosmetic: this starter's files are CRLF and some of
 the upstream files are LF, so a byte comparison without it always reports a
