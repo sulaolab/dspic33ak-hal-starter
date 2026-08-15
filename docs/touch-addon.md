@@ -55,4 +55,13 @@ a repository that is MIT-0 precisely so anyone can take it.
 ## Removing it
 
 Set `HAL_STARTER_ENABLE_TOUCH` to 0 in `src/app/app_config.h`. The touch code
-drops out of the image and the three CVDAN inputs are free.
+drops out of the image and the three CVDAN inputs are free — measured on the
+`dsPIC33AK512` configuration: 111,128 bytes of program region with touch on,
+94,844 with it off.
+
+That one switch reaches the bring-up console too, through
+`src/app/app_specific_config_defs.h`: the console is vendored from sonora and asks
+its own project's question (`ENA_OPEN_TOUCH_EXCLUSIVE`), which that file answers
+from `HAL_STARTER_ENABLE_TOUCH`. Without it the dispatcher's `case 'k'` would keep
+`touch_console.c` — and through it `nora_touch.c` — linked in a build that cannot
+use either. See [open-touch-sync.md](open-touch-sync.md).

@@ -1,6 +1,6 @@
 # Keeping the touch files in sync with sonora
 
-`src/hal_touch/` and `src/console/touch_console.c` are maintained in
+`src/hal_touch/` and `src/console/touch_console.{c,h}` are maintained in
 the `dspic33ak-audio-dsp-sonora` firmware and vendored here. They are kept
 **byte-identical apart from the divergences listed below**, on purpose: the tuning
 manual is written in these command strings, and a fix found on one board has to be
@@ -44,21 +44,73 @@ is kept identical.
    (`board_pins.h`, `main.c`), as they are in sonora's — the same rule, different
    values in principle, identical values in fact (CLKGEN6 = 200 MHz on both).
 
-Anything else that differs is drift, not design. `nora_touch.c`'s constants in
-particular are measured values with their measurement recorded in the comment
-beside them; changing one here without changing it upstream leaves two boards
-claiming different evidence for the same number.
+That is the whole list: divergence 1 is the only difference *inside* a vendored
+file, and 2 and 3 are files this project owns. Anything else that differs is drift,
+not design. `nora_touch.c`'s constants in particular are measured values with their
+measurement recorded in the comment beside them; changing one here without changing
+it upstream leaves two boards claiming different evidence for the same number.
+
+## The upstream build switch, and how it is satisfied here
+
+`touch_console.{c,h}` asks upstream's question by name:
+
+```c
+#if defined(ENA_OPEN_TOUCH_EXCLUSIVE)
+```
+
+Upstream that is a device fact — sonora also builds for a `dsPIC33AK128MC106`,
+which has no ITC and no ADC 5, so every console verb would print zeros from a
+peripheral that is not there. The `#else` branch in `touch_console.h` supplies an
+"unknown module" stub, which is also what keeps the module out of that image: the
+dispatcher's unconditional `case 'k'` is otherwise the one reference that keeps
+`touch_console.c` — and through it `nora_touch.c` — linked.
+
+Rather than delete the guard (which would fork both files), this starter answers
+the question from its own switch. `src/app/app_specific_config_defs.h` is a local
+adapter, ~10 lines:
+
+```c
+#include "app_config.h"     /* HAL_STARTER_ENABLE_TOUCH */
+
+#if HAL_STARTER_ENABLE_TOUCH
+#define ENA_OPEN_TOUCH_EXCLUSIVE  1
+#endif
+```
+
+So there is one switch here and not two, and `HAL_STARTER_ENABLE_TOUCH 0` now does
+what `docs/touch-addon.md` has always said it does: the console body compiles out,
+the header answers `APP_CONSOLE_ERR_NOT_FOUND`, and `--gc-sections` drops both
+files instead of keeping program Flash that nothing can reach.
+
+Measured on the `dsPIC33AK512` configuration, 2026-08-15: 111,128 bytes in the
+program region with touch on, 94,844 with it off — **16,284 bytes**, the detection
+layer, the backend and the console together. (sonora's own comment quotes 9.0 KiB;
+that is its build, counting what its `case 'k'` was holding.)
 
 ## Checking
 
+All seven vendored files at once, against a sonora clone (`origin/main`), with the
+one include-path divergence normalised away:
+
 ```sh
 python - <<'PY'
-a = open('../sonora/src/app/uart_app/touch_console.c','rb').read().replace(b'\r\n', b'\n')
-b = open('src/console/touch_console.c','rb').read().replace(b'\r\n', b'\n')
-a = a.replace(b'hal_touch/nora_touch.h', b'nora_touch.h')
-print('identical' if a == b else 'DIVERGED')
+import io, subprocess
+S = '../dsp-sonora-dev'          # any sonora clone; blobs are read from origin/main
+pairs  = [('src/app/hal_touch/' + f, 'src/hal_touch/' + f) for f in (
+          'nora_touch.h', 'nora_touch.c', 'nora_itc_internal.h',
+          'nora_itc_dspic33ak.c', 'nora_itc_dspic33ak_reg.h')]
+pairs += [('src/app/uart_app/' + f, 'src/console/' + f) for f in (
+          'touch_console.c', 'touch_console.h')]
+for up, here in pairs:
+    a = subprocess.run(['git', '-C', S, 'show', 'origin/main:' + up],
+                       capture_output=True, check=True).stdout.decode('utf-8')
+    a = a.replace('\r\n', '\n').replace('hal_touch/nora_touch.h', 'nora_touch.h')
+    b = io.open(here, encoding='utf-8', newline='').read().replace('\r\n', '\n')
+    print(('identical' if a == b else 'DIVERGED '), here)
 PY
 ```
+
+Last run: **7 of 7 identical** against sonora `main` = `1c7728c` (2026-08-15).
 
 The `\r\n` normalisation is not cosmetic: this starter's files are CRLF and some of
 the upstream files are LF, so a byte comparison without it always reports a

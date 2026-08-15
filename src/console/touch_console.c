@@ -14,6 +14,12 @@
  * points -- see the diagnostics section of nora_touch.h. */
 #include "nora_touch.h"
 
+/* Nothing below is compiled without touch -- touch_console.h supplies the
+ * "unknown module" stub in that case, and it explains why. Guarding the body
+ * here rather than excluding the file in configurations.xml keeps the device
+ * fact in one place and keeps MPLAB X out of it. */
+#if defined(ENA_OPEN_TOUCH_EXCLUSIVE)
+
 /*===========================================================================
  * touch_console.c
  *
@@ -641,3 +647,5 @@ void touch_console_onmsg( app_console_msg_t* msg )
         break;
     }
 }
+
+#endif /* defined(ENA_OPEN_TOUCH_EXCLUSIVE) */

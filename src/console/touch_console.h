@@ -7,6 +7,7 @@
  */
 
 #include "app_console.h"
+#include "app_specific_config_defs.h"   /* ENA_OPEN_TOUCH_EXCLUSIVE */
 
 /* Open capacitive-touch bring-up console (module 'k'). Raw ITC counts and
  * nothing above them: no baseline, no threshold and no key decision, all of which
@@ -59,6 +60,34 @@
  *                               "a requested time does not fit its timer" and
  *                               the previous value is put back)
  */
+#if defined(ENA_OPEN_TOUCH_EXCLUSIVE)
+
 void touch_console_onmsg( app_console_msg_t* msg );
+
+#else
+
+/* No touch in this build. On the dsPIC33AK128MC106 that is a device fact, not a
+ * preference: the part has no ITC and no ADC 5, so nora_itc_dspic33ak.c compiles
+ * to its NORA_ITC_ERR_UNSUPPORTED stubs and every verb above would print zeros
+ * from a peripheral that is not there. app_specific_config_defs.h (2.1) already
+ * decides this -- ENA_OPEN_TOUCH_EXCLUSIVE is defined for the AK512 Classic build
+ * only -- and main.c and board/devices/button_led.c already follow it. This stub
+ * makes the console dispatcher follow it too, and gives the same answer it gives
+ * for any unknown module. Same shape as resident_de_app_console.h, for the same
+ * reason: the test lives here, so no caller needs an #if.
+ *
+ * It is also what keeps the module out of the image. touch_console.c is compiled
+ * for every configuration, so the unconditional 'case k' in app_debug.c was the
+ * only reference keeping touch_console.c and, through it, nora_touch.c linked --
+ * 9.0 KiB of program Flash on a part that cannot use one byte of it. With the
+ * reference gone --gc-sections drops both. */
+static inline void touch_console_onmsg( app_console_msg_t* msg )
+{
+    if( msg == NULL ) { return; }
+    msg->data_len = 0u;
+    msg->status   = APP_CONSOLE_ERR_NOT_FOUND;
+}
+
+#endif /* defined(ENA_OPEN_TOUCH_EXCLUSIVE) */
 
 #endif /* SONORA_TOUCH_CONSOLE_H */
