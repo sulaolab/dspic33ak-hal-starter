@@ -357,12 +357,18 @@ Each clause answers a specific way this could go wrong:
 | × 35/100 | a threshold that sits on top of the taps it must accept |
 | ceiling = the configured value | learning ever making a pad **less** sensitive than the value already proven on this hardware — except where the floor below says that value would press itself. |
 | floor = `max(700, idle_ref × 6)`, **applied after the ceiling** | a pad pressing itself. This is the only vote idle noise still gets, and it is a veto rather than the rule — so it has to outrank the ceiling. Applied in the other order the ceiling silently undoes it: with the floor's own minimum equal to the shipped default, floor-then-ceiling pins every learned pair at exactly the default and `idle_ref × 6` becomes dead code. |
+| `release = press / 2`, derived | a release level learned separately landed inside the noise band. Hysteresis now scales with a learned-down pad instead of being lost by it. |
 
 The two constants were measured, and both moved on 2026-08-16 (`FLOOR_MIN` 500 → 700,
 `FLOOR_MULT` 3 → 6) on the sonora board after an unrelated noise improvement dropped
 `idle_ref` far enough that the *absolute* part of the floor became the binding one and
 landed inside the noise band: 30 minutes of quiet produced 21 false presses at 500,
-and none at 700. 700 is the smallest value measured clean, and it still sits under
+and none at 700. The 700 pair has since held for a **7 h 52 m** unattended soak on
+that board — zero `press` and zero `release` lines between the last deliberate tap
+and the check, at 5,692,179 scans with 0 rejected and 0 implausible samples
+(2026-08-16, three pads at press 700 / release 350, `idle_ref` 67 / 63 / 119). Thirty
+minutes was enough to see the broken state; it took hours to earn the claim that the
+fixed one is quiet. 700 is the smallest value measured clean, and it still sits under
 every deliberate tap on that board (the lightest was 1,085; only the fourth and fifth
 tap of a fast six-tap burst ever fell below it). `FLOOR_MULT` 6 rather than 3 because
 with a 700 minimum, ×3 would not bind until `idle_ref` passed 233, well above anything
@@ -389,8 +395,8 @@ criterion counts.
 
 Deciding on three samples is riskier than on five, and the answer is the limits
 rather than an argument: the ceiling means an unlucky sample can only make a pad
-*more* sensitive than shipped, the floor keeps it above three times the pad's own
-idle magnitude, and the next press recomputes from four.
+*more* sensitive than shipped, the floor keeps it at or above `max(700, idle_ref × 6)`,
+and the next press recomputes from four.
 
 ### 3.4 Nothing is stored across a power cycle
 
