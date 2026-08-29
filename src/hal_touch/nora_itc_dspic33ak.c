@@ -742,7 +742,17 @@ nora_itc_status_t nora_itc_irq_disable(nora_itc_list_t list)
     return NORA_ITC_OK;
 }
 
-void __attribute__((interrupt, no_auto_psv)) _ITCInterrupt(void)
+/*
+ * `context`, not `no_auto_psv`: on dsPIC33A the alternate W0-W7 array is tied to the
+ * IPL, so every nesting level already has its own register bank and this thunk needs
+ * no prologue push -- and a prologue push at an ISR's first instruction is the
+ * documented trigger of the A1 silicon STACK ERROR. Every other vector in this
+ * project is written the same way (src/main.c _T1Interrupt, src/console/uart_irq.c,
+ * the DMA vectors in src/hal_spi_i2s_tdm/); this one was the last no_auto_psv left.
+ * Do not revert it: the attribute is not an optimisation here, it is what keeps the
+ * vector off that erratum.
+ */
+void __attribute__((interrupt, context)) _ITCInterrupt(void)
 {
     uint8_t i;
 
