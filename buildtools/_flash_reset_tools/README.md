@@ -22,9 +22,9 @@ auto-detect the newest MPLAB X installation and use its bundled `mdb.bat`,
 `ipecmdboost.jar`, and Java runtime.
 
 Source is maintained in the `sulaolab/pkob4-flash-reset` repository
-(private, MIT-0). Rebuild from source with `dotnet publish -c Release` under
+(public, MIT-0). Rebuild from source with `dotnet publish -c Release` under
 `tools/flash_pkob4`, `tools/reset_pkob4`, or `tools/read_udid_pkob4`, then copy
-the published executables into this directory.
+the resulting `bin\Release\net8.0\win-x64\publish\*.exe` into this directory.
 
 ---
 
@@ -304,9 +304,11 @@ dsPIC33AK512MPS512 の Curiosity ボードを **コマンドライン**から素
 | `reset_pkob4.exe` | **リセット専用**（release-from-reset）。書き込みはしない。 |
 | `read_udid_pkob4.exe` | **UDID 読み出し専用**（ダイ固有の 128bit Unique Device ID を表示）。書き込み・リセットはしないが、接続時に CDC コンソールは一瞬切れる。 |
 
-どちらも .NET 不要の自己完結 exe（Windows x64、各 約 68 MB）です。
-**ソースは GitHub リポジトリ `sulaolab/pkob4-flash-reset`（private, MIT-0）** で管理しており、
-ローカルでは `tools/flash_pkob4/` と `tools/reset_pkob4/`（`dotnet publish -c Release` で再ビルド可）。
+いずれも .NET 不要の自己完結 exe（Windows x64、各 約 68 MB）です。
+**ソースは GitHub リポジトリ `sulaolab/pkob4-flash-reset`（public, MIT-0）** で管理しており、
+ローカルでは `tools/flash_pkob4/` / `tools/reset_pkob4/` / `tools/read_udid_pkob4/` で
+`dotnet publish -c Release` し、生成された `bin\Release\net8.0\win-x64\publish\*.exe` を
+このフォルダへコピーして更新します（下の「注記」と同じ手順）。
 
 ---
 
