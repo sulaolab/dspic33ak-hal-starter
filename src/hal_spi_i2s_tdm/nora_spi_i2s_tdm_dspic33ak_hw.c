@@ -28,7 +28,7 @@
   #define TDM_DBG_PRINTF(...)   ((void)0)
 #endif //defined(ENA_TDM_DBG)
 
-#define PRIO_TDM_DMA              (4)
+/* PRIO_TDM_DMA now lives in nora_spi_i2s_tdm_dspic33ak_hw.h (two TUs need it). */
 
 
 //===========================================================
@@ -56,7 +56,7 @@ typedef struct {
 // Function Prototype (private)
 //===========================================================
 static bool        hw_inst_valid( tdm_spi_inst_t inst );
-static bool        hw_dma_config_channel( tdm_spi_inst_t inst, nora_dma_channel_t dma_ch, int32_t *buffer, uint32_t count, bool is_rx );
+static bool        hw_dma_config_channel( tdm_spi_inst_t inst, nora_dma_channel_t dma_ch, int32_t *buffer, uint32_t count, bool is_rx, uint8_t irq_priority );
 static void        hw_spi_irq_enable( tdm_spi_inst_t inst, bool enable );
 static void        hw_spi_irq_bits_enable( tdm_spi_inst_t inst, bool enable );
 static void        hw_spi_irq_bits_clear_flags( tdm_spi_inst_t inst );
@@ -271,17 +271,18 @@ bool nora_spi_i2s_tdm_hw_dma_config( tdm_spi_inst_t inst,
                                           uint8_t  tx_dma_ch,
                                           int32_t* rx_buffer,
                                           int32_t* tx_buffer,
-                                          uint32_t buffer_word_count )
+                                          uint32_t buffer_word_count,
+                                          uint8_t  irq_priority )
 {
     if( !hw_inst_valid( inst ) )
     {
         return false;
     }
-    if( !hw_dma_config_channel( inst, rx_dma_ch, rx_buffer, buffer_word_count, true ) )
+    if( !hw_dma_config_channel( inst, rx_dma_ch, rx_buffer, buffer_word_count, true, irq_priority ) )
     {
         return false;
     }
-    return hw_dma_config_channel( inst, tx_dma_ch, tx_buffer, buffer_word_count, false );
+    return hw_dma_config_channel( inst, tx_dma_ch, tx_buffer, buffer_word_count, false, irq_priority );
 }
 
 
@@ -449,7 +450,7 @@ static bool hw_inst_valid( tdm_spi_inst_t inst )
  * SPIxBUF and the logical DMA trigger. RX copies SPIxBUF into the ping-pong buffer,
  * while TX copies the ping-pong buffer into SPIxBUF.
  */
-static bool hw_dma_config_channel( tdm_spi_inst_t inst, nora_dma_channel_t dma_ch, int32_t *buffer, uint32_t count, bool is_rx )
+static bool hw_dma_config_channel( tdm_spi_inst_t inst, nora_dma_channel_t dma_ch, int32_t *buffer, uint32_t count, bool is_rx, uint8_t irq_priority )
 {
     if( !hw_inst_valid( inst ) )
     {
@@ -479,7 +480,9 @@ static bool hw_dma_config_channel( tdm_spi_inst_t inst, nora_dma_channel_t dma_c
         .trigger      = is_rx ? dev->rx_trigger : dev->tx_trigger,
 
         .irq_priority_set = true,
-        .irq_priority     = PRIO_TDM_DMA,
+        /* Caller-supplied, NOT the PRIO_TDM_DMA constant: the leg owns its priority so that
+         * arming re-asserts the rate-monotonic map instead of reverting it. */
+        .irq_priority     = irq_priority,
         // RX raises the per-instance block ISR (the block-timing master); TX is
         // interrupt-less -- fire-and-forget ping-pong with auto-reload needs no ISR, so
         // the CPU IRQ is enabled on the RX channel only. (No TX "secondary" handler.)

@@ -53,11 +53,13 @@ typedef enum {
 } nora_dma_channel_t;
 
 /*
- * DMA triggers currently needed by the SPI/I2S/TDM transport.  These are
- * logical peripheral events, not hardware trigger-select register values. The selected
- * NORA port maps them to its device-specific trigger representation.
+ * DMA triggers currently needed by the SPI/I2S/TDM transport, plus the AK512
+ * Classic-app PWM audio-DAC (PG5-8).  These are logical peripheral events,
+ * not hardware trigger-select register values. The selected NORA port maps
+ * them to its device-specific trigger representation.
  *
- * Enumerator set is per family: AK reaches SPI4 where CK reaches SPI3.
+ * Enumerator set is per family: AK reaches SPI4 where CK reaches SPI3; the
+ * PWM_GEN5-8 triggers are AK512-only (no PG5-8 on AK128, no dsPIC33CK port).
  *
  * NORA_DMA_TRIGGER_NONE is the software-only channel: no peripheral event may
  * fire it, and it is driven solely by nora_dma_software_trigger().  It is not a
@@ -76,6 +78,10 @@ typedef enum {
     NORA_DMA_TRIGGER_SPI3_TX,
     NORA_DMA_TRIGGER_SPI4_RX,
     NORA_DMA_TRIGGER_SPI4_TX,
+    NORA_DMA_TRIGGER_PWM_GEN5,
+    NORA_DMA_TRIGGER_PWM_GEN6,
+    NORA_DMA_TRIGGER_PWM_GEN7,
+    NORA_DMA_TRIGGER_PWM_GEN8,
 } nora_dma_trigger_t;
 
 /* A raw, backend-owned DMA status snapshot.  Use the query functions below
@@ -251,6 +257,20 @@ uint32_t nora_dma_read_count(nora_dma_channel_t ch);
  * Needed by the TDM soft-stop path, which masks the DMA IRQ before stopping the
  * channel so the ISR cannot run during teardown. */
 void nora_dma_irq_enable(nora_dma_channel_t ch, bool enable);
+
+/* Re-program a channel's CPU interrupt priority (0..7) after nora_dma_configure().
+ * Task level only: IPCx is never written by hardware or by an ISR, so this is an
+ * ordinary read-modify-write with a single writer. Programming a priority while
+ * that channel's interrupt is enabled is the caller's decision -- an interrupt
+ * already in flight keeps the level it was accepted at. */
+void nora_dma_irq_set_priority(nora_dma_channel_t ch, uint8_t prio);
+
+/* Read back a channel's CPU interrupt priority (0..7); 0 for an invalid channel.
+ * The counterpart of nora_dma_irq_set_priority, so a caller that re-programs a
+ * priority at run time can PROVE what the hardware holds instead of trusting that
+ * its own write happened -- 0 also being the "interrupt disabled" encoding is
+ * exactly why an unverified priority write is worth reporting. */
+uint8_t nora_dma_irq_get_priority(nora_dma_channel_t ch);
 
 /* General IRQ control: read the channel's CPU interrupt enable;
  * false for an invalid channel.

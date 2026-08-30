@@ -40,12 +40,6 @@
 #include <stdbool.h>
 #include "nora_spi_i2s_tdm_conf.h"   // HAL compile-time config (geometry/topology); exposes NORA_TDM_* to consumers
 
-// NORA_TDM_SUMPROF gates code OUT, so an absent macro would evaluate to 0 in the #if below and
-// silently drop the profiler from a project whose conf.h predates it. Demand it explicitly:
-// copy the block from nora_spi_i2s_tdm_conf.h_example (default 1 = previous behaviour).
-#ifndef NORA_TDM_SUMPROF
-#error "nora_spi_i2s_tdm_conf.h must define NORA_TDM_SUMPROF (0 or 1) -- see nora_spi_i2s_tdm_conf.h_example."
-#endif
 
 
 //===========================================================
@@ -75,28 +69,13 @@ typedef struct
 } nora_spi_i2s_tdm_load_t;
 
 
-// TDM-active COMBINED-occupancy profiler snapshot (engine-wide "TDMsum").
-//
-// The per-instance load monitor above times EACH RX-block ISR on its own, so leg A's peak
-// and leg B's peak can occur in DIFFERENT time windows -- adding the two peaks overstates the
-// real CPU load. This snapshot instead reports the peak, over any single fixed common window,
-// of the TIME UNION during which ANY TDM RX-block ISR was executing (TDM1 and TDM2 overlap
-// counted once, never double-added). window_period_ticks is the common window length in raw
-// high-res-timer counts (derived from the same block deadline the per-leg %/margin uses);
-// max_busy_ticks is the largest single-window union since the last clear; saturated_count is
-// the number of windows that were fully (100%) occupied since the last clear.
-//
-// NOTE: this is TDM ACTIVE WALL TIME. Because a higher-priority non-TDM interrupt (e.g. the
-// ADC or UART-TX vectors, which sit above PRIO_TDM_DMA) can preempt a TDM ISR, any time spent
-// in such a nested non-TDM interrupt is included in the measured TDM busy time. Excluding it
-// would require instrumenting every ISR and is intentionally out of scope here.
-typedef struct
-{
-    uint32_t window_period_ticks;   // common window length (raw high-res-timer counts); 0 = not configured
-    uint32_t max_busy_ticks;        // peak single-window TDM-union occupancy since the last clear
-    uint32_t saturated_count;       // windows fully (>=100%) occupied since the last clear
-    bool     initialized;           // a valid window has been configured
-} nora_spi_i2s_tdm_tdmsum_t;
+// The engine-wide TDMsum combined-occupancy snapshot that stood here was removed on
+// 2026-08-26. Engine CPU load is now reported by hal_timer/nora_cpu_load_prof.h
+// (nora_cpu_load_snapshot_t): a fixed measurement window independent of the block period,
+// and EXCLUSIVE per-owner CPU time instead of TDM-active wall time. The old figure counted a
+// preemptor's execution inside the leg it preempted, so it grew when the interrupt priorities
+// changed even though the work had not. Past measurements labelled 'TDMsum' in this tree were
+// taken with the old instrument and are not comparable with a 'DSPload' figure.
 
 
 
@@ -188,8 +167,7 @@ typedef enum {
 //       elements, so one sample IS one DMA element and there is nothing to pack.
 //   CK: struct { uint16_t wire[2]; }. The DMA element there is a 16-bit wire word; the
 //       struct is what keeps that visible. Hiding it behind an int32_t buffer is how a
-//       half-swap defect stayed hidden once already (dspic33ck-hal-lab,
-//       docs/ck_silicon_findings.md defect 7).
+//       half-swap defect stayed hidden once already (observed on the dsPIC33CK backend).
 //
 // This is the DMA contract's typed-value rule (nora_dma_status_t) applied one level up: the
 // TYPE is shared, the LAYOUT is not, and a consumer touches the value only through the
@@ -571,6 +549,24 @@ extern bool nora_spi_i2s_tdm_inst_get_setup( const nora_spi_i2s_tdm_inst_t* inst
 // for a non-primary leg; true after the (idempotent) teardown.
 extern bool nora_spi_i2s_tdm_inst_start( nora_spi_i2s_tdm_inst_t* inst );
 extern bool nora_spi_i2s_tdm_inst_stop( nora_spi_i2s_tdm_inst_t* inst );
+// Per-instance RX-block INTERRUPT mask, independent of the stream itself.
+//
+// The DMA keeps transferring either way: this masks only the RX-block ISR, so the leg's TX still
+// streams and its RX buffer still fills -- what stops is the per-block callback and every
+// diagnostic the ISR maintains (block_count, deadline_miss, FRMERR bookkeeping, load peaks).
+//
+// Its one legitimate use is a leg whose RX nobody consumes and whose TX is filled by ANOTHER
+// leg's callback (co-clocked single-producer mirroring): there the ISR does nothing but cost CPU
+// in the block period, and freeing it buys DSP headroom. Because that also freezes the leg's
+// diagnostics, the caller owns the consequence -- do not read this leg's ISR-maintained counters,
+// and do not gate any watchdog on them, while the mask is off.
+//
+// Re-enabling clears the pending flag first, so a request that arrived while masked does not
+// fire an immediate spurious block. Returns false only for a NULL instance.
+extern bool nora_spi_i2s_tdm_inst_set_block_irq_enabled( nora_spi_i2s_tdm_inst_t* inst,
+                                                              bool enabled );
+extern bool nora_spi_i2s_tdm_inst_block_irq_is_enabled( const nora_spi_i2s_tdm_inst_t* inst );
+
 // NOTE: the internal arm/go split (program+arm DMA/SPI with the module OFF, then release SPIEN
 // back-to-back so co-clocked legs latch one FS edge = phase-locked) is NOT public. It has no
 // armed-state / open-gate of its own, so exposing it would let a caller enable SPI out of
@@ -608,6 +604,39 @@ extern nora_spi_i2s_tdm_clock_event_t nora_spi_i2s_tdm_consume_clock_event( void
 // used by the CMSIS-SAI wrapper to validate ARM_SAI AUDIO_FREQ. Runtime rate DETECTION +
 // the stop->reconfigure->start it drives live in the application.
 
+// RATE-MONOTONIC LEG PRIORITIES.
+//
+// By default every leg's RX-DMA interrupt sits at the same priority, so the legs cannot
+// preempt each other and each one's worst-case response time includes the other's whole
+// block ISR as blocking. With mixed rates that blocking is what misses the deadline of the
+// leg with the SHORTER period, even though that leg on its own fits comfortably.
+//
+// This gives the leg named first the base priority and the other one base-1, so the
+// short-deadline leg preempts the long-deadline one. Pass the same instance twice (or NULL
+// as `longer_deadline`) to put every configured leg back on the base priority, which is the
+// power-on state. The HAL owns the numbers; the caller only decides which leg is which.
+//
+// TASK LEVEL ONLY, and intended for a moment when the legs are not streaming (a rate change
+// commits through stop -> reconfigure -> start). Making the priorities asymmetric means the
+// legs CAN nest, so anything shared between two leg callbacks has to be safe against that --
+// on this core W0-W7/AccA/AccB/RCOUNT/CORCON are banked per IPL and so are F0-F7, but the
+// modulo-addressing registers are not, and neither is application state.
+// Validated on an AK512 16-channel mixed-rate configuration.
+//
+// Returns false and changes nothing on a bad instance, or if the base priority leaves no
+// room below it.
+bool nora_spi_i2s_tdm_set_rate_monotonic_priorities( nora_spi_i2s_tdm_inst_t* shorter_deadline,
+                                                     nora_spi_i2s_tdm_inst_t* longer_deadline );
+
+// Read back the CPU interrupt priority this leg's RX-block ISR currently runs at (0..7);
+// 0 for a bad instance -- which is also the "disabled" encoding, so a caller reporting this
+// cannot mistake a refused call for a programmed level.
+//
+// This exists so a caller that re-orders priorities on a LIVE stream can state what the
+// hardware holds rather than what it asked for. The rate-monotonic invariant -- the leg with
+// the higher sample rate holds the higher priority -- is only checkable with a read side.
+uint8_t nora_spi_i2s_tdm_inst_irq_priority( const nora_spi_i2s_tdm_inst_t* inst );
+
 // Snapshot the load monitor / status. The singleton forms report the PRIMARY leg
 // (primary_leg_index, default logical leg 0); the inst forms report a specific instance.
 // For the inst forms, block_count/deadline_miss/load AND running are that instance's;
@@ -622,28 +651,6 @@ extern bool nora_spi_i2s_tdm_inst_get_status( nora_spi_i2s_tdm_inst_t* inst,
                                                    nora_spi_i2s_tdm_status_t* status,
                                                    bool clear_peak );
 
-// Engine-wide TDM-active COMBINED-occupancy ("TDMsum") profiler control/readout.
-//
-// These operate on a single engine-wide profiler shared by every TDM RX-block ISR (see
-// nora_spi_i2s_tdm_tdmsum_t). All three bracket the access with EVERY configured leg's
-// RX-DMA IE mask so the read/reconfigure is consistent against the (mutually non-preempting)
-// TDM ISRs on this 16-bit core -- the caller does NOT mask.
-//
-// _tdmsum_configure() sets the common window length (in raw high-res-timer counts, e.g. the
-// block deadline converted to counts) and re-bases the window grid, clearing depth/peaks. Call
-// it once the deadline is known and again whenever it changes (rate change / new stream epoch).
-// _tdmsum_reset() re-bases the grid and clears depth/peaks but KEEPS the window length (use on
-// stop/resume). _tdmsum_get() snapshots the peak/saturation, clearing them when clear_peak.
-//
-// Declared only when NORA_TDM_SUMPROF is 1 (the default). With 0 the profiler, its ISR hooks
-// and these three entry points are not compiled -- a reference then fails at compile time
-// rather than silently returning a never-updated zero snapshot.
-#if NORA_TDM_SUMPROF
-extern void nora_spi_i2s_tdm_tdmsum_configure( uint32_t window_period_ticks );
-extern void nora_spi_i2s_tdm_tdmsum_reset( void );
-extern bool nora_spi_i2s_tdm_tdmsum_get( nora_spi_i2s_tdm_tdmsum_t* out,
-                                              bool clear_peak );
-#endif
 
 
 // Last-error diagnostic. The bool-returning calls (set_port / open / close / inst_configure /

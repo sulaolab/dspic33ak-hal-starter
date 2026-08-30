@@ -342,68 +342,9 @@ void nora_spi_i2s_tdm_diag_read_counts( const nora_spi_i2s_tdm_diag_t* d,
 }
 
 
-//===========================================================
-// TDM-active COMBINED-occupancy profiler ("TDMsum") -- engine-wide singleton.
-// The hot-path enter/exit/advance/close are static inline in the header; only the
-// foreground configure/reset/snapshot and the shared instance live here. See the header
-// for the full concurrency/measurement contract. These do NO masking (callers mask).
-// Compiled only when NORA_TDM_SUMPROF is 1 (see nora_spi_i2s_tdm_conf.h).
-//===========================================================
-#if NORA_TDM_SUMPROF
-
-nora_spi_i2s_tdm_dspic33ak_sumprof_state_t
-    g_nora_spi_i2s_tdm_dspic33ak_sumprof_state = {
-    0u,     /* window_period_ticks */
-    0u,     /* window_end_ticks    */
-    0u,     /* busy_start_ticks    */
-    0u,     /* busy_ticks          */
-    0u,     /* max_busy_ticks      */
-    0u,     /* saturated_count     */
-    0u,     /* busy_depth          */
-    false   /* initialized         */
-};
-
-void nora_spi_i2s_tdm_dspic33ak_sumprof_configure( uint32_t now, uint32_t window_period_ticks )
-{
-    g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.window_period_ticks = window_period_ticks;
-    g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.window_end_ticks    = now + window_period_ticks;
-    g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.busy_start_ticks    = now;
-    g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.busy_ticks          = 0u;
-    g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.max_busy_ticks      = 0u;
-    g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.saturated_count     = 0u;
-    g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.busy_depth          = 0u;
-    g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.initialized         = ( window_period_ticks != 0u );
-}
-
-void nora_spi_i2s_tdm_dspic33ak_sumprof_reset( uint32_t now )
-{
-    // Keep window_period_ticks; re-base the grid and clear depth/accumulators/peaks.
-    g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.window_end_ticks = now + g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.window_period_ticks;
-    g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.busy_start_ticks = now;
-    g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.busy_ticks       = 0u;
-    g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.max_busy_ticks   = 0u;
-    g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.saturated_count  = 0u;
-    g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.busy_depth       = 0u;
-}
-
-void nora_spi_i2s_tdm_dspic33ak_sumprof_snapshot( nora_spi_i2s_tdm_tdmsum_t* out,
-                                             bool clear_peak )
-{
-    if( out == NULL )
-    {
-        return;
-    }
-
-    out->window_period_ticks = g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.window_period_ticks;
-    out->max_busy_ticks      = g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.max_busy_ticks;
-    out->saturated_count     = g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.saturated_count;
-    out->initialized         = g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.initialized;
-
-    if( clear_peak )
-    {
-        g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.max_busy_ticks  = 0u;
-        g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.saturated_count = 0u;
-    }
-}
-
-#endif // NORA_TDM_SUMPROF
+// The engine-wide TDMsum union profiler that lived here was removed on 2026-08-26. It measured
+// TDM-active WALL time over a window phase-locked to one leg's block boundary, so a preemptor's
+// execution was charged to the leg it preempted -- which made the reading depend on the
+// rate-monotonic priority map instead of on the work done. Its replacement is the
+// owner-attributed fixed-window meter in hal_timer/nora_cpu_load_prof*.{h,c}, which charges
+// EXCLUSIVE time per owner and reports the stolen time as its own quantity.

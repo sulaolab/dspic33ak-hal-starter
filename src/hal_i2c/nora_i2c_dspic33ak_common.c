@@ -39,7 +39,9 @@ const char *nora_i2c_status_str(nora_i2c_status_t status)
  * -------------------------------------------------------------------------- */
 bool nora_i2c_inst_is_valid(nora_i2c_instance_t inst)
 {
-    return ((unsigned)inst < (unsigned)NORA_I2C_INST_COUNT);
+    /* NORA_I2C_INST_SUPPORTED_COUNT: every per-instance array is that wide and
+     * every access passes through here -- see nora_i2c.h. */
+    return ((unsigned)inst < (unsigned)NORA_I2C_INST_SUPPORTED_COUNT);
 }
 
 /* --------------------------------------------------------------------------
@@ -108,7 +110,7 @@ bool nora_i2c_is_present(nora_i2c_instance_t inst)
  * public nora_i2c_is_initialized() reflects either role. This is the only
  * module state in the common layer.
  * -------------------------------------------------------------------------- */
-static nora_i2c_role_t g_role[NORA_I2C_INST_COUNT];
+static nora_i2c_role_t g_role[NORA_I2C_INST_SUPPORTED_COUNT];
 
 void nora_i2c_set_role(nora_i2c_instance_t inst,
                             nora_i2c_role_t role)

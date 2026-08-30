@@ -101,7 +101,10 @@ static const nora_i2c_device_t g_i2c_devices[NORA_I2C_INST_COUNT] = {
 const nora_i2c_device_t *nora_i2c_get_device(
     nora_i2c_instance_t inst)
 {
-    if ((unsigned)inst >= (unsigned)NORA_I2C_INST_COUNT) {
+    /* NORA_I2C_INST_SUPPORTED_COUNT, not the enum count: an instance the project
+     * narrowed away has no per-instance state, so it must report absent here.
+     * The register table itself stays full-width -- it is const, in flash. */
+    if ((unsigned)inst >= (unsigned)NORA_I2C_INST_SUPPORTED_COUNT) {
         return 0;
     }
 
@@ -121,7 +124,7 @@ nora_i2c_status_t nora_i2c_set_interrupt_priority(
     nora_i2c_instance_t inst,
     uint8_t priority)
 {
-    if ((unsigned)inst >= (unsigned)NORA_I2C_INST_COUNT) {
+    if ((unsigned)inst >= (unsigned)NORA_I2C_INST_SUPPORTED_COUNT) {
         return NORA_I2C_ERR_INVALID_ARG;
     }
     if (priority > 7u) {
@@ -415,79 +418,119 @@ bool nora_i2c_device_tx_irq_enable(nora_i2c_instance_t inst, bool enable)
  * The I2CxE (bus error) source is deliberately not bound: this driver does not
  * service it, so an integration that wants error interrupts still owns that
  * vector.
+ *
+ * The per-instance #if defined(_I2CxIF) guards ask "does this silicon have the
+ * source", never "does this product answer as a slave", so a master-only build
+ * still gets every vector -- and, through them, the whole slave engine, since
+ * --gc-sections keeps what a live vector calls. NORA_I2C_DEFINE_SLAVE_VECTORS
+ * (see nora_i2c_slave.h, set per project in board/i2c/nora_i2c_conf.h) is the
+ * second question. At 0 the vectors are not defined and the engine drops out of
+ * the link with them; the engine itself still compiles, so an integration can
+ * own the IVT and call the delegates directly.
  * -------------------------------------------------------------------------- */
+/*
+ * `context` ON EVERY VECTOR HERE, NOT `no_auto_psv`.
+ *
+ * On dsPIC33A the alternate W0-W7 array is INHERENTLY tied to the IPL (DS70005591D:
+ * seven arrays plus AccA/AccB/RCOUNT and the DSP CORCON bits; "IPL4 is assigned to
+ * Context 4"), so an ISR does not need to save W0-W7 -- the hardware already handed it
+ * its own copies. `context` states that fact; `no_auto_psv` is a 16-bit-era attribute
+ * that says nothing on a part with one unified address space.
+ *
+ * THIS IS ABOUT NESTING. Every nesting level runs at a higher IPL than the one it
+ * preempted, so every level gets a DIFFERENT bank automatically, and interrupts at
+ * equal IPL cannot preempt each other at all. Depth is bounded at 7 by the IPL range
+ * -- which is also why there is no bank-exhaustion case to guard: this project assigns
+ * only IPL 3..5 (see the rate-monotonic assignment in the ASRC app), all well inside
+ * the seven arrays. An IPL above 7 would have no array, and nothing here can reach one.
+ *
+ * The vectors below are one-line thunks calling an out-of-line handler, so they touch
+ * nothing beyond the argument registers and `context` takes their prologues to ZERO
+ * pushes. That matters beyond code size: prologue pushes at an ISR's first instruction
+ * are the documented trigger of the A1 silicon STACK ERROR -- see the DO-NOT-REVERT
+ * note in the application-level ASRC clock control, and the
+ * per-vector noinline bodies in nora_spi_i2s_tdm_dspic33ak.c for the case where the
+ * pushes are W8+ and `context` cannot remove them.
+ *
+ * NOT for trap handlers: a trap runs in whatever register context the CPU was already
+ * in, so it cannot rely on a bank of its own.
+ */
+#if NORA_I2C_DEFINE_SLAVE_VECTORS
+
 #if defined(_I2C1IF)
-void __attribute__((interrupt, no_auto_psv)) _I2C1Interrupt(void)
+void __attribute__((interrupt, context)) _I2C1Interrupt(void)
 {
     nora_i2c_slave_event_irq(NORA_I2C_INST_1);
 }
 #endif
 #if defined(_I2C1RXIF)
-void __attribute__((interrupt, no_auto_psv)) _I2C1RXInterrupt(void)
+void __attribute__((interrupt, context)) _I2C1RXInterrupt(void)
 {
     nora_i2c_slave_rx_irq(NORA_I2C_INST_1);
 }
 #endif
 #if defined(_I2C1TXIF)
-void __attribute__((interrupt, no_auto_psv)) _I2C1TXInterrupt(void)
+void __attribute__((interrupt, context)) _I2C1TXInterrupt(void)
 {
     nora_i2c_slave_tx_irq(NORA_I2C_INST_1);
 }
 #endif
 
 #if defined(_I2C2IF)
-void __attribute__((interrupt, no_auto_psv)) _I2C2Interrupt(void)
+void __attribute__((interrupt, context)) _I2C2Interrupt(void)
 {
     nora_i2c_slave_event_irq(NORA_I2C_INST_2);
 }
 #endif
 #if defined(_I2C2RXIF)
-void __attribute__((interrupt, no_auto_psv)) _I2C2RXInterrupt(void)
+void __attribute__((interrupt, context)) _I2C2RXInterrupt(void)
 {
     nora_i2c_slave_rx_irq(NORA_I2C_INST_2);
 }
 #endif
 #if defined(_I2C2TXIF)
-void __attribute__((interrupt, no_auto_psv)) _I2C2TXInterrupt(void)
+void __attribute__((interrupt, context)) _I2C2TXInterrupt(void)
 {
     nora_i2c_slave_tx_irq(NORA_I2C_INST_2);
 }
 #endif
 
 #if defined(_I2C3IF)
-void __attribute__((interrupt, no_auto_psv)) _I2C3Interrupt(void)
+void __attribute__((interrupt, context)) _I2C3Interrupt(void)
 {
     nora_i2c_slave_event_irq(NORA_I2C_INST_3);
 }
 #endif
 #if defined(_I2C3RXIF)
-void __attribute__((interrupt, no_auto_psv)) _I2C3RXInterrupt(void)
+void __attribute__((interrupt, context)) _I2C3RXInterrupt(void)
 {
     nora_i2c_slave_rx_irq(NORA_I2C_INST_3);
 }
 #endif
 #if defined(_I2C3TXIF)
-void __attribute__((interrupt, no_auto_psv)) _I2C3TXInterrupt(void)
+void __attribute__((interrupt, context)) _I2C3TXInterrupt(void)
 {
     nora_i2c_slave_tx_irq(NORA_I2C_INST_3);
 }
 #endif
 
 #if defined(_I2C4IF)
-void __attribute__((interrupt, no_auto_psv)) _I2C4Interrupt(void)
+void __attribute__((interrupt, context)) _I2C4Interrupt(void)
 {
     nora_i2c_slave_event_irq(NORA_I2C_INST_4);
 }
 #endif
 #if defined(_I2C4RXIF)
-void __attribute__((interrupt, no_auto_psv)) _I2C4RXInterrupt(void)
+void __attribute__((interrupt, context)) _I2C4RXInterrupt(void)
 {
     nora_i2c_slave_rx_irq(NORA_I2C_INST_4);
 }
 #endif
 #if defined(_I2C4TXIF)
-void __attribute__((interrupt, no_auto_psv)) _I2C4TXInterrupt(void)
+void __attribute__((interrupt, context)) _I2C4TXInterrupt(void)
 {
     nora_i2c_slave_tx_irq(NORA_I2C_INST_4);
 }
 #endif
+
+#endif /* NORA_I2C_DEFINE_SLAVE_VECTORS */

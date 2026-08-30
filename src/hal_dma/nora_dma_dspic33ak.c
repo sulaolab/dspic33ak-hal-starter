@@ -139,6 +139,15 @@ static bool nora_dma_dspic33ak_trigger_to_chsel(nora_dma_trigger_t trigger,
     case NORA_DMA_TRIGGER_SPI4_RX: *chsel = 0xCu; return true;
     case NORA_DMA_TRIGGER_SPI4_TX: *chsel = 0xDu; return true;
 #endif
+    /* PWM Generator 5-8 (Classic-app audio-DAC, AK512 only). PG5/6 use DMA4/5,
+     * which exist on every device this backend supports, so those two are not
+     * guarded here; the caller (classic_audio_pwm.c) is itself AK512-only. */
+    case NORA_DMA_TRIGGER_PWM_GEN5: *chsel = 0x27u; return true;
+    case NORA_DMA_TRIGGER_PWM_GEN6: *chsel = 0x28u; return true;
+#if defined(_DMA6IF)
+    case NORA_DMA_TRIGGER_PWM_GEN7: *chsel = 0x29u; return true;
+    case NORA_DMA_TRIGGER_PWM_GEN8: *chsel = 0x2Au; return true;
+#endif
     default: return false;
     }
 }
@@ -217,8 +226,10 @@ static bool nora_dma_hw_irq_is_enabled(nora_dma_channel_t ch)
  * so a read-modify-write either way).  Unlike IFS/IEC, hardware never writes IPCx
  * and it is only programmed at init/reconfigure, so there is no concurrent writer
  * to race with - adding an atomicity dance here would complicate the API for a
- * hazard that does not exist. */
-static void nora_dma_irq_set_priority(nora_dma_channel_t ch, uint8_t prio)
+ * hazard that does not exist. Callers may also re-program a priority after init
+ * (see nora_spi_i2s_tdm_set_rate_monotonic_priorities), which does not change
+ * that: IPCx still has exactly one writer, task level. */
+void nora_dma_irq_set_priority(nora_dma_channel_t ch, uint8_t prio)
 {
     switch (ch) {
     case 0: _DMA0IP = prio; break;
@@ -234,6 +245,27 @@ static void nora_dma_irq_set_priority(nora_dma_channel_t ch, uint8_t prio)
     case 7: _DMA7IP = prio; break;
 #endif
     default: break;
+    }
+}
+
+/* Read side of the above. A bit-alias READ is a plain field extract with no
+ * write-back, so nothing here can disturb the neighbouring channel's field. */
+uint8_t nora_dma_irq_get_priority(nora_dma_channel_t ch)
+{
+    switch (ch) {
+    case 0: return (uint8_t)_DMA0IP;
+    case 1: return (uint8_t)_DMA1IP;
+    case 2: return (uint8_t)_DMA2IP;
+    case 3: return (uint8_t)_DMA3IP;
+    case 4: return (uint8_t)_DMA4IP;
+    case 5: return (uint8_t)_DMA5IP;
+#if defined(_DMA6IF)
+    case 6: return (uint8_t)_DMA6IP;
+#endif
+#if defined(_DMA7IF)
+    case 7: return (uint8_t)_DMA7IP;
+#endif
+    default: return 0u;
     }
 }
 

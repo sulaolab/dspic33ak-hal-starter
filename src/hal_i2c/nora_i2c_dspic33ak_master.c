@@ -12,12 +12,12 @@ typedef enum {
     NORA_I2C_PENDING_MASTER_WRITE
 } nora_i2c_pending_state_t;
 
-static uint32_t g_timeout_ms[NORA_I2C_INST_COUNT];
-static nora_i2c_get_ms_fn g_get_ms[NORA_I2C_INST_COUNT];
-static bool g_initialized[NORA_I2C_INST_COUNT];
-static nora_i2c_pending_state_t g_pending_state[NORA_I2C_INST_COUNT];
-static uint32_t g_pending_start_ms[NORA_I2C_INST_COUNT];
-static uint32_t g_pending_timeout_ms[NORA_I2C_INST_COUNT];
+static uint32_t g_timeout_ms[NORA_I2C_INST_SUPPORTED_COUNT];
+static nora_i2c_get_ms_fn g_get_ms[NORA_I2C_INST_SUPPORTED_COUNT];
+static bool g_initialized[NORA_I2C_INST_SUPPORTED_COUNT];
+static nora_i2c_pending_state_t g_pending_state[NORA_I2C_INST_SUPPORTED_COUNT];
+static uint32_t g_pending_start_ms[NORA_I2C_INST_SUPPORTED_COUNT];
+static uint32_t g_pending_timeout_ms[NORA_I2C_INST_SUPPORTED_COUNT];
 
 /* --------------------------------------------------------------------------
  * Local helper prototypes

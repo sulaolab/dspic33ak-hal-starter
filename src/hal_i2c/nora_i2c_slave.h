@@ -7,6 +7,39 @@
 
 #include "nora_i2c.h"
 
+/*
+ * Project-supplied compile-time config, optional. The HAL ships no conf.h, so a
+ * project that vendors hal_i2c without one keeps the documented default below
+ * (vectors defined -- the behaviour this driver has always had) instead of
+ * failing to compile on a missing include.
+ */
+#if !defined( NORA_I2C_DEFINE_SLAVE_VECTORS )
+#  if defined( __has_include )
+#    if __has_include( "nora_i2c_conf.h" )
+#      include "nora_i2c_conf.h"
+#    endif
+#  endif
+#endif
+
+/*
+ * I2C slave interrupt-vector ownership -- see board/i2c/nora_i2c_conf.h for the
+ * full description and for how a project turns it off.
+ *
+ *   1 (default) : the device layer defines _I2CxInterrupt / _I2CxRXInterrupt /
+ *                 _I2CxTXInterrupt for every instance the silicon has, each
+ *                 routing to the slave engine below. Turnkey.
+ *   0           : no vectors are defined. Everything else in this header is
+ *                 still compiled and callable, so an integration that owns the
+ *                 IVT calls nora_i2c_slave_event_irq() (and the _rx_irq /
+ *                 _tx_irq hedge) from its own vectors.
+ *
+ * Defaulted rather than #error'd on purpose: this switch gates code OUT, and a
+ * project whose conf.h predates it must keep working exactly as before.
+ */
+#ifndef NORA_I2C_DEFINE_SLAVE_VECTORS
+#define NORA_I2C_DEFINE_SLAVE_VECTORS   1
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif

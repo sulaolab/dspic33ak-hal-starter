@@ -23,6 +23,14 @@
 // Device identity is a dsPIC33AK backend concern. Keep compiler part macros out of the
 // public transport contract; this adapter is the one place that maps them to backend tags.
 // Tag values are arbitrary: compare with == only (never order / arithmetic).
+/* CPU interrupt priority of every leg's RX-DMA interrupt. Lives here rather than in
+ * hw.c because two translation units need it now: hw.c programs it at configure()
+ * time, and the core re-programs one leg to base-1 for rate-monotonic legs
+ * (nora_spi_i2s_tdm_set_rate_monotonic_priorities). Above it sit UART2 async TX and
+ * the CCP capture at 5, which must keep preempting the audio ISRs -- which is why
+ * the asymmetry is made by LOWERING the long-deadline leg, not by raising the other. */
+#define PRIO_TDM_DMA              (4)
+
 #define NORA_SPI_I2S_TDM_DSPIC33AK_DEV_AK512   (1)
 #define NORA_SPI_I2S_TDM_DSPIC33AK_DEV_AK128   (2)
 
@@ -67,7 +75,8 @@ bool nora_spi_i2s_tdm_hw_dma_config( tdm_spi_inst_t inst,
                                           uint8_t  tx_dma_ch,
                                           int32_t* rx_buffer,
                                           int32_t* tx_buffer,
-                                          uint32_t buffer_word_count );
+                                          uint32_t buffer_word_count,
+                                          uint8_t  irq_priority );
 void nora_spi_i2s_tdm_hw_dma_trigger_enable( tdm_spi_inst_t inst, bool enable );
 void nora_spi_i2s_tdm_hw_module_enable( tdm_spi_inst_t inst, bool enable );
 void nora_spi_i2s_tdm_hw_irq_clear_flags( tdm_spi_inst_t inst );

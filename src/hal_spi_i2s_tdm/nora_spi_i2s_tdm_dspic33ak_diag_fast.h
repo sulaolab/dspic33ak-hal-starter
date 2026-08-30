@@ -1,9 +1,14 @@
 #ifndef NORA_SPI_I2S_TDM_DSPIC33AK_DIAG_FAST_H
 #define NORA_SPI_I2S_TDM_DSPIC33AK_DIAG_FAST_H
 
-// dsPIC33AK-private TDMsum profiler state and ISR fast path. This header is intentionally
-// separate from nora_spi_i2s_tdm_diag.h: portable consumers see diagnostics snapshots only,
-// never this mutable implementation state.
+// dsPIC33AK-private diagnostics ISR fast path. This header is intentionally separate from
+// nora_spi_i2s_tdm_diag.h: portable consumers see diagnostics snapshots only, never the ISR-only
+// entry points.
+//
+// The engine-wide TDMsum union profiler that used to live here was removed on 2026-08-26 and
+// replaced by the owner-attributed fixed-window meter in hal_timer/nora_cpu_load_prof*.h. It
+// measured TDM-active WALL time, which counts a preemptor's execution inside the leg it
+// preempted -- unreadable once the legs stopped sharing one interrupt priority.
 
 #include "nora_spi_i2s_tdm_diag.h"
 
@@ -27,130 +32,5 @@ void nora_spi_i2s_tdm_diag_check_deadline_hot(
     uint8_t                  channel,
     nora_dma_status_t        status );
 
-#if NORA_TDM_SUMPROF
-
-// Bounds the per-call window-advance loop. Steady state advances 0-1 windows per ISR edge;
-// after a long stopped gap the grid is re-based rather than walking every empty window.
-#define NORA_SPI_I2S_TDM_DSPIC33AK_SUMPROF_MAX_CATCHUP  (4u)
-
-typedef struct {
-    volatile uint32_t window_period_ticks;
-    volatile uint32_t window_end_ticks;
-    volatile uint32_t busy_start_ticks;
-    volatile uint32_t busy_ticks;
-    volatile uint32_t max_busy_ticks;
-    volatile uint32_t saturated_count;
-    volatile uint8_t  busy_depth;
-    volatile bool     initialized;
-} nora_spi_i2s_tdm_dspic33ak_sumprof_state_t;
-
-// Defined by nora_spi_i2s_tdm_dspic33ak_diag.c. External linkage is needed only because the
-// inline ISR hooks and foreground snapshot code live in separate backend translation units.
-extern nora_spi_i2s_tdm_dspic33ak_sumprof_state_t
-    g_nora_spi_i2s_tdm_dspic33ak_sumprof_state;
-
-static inline bool nora_spi_i2s_tdm_dspic33ak_sumprof_reached( uint32_t now,
-                                                                uint32_t end )
-{
-    return (int32_t)( now - end ) >= 0;
-}
-
-static inline void nora_spi_i2s_tdm_dspic33ak_sumprof_close_window( void )
-{
-    uint32_t busy = g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.busy_ticks;
-
-    if( busy > g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.window_period_ticks )
-    {
-        busy = g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.window_period_ticks;
-    }
-    if( busy > g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.max_busy_ticks )
-    {
-        g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.max_busy_ticks = busy;
-    }
-    if( busy >= g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.window_period_ticks )
-    {
-        g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.saturated_count++;
-    }
-}
-
-static inline void nora_spi_i2s_tdm_dspic33ak_sumprof_advance( uint32_t now )
-{
-    uint8_t guard = 0u;
-
-    if( !g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.initialized ||
-        ( g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.window_period_ticks == 0u ) )
-    {
-        return;
-    }
-
-    while( nora_spi_i2s_tdm_dspic33ak_sumprof_reached(
-               now, g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.window_end_ticks ) )
-    {
-        if( g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.busy_depth != 0u )
-        {
-            g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.busy_ticks +=
-                (uint32_t)( g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.window_end_ticks -
-                            g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.busy_start_ticks );
-            g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.busy_start_ticks =
-                g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.window_end_ticks;
-        }
-
-        nora_spi_i2s_tdm_dspic33ak_sumprof_close_window();
-
-        g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.busy_ticks = 0u;
-        g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.window_end_ticks +=
-            g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.window_period_ticks;
-
-        if( ++guard >= NORA_SPI_I2S_TDM_DSPIC33AK_SUMPROF_MAX_CATCHUP )
-        {
-            g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.window_end_ticks =
-                now + g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.window_period_ticks;
-            g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.busy_ticks = 0u;
-            if( g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.busy_depth != 0u )
-            {
-                g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.busy_start_ticks = now;
-            }
-            break;
-        }
-    }
-}
-
-static inline void nora_spi_i2s_tdm_dspic33ak_sumprof_enter( uint32_t now )
-{
-    nora_spi_i2s_tdm_dspic33ak_sumprof_advance( now );
-
-    if( g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.busy_depth == 0u )
-    {
-        g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.busy_start_ticks = now;
-    }
-    g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.busy_depth++;
-}
-
-static inline void nora_spi_i2s_tdm_dspic33ak_sumprof_exit( uint32_t now )
-{
-    nora_spi_i2s_tdm_dspic33ak_sumprof_advance( now );
-
-    if( g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.busy_depth == 0u )
-    {
-        return;
-    }
-
-    g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.busy_depth--;
-
-    if( g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.busy_depth == 0u )
-    {
-        g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.busy_ticks +=
-            (uint32_t)( now -
-                        g_nora_spi_i2s_tdm_dspic33ak_sumprof_state.busy_start_ticks );
-    }
-}
-
-void nora_spi_i2s_tdm_dspic33ak_sumprof_configure( uint32_t now,
-                                                     uint32_t window_period_ticks );
-void nora_spi_i2s_tdm_dspic33ak_sumprof_reset( uint32_t now );
-void nora_spi_i2s_tdm_dspic33ak_sumprof_snapshot( nora_spi_i2s_tdm_tdmsum_t* out,
-                                                    bool clear_peak );
-
-#endif // NORA_TDM_SUMPROF
 
 #endif // NORA_SPI_I2S_TDM_DSPIC33AK_DIAG_FAST_H

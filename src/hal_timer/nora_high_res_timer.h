@@ -4,8 +4,13 @@
 /*
  * nora_high_res_timer.h
  * --------------------------
- * Minimal Timer2-based free-running high-resolution counter for profiling and
- * short interval measurement.
+ * Minimal free-running 32-bit high-resolution counter for profiling and short
+ * interval measurement.
+ *
+ * The counter itself is whichever peripheral the part actually offers -- Timer2
+ * where there is one, an SCCP instance on the parts that have no Timer2 -- and
+ * which one it is does not reach this interface: the caller states the input
+ * clock, and every count is one period of it either way.
  */
 
 #include <stdint.h>
@@ -23,13 +28,13 @@ typedef enum {
 } nora_high_res_timer_status_t;
 
 typedef struct {
-    /* Actual input clock supplied to Timer2, in Hz. */
+    /* Actual input clock supplied to the counter, in Hz. */
     uint32_t timer_clk_hz;
     bool run_in_idle;
 } nora_high_res_timer_config_t;
 
-/* Configure and start Timer2 as a free-running counter. On success, this HAL
- * owns Timer2 until nora_high_res_timer_deinit() is called. */
+/* Configure and start the counter free-running. On success, this HAL owns the
+ * underlying timer peripheral until nora_high_res_timer_deinit() is called. */
 nora_high_res_timer_status_t nora_high_res_timer_init(
     const nora_high_res_timer_config_t *config);
 
@@ -39,12 +44,12 @@ bool nora_high_res_timer_is_present(void);
 
 bool nora_high_res_timer_is_initialized(void);
 
-/* Return the raw Timer2 counter value. One count is one Timer2 input-clock
- * period. Returns 0 when Timer2 is absent or the HAL is not initialized. */
+/* Return the raw counter value. One count is one input-clock period. Returns 0
+ * when the part has no usable timer or the HAL is not initialized. */
 uint32_t nora_high_res_timer_get_count(void);
 
 /* Wraparound-safe when the measured interval is shorter than one full 32-bit
- * Timer2 counter cycle. At 100 MHz, one cycle is about 42.95 seconds. */
+ * counter cycle. At 100 MHz, one cycle is about 42.95 seconds. */
 uint32_t nora_high_res_timer_elapsed_count(uint32_t start_count);
 
 /* Convert raw counts to integer microseconds. The result is truncated and

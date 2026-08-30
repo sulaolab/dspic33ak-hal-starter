@@ -100,6 +100,7 @@
       <logicalFolder name="f7" displayName="hal_timer" projectFiles="true">
         <itemPath>../src/hal_timer/nora_tick_timer_dspic33ak.c</itemPath>
         <itemPath>../src/hal_timer/nora_high_res_timer_dspic33ak.c</itemPath>
+        <itemPath>../src/hal_timer/nora_cpu_load_prof_dspic33ak.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f25" displayName="hal_touch" projectFiles="true">
         <itemPath>../src/hal_touch/nora_touch.c</itemPath>

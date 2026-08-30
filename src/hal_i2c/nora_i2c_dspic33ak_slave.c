@@ -3,6 +3,12 @@
 #include "nora_i2c_dspic33ak_reg.h"
 #include "nora_i2c_dspic33ak_internal.h"
 
+/* This engine is compiled unconditionally. NORA_I2C_DEFINE_SLAVE_VECTORS
+ * (nora_i2c_slave.h) decides only whether the device layer OWNS the I2C
+ * vectors, so at 0 everything here still links for an integration that drives
+ * nora_i2c_slave_*_irq() from its own IVT -- and, when nothing does, drops out
+ * with the vectors as unreferenced code. Not an #error for that reason. */
+
 /* --------------------------------------------------------------------------
  * dsPIC33AK I2C slave engine (interrupt-driven, callback-based).
  *
@@ -29,9 +35,9 @@
  * clock after an address byte even when STREN = 0, so this is always required.
  * -------------------------------------------------------------------------- */
 
-static nora_i2c_slave_config_t g_cfg[NORA_I2C_INST_COUNT];
-static bool                         g_active[NORA_I2C_INST_COUNT];
-static bool                         g_reading[NORA_I2C_INST_COUNT];
+static nora_i2c_slave_config_t g_cfg[NORA_I2C_INST_SUPPORTED_COUNT];
+static bool                         g_active[NORA_I2C_INST_SUPPORTED_COUNT];
+static bool                         g_reading[NORA_I2C_INST_SUPPORTED_COUNT];
 
 /* --------------------------------------------------------------------------
  * Init

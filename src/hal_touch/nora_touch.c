@@ -33,7 +33,8 @@
  * and depth is worth less than it first reported -- ~3x from 2^4 to 2^8, not ~40x,
  * because the absolute tail grows 5x while the count grows 16x.
  *
- * Two corrections, 2026-08-15 (itc_hardware_reference.md §12), because the text
+ * Two corrections, 2026-08-15, after re-reading the ITC hardware documentation,
+ * because the text
  * above was wrong in a way that closed off real levers:
  *
  *  - 2^8 is NOT "the maximum". ACCCNT[3:0] accepts up to 15, and ITCRESx is

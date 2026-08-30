@@ -1,6 +1,6 @@
 # nora_spi_i2s_tdm — SPI framed-mode I2S/TDM transport HAL
 
-A compact, reusable SPI/I2S/TDM **transport** HAL for dsPIC33AK, carved from the upstream
+A compact, reusable SPI/I2S/TDM **transport** HAL for dsPIC33AK, carved from the Sonora
 audio project. It moves audio frames over a framed SPI peripheral with DMA ping-pong and
 a per-instance block callback. It is intentionally **small**: it does not try to be a
 turnkey "drop-in and forget" audio stack. Board-specific, failsafe, and CMSIS-SAI
@@ -46,8 +46,8 @@ needs.
 - No codec init (e.g. WM8904) — that is board/app code.
 - No general board pin routing in the core — board FS/BCLK/DATA/MCLK routing is supplied by
   the registered port hook. **Exception:** for `TDM master + FS_50PCT`, the HAL-owned CLC10
-  helper (`nora_spi_i2s_tdm_dspic33ak_fs_clc.*`) temporarily repoints the already-routed
-  `SSx` FS pin to `CLC10OUT` (and routes `SSx`→RPV8) and restores it on `release()`.
+  helper (`nora_spi_i2s_tdm_dspic33ak_fs_clc.*`) temporarily repoints the already-routed `SSx` FS
+  pin to `CLC10OUT` (and routes `SSx`→RPV8) and restores it on `release()`.
 - No DSP — the callback owns any processing.
 - No sample-rate policy — the transport is rate-agnostic (runs at the configured BRG or
   the incoming external clock); the supported-rate set is an app concern.
@@ -66,13 +66,13 @@ needs.
   count, optional SPI3/4 rows or explicit SPI34 bank selection, per-instance DMA channels, and
   per-leg `SYNC_DOMAIN` defaults. `*.h_example` is never compiled.
 - The template is self-contained (no app-config dependency). A project MAY instead derive
-  the `NORA_TDM_*` macros from its own app config (the upstream project does this in
-  `src/nora_spi_i2s_tdm_conf.h`); that is the integrator's choice and does not make
+  the `NORA_TDM_*` macros from its own app config (Sonora does this in
+  `src/board/audio/nora_spi_i2s_tdm_conf.h`); that is the integrator's choice and does not make
   the HAL core app-dependent (dependency is app → conf.h → HAL, never HAL → app).
 
 ## 4. Required sibling HALs
 
-- `nora_dma` — DMA channel setup/arming (required). Standalone repo:
+- `NORA DMA HAL` (`nora_dma`) — DMA channel setup/arming (required). Standalone repo:
   [nora-hal-dspic33ak-dma](https://github.com/sulaolab/nora-hal-dspic33ak-dma).
 - `nora_high_res_timer` — compile/link sibling dependency for the load monitor.
   Runtime use is gated by `nora_high_res_timer_is_initialized()`; if the timer is
@@ -109,8 +109,9 @@ CPU IRQ enable/flag bits are **no longer** part of that list: they go through th
 `_DMAxIE` / `_DMAxIF` bit aliases, so there is no per-device `IEC`/`IFS` mask table to
 extend (see "Interrupt ownership").
 
-The vendor part macro is confined to one `NORA_SPI_I2S_TDM_DSPIC33AK_DEVICE` adapter
-(opaque-tag derivation); app/HW code selects on that, not on the raw `__dsPIC33AK*__`.
+The vendor part macro is confined to the dsPIC33AK backend adapter in
+`nora_spi_i2s_tdm_dspic33ak_hw.h`. Public headers expose neither the compiler part macro nor
+the backend's opaque device tag.
 
 ## 6. DMA and SPI transport-health diagnostics
 
@@ -151,7 +152,7 @@ TX is interrupt-less (no TX interrupt is enabled by the transport).
 
 State honestly:
 
-- The default upstream configuration is stable (boot, blocks advancing, `miss=0`, audio
+- The default Sonora configuration is stable (boot, blocks advancing, `miss=0`, audio
   unchanged).
 - An exhaustive format/role matrix test is **not** complete.
 - Validated / currently intended envelope:
@@ -163,7 +164,7 @@ State honestly:
     50%-duty FS) was bench-verified on a dsPIC33AK Curiosity board (BCLK/FS = 256, `miss=0`).
     Other master rate/format combinations should still be confirmed on the target board.
 - This snapshot is the **system-topology** model (transactional `configure_system()`,
-  `open()` with no role, per-domain framing validation), HW-verified in the upstream audio
+  `open()` with no role, per-domain framing validation), HW-verified in the upstream Sonora
   source (co-clocked A/B, 94% load, deterministic phase-locked startup, CMSIS single-instance
   loopback) and bench-verified via the starter on a dsPIC33AK Curiosity board (TDM8 master
   smoke, `FS_PULSE`/`FS_50PCT`, stop→restart, negative-config self-test matrix).
@@ -184,6 +185,45 @@ State honestly:
   `SPIROV`/`SPITUR`, sampled per RX block) are not the same signal as the CMSIS wrapper's
   `rx_overflow` / `tx_underflow` (its own software buffer-semantics events, one layer up) — the
   names read alike but the two pairs detect different failure modes at different layers.
+
+## 10. `nora_spi_i2s_tdm.h` is the canonical NORA SPI/I2S/TDM API
+
+**This header — the native dsPIC33AK transport API used by board integration, multi-leg
+operation, and the CMSIS-SAI binding — IS the NORA SPI/I2S/TDM API.** There is no second,
+"more portable" API above it. Application and board code depends on `nora_spi_i2s_tdm.h`
+directly, including the SYSTEM/domain model (`configure_system()` / `start_all_domains()`),
+the per-leg resource model, and the diagnostics in §6.
+
+CK is aligned **to** this contract rather than the two targets meeting in the middle:
+
+- **The API/design of `nora_spi_i2s_tdm.h` is the canonical contract**, and the CK
+  implementation is brought into agreement with it. The direction is fixed: CK moves toward this
+  contract; this contract is not reduced to fit CK.
+- **Silicon-specific data representation and capability differences are handled in the CK
+  backend design** — below the contract, not in front of it. A feature CK lacks is reported as a
+  **capability** the caller can query or as an explicit **unsupported** result; it is not hidden
+  by narrowing the shared surface, and it is not emulated behind the caller's back.
+- **Still open, deliberately:** the block-callback sample type. AK hands the callback
+  `const int32_t*` / `int32_t*`, while CK's wire slots are a target-specific slot type. How that
+  is reconciled — and therefore whether the two targets can literally share one public header, or
+  whether CK needs its own declaration of the same contract — is a CK-backend design question that
+  has **not** been decided here. When it is settled and the header really is shared, this section
+  can be strengthened to say "same public header"; until then it says contract, not header.
+- Consequently, **the portable-facade approach was rejected**: an application-facing
+  `nora_tdm_stream.h` stream contract layered above this transport (with its own lifecycle,
+  its own buffer ownership, and a common envelope smaller than the native one) was implemented
+  on AK and then removed before it reached `main`. Reason: it added a second public API for the
+  same peripheral, its common envelope could only ever be the intersection of both targets, and
+  it had no callers on either target. See `docs_public/nora_hal_public_api.md` and, for the full
+  history including the earlier decision to keep it, the consuming project's HAL merge
+  review record.
+- **Do not re-add a portability facade here.** If AK and CK genuinely cannot share a call,
+  express that as a capability query or an unsupported return in this API.
+
+Note for anyone grepping: `nora_spi_i2s_tdm_dspic33ak.c` has a file-private `tdm_stream_t`
+type (`tdm_stream_primary_leg()`, `tdm_stream_topology_is_valid()`,
+`tdm_stream_ready_for_start()`, the `s_stream` singleton). That is this implementation's own
+primary-leg/topology bookkeeping — unrelated to the removed facade, and load-bearing.
 
 ---
 
@@ -207,7 +247,19 @@ It documents, in full:
   leg is running (and `set_port()` also while open); `close()` is a near-no-op (no board/clock
   teardown).
 - **Block-callback contract** — register before `inst_start()`; `src`/`dst` are both non-NULL when
-  the callback runs, else the block is skipped.
-- **CANDIDATE co-clock API** — `inst_tx_fill_mirror()` (typed `mirror_result_t` + `int32_t** dst`
-  out-param) and the `tx_active_half()` / `tx_active_pos()` probes.
+  the callback runs, else the block is skipped. Both are `nora_tdm_slot_t*` buffers: on this family
+  a slot **is** an `int32_t` (transparent typedef, so existing call sites are unchanged), while a
+  backend whose DMA element is a 16-bit wire word defines it as its own 4-byte struct. Portable
+  consumers go through `nora_tdm_slot_encode_s32()` / `_decode_s32()` / `_scale_q15()` and follow
+  the three rules stated with the type in the header: **go through the accessors** (this family's
+  transparent typedef cannot catch a direct store, so the other family's build is what fails),
+  **a slot is not a byte sequence** (both families are 4 bytes, so cross-family memcpy/persist/
+  reinterpret compiles and is wrong), and **fold the conversion into the DSP's existing
+  store/load** (a separate pass measured 3-4x on a wire-word family; here it is free, which is
+  why the trap is invisible from this side).
+- **Co-clocked block** — `inst_tx_fill_mirror()` (typed `mirror_result_t` + `nora_tdm_slot_t** dst`
+  out-param) and the `tx_active_half()` / `tx_active_pos()` probes. Not part of the minimal
+  single-leg surface, but **required in every backend that can co-clock two legs** — a consumer here
+  not calling them is not a reason to omit them (this is a declared part of the contract,
+  not an optional extra).
 - **Diagnosing a failed call** — every `bool`-returning API sets `get_last_error()` on `false`.

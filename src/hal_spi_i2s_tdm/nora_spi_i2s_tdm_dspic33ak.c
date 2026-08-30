@@ -20,8 +20,9 @@
 #include "nora_spi_i2s_tdm_dspic33ak_hw.h"      // silicon layer: tdm_spi_inst_t + register/DMA ops
 #include "nora_spi_i2s_tdm_dspic33ak_fs_clc.h"  // CLC10 50%-FS generator (TDM master + FS_50PCT)
 #include "nora_spi_i2s_tdm_diag.h"               // public counters and load snapshots
-#include "nora_spi_i2s_tdm_dspic33ak_diag_fast.h" // dsPIC33AK TDMsum ISR fast path
-#include "nora_high_res_timer.h"      // free-running counter: TDMsum 'now' samples for configure/reset
+#include "nora_spi_i2s_tdm_dspic33ak_diag_fast.h" // dsPIC33AK per-leg deadline-check ISR fast path
+#include "nora_high_res_timer.h"      // free-running counter behind the per-leg ISR load monitor
+#include "nora_cpu_load_prof_fast.h"  // fixed-window CPU load profiler: RX-block ISR enter/exit hooks
 
 
 
@@ -115,6 +116,19 @@ struct nora_spi_i2s_tdm_inst_s {
     // Orthogonal to config.clock_role (the clock driver). Which leg the arg-less singleton
     // status API reports is the stream's primary_leg_index (tdm_stream_t), not a per-leg flag.
     uint8_t        sync_domain;
+    // DESIRED CPU interrupt priority for this leg's RX-DMA vector. Defaults to PRIO_TDM_DMA and
+    // is re-programmed only by set_rate_monotonic_priorities(). It is held HERE, per leg, rather
+    // than written straight to IPCx and forgotten, because tdm_inst_arm() reconfigures the DMA
+    // channel on EVERY start/restart and the channel config carries a priority: with a constant
+    // there, a whole-transport restart silently reverted the rate-monotonic map that the caller
+    // had just applied (measured 2026-08-26 -- a leg-A rate change came out symmetric while a
+    // leg-B fast rate change, which does not re-arm, kept the asymmetry).
+    uint8_t        irq_priority;
+    // CPU-load-profiler owner id for THIS leg's RX-block ISR (NORA_CPU_LOAD_OWNER_LEG_A/_B, or
+    // _OTHER for a leg the profiler does not track separately). Held per leg rather than derived
+    // in the ISR because the profiler's own identity space is not the HAL's: it distinguishes at
+    // most two legs by design (see nora_cpu_load_prof.h), while the HAL builds up to four.
+    uint8_t        prof_owner;
     nora_spi_i2s_tdm_config_t config;         // includes this leg's OWN clock role
     bool           config_valid;
     nora_spi_i2s_tdm_block_cb_t block_cb;     // this instance's block callback
@@ -297,6 +311,8 @@ static tdm_spi_leg_t s_spi_legs[] =
         .geom_slots_per_fs      = (uint8_t)(NORA_TDM_SLOTS_PER_FS),
         .geom_block_frames      = (uint16_t)(NORA_TDM_BLOCK_FRAMES),
         .sync_domain            = (uint8_t)(NORA_TDM_SPI1_SYNC_DOMAIN),
+        .irq_priority           = (uint8_t)(PRIO_TDM_DMA),
+        .prof_owner             = (uint8_t)(NORA_CPU_LOAD_OWNER_LEG_A),
         .block_cb               = NULL,
         .block_user             = NULL,
         .diag                   = { .isr_min_count = 0xFFFFFFFFUL },  /* rest zero; start() calls diag_reset() */
@@ -319,6 +335,8 @@ static tdm_spi_leg_t s_spi_legs[] =
         .geom_slots_per_fs      = (uint8_t)(NORA_TDM_SLOTS_PER_FS),
         .geom_block_frames      = (uint16_t)(NORA_TDM_BLOCK_FRAMES),
         .sync_domain            = (uint8_t)(NORA_TDM_SPI2_SYNC_DOMAIN),
+        .irq_priority           = (uint8_t)(PRIO_TDM_DMA),
+        .prof_owner             = (uint8_t)(NORA_CPU_LOAD_OWNER_LEG_B),
         .block_cb               = NULL,
         .block_user             = NULL,
         .diag                   = { .isr_min_count = 0xFFFFFFFFUL },
@@ -336,6 +354,8 @@ static tdm_spi_leg_t s_spi_legs[] =
         .geom_slots_per_fs      = (uint8_t)(NORA_TDM_SLOTS_PER_FS),
         .geom_block_frames      = (uint16_t)(NORA_TDM_BLOCK_FRAMES),
         .sync_domain            = (uint8_t)(NORA_TDM_SPI3_SYNC_DOMAIN),
+        .irq_priority           = (uint8_t)(PRIO_TDM_DMA),
+        .prof_owner             = (uint8_t)(NORA_CPU_LOAD_OWNER_OTHER),
         .block_cb               = NULL,
         .block_user             = NULL,
         .diag                   = { .isr_min_count = 0xFFFFFFFFUL },
@@ -353,6 +373,8 @@ static tdm_spi_leg_t s_spi_legs[] =
         .geom_slots_per_fs      = (uint8_t)(NORA_TDM_SLOTS_PER_FS),
         .geom_block_frames      = (uint16_t)(NORA_TDM_BLOCK_FRAMES),
         .sync_domain            = (uint8_t)(NORA_TDM_SPI4_SYNC_DOMAIN),
+        .irq_priority           = (uint8_t)(PRIO_TDM_DMA),
+        .prof_owner             = (uint8_t)(NORA_CPU_LOAD_OWNER_OTHER),
         .block_cb               = NULL,
         .block_user             = NULL,
         .diag                   = { .isr_min_count = 0xFFFFFFFFUL },
@@ -1304,10 +1326,14 @@ static bool tdm_inst_arm( nora_spi_i2s_tdm_inst_t* inst )
 
     // Arm this instance's RX/TX DMA; on failure roll back ITS DMA/SPI so a partial
     // start leaves no channel with CHEN/IE set and the SPI off.
+    // The priority comes from the LEG (inst->irq_priority), not from the PRIO_TDM_DMA constant:
+    // arming must re-assert whatever priority map is currently in force, or a restart reverts
+    // set_rate_monotonic_priorities() behind the caller's back (see the field's comment).
     if( !nora_spi_i2s_tdm_hw_dma_config( inst->spi_inst,
                                               inst->rx_dma_ch, inst->tx_dma_ch,
                                               inst->rx_buffer, inst->tx_buffer,
-                                              inst->buffer_word_count ) )
+                                              inst->buffer_word_count,
+                                              inst->irq_priority ) )
     {
         tdm_set_error( NORA_SPI_I2S_TDM_ERR_DMA_CONFIG );
         goto fail;
@@ -1841,6 +1867,45 @@ bool nora_spi_i2s_tdm_inst_stop( nora_spi_i2s_tdm_inst_t* inst )
 }
 
 
+/*
+ * Mask/unmask ONE instance's RX-block interrupt without touching its stream.
+ *
+ * The DMA channel stays enabled, so TX keeps streaming and RX keeps filling; only the
+ * RX-block ISR -- the per-block callback plus every diagnostic it maintains -- stops.
+ * See the header for the single case this is for (a mirrored, RX-unread leg) and for
+ * the caller's obligation not to read that leg's ISR counters while masked.
+ *
+ * Re-enable clears the pending flag first: DMA requests kept arriving while masked, so
+ * an un-cleared flag would fire the ISR immediately with a stale half position.
+ */
+bool nora_spi_i2s_tdm_inst_set_block_irq_enabled( nora_spi_i2s_tdm_inst_t* inst,
+                                                       bool enabled )
+{
+    if( ( inst == NULL ) || !tdm_spi_leg_is_valid( inst ) )
+    {
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_BAD_INSTANCE );
+        return false;
+    }
+    if( enabled )
+    {
+        nora_dma_clear_irq_flag( inst->rx_dma_ch );
+    }
+    nora_dma_irq_enable( inst->rx_dma_ch, enabled );
+    tdm_set_error( NORA_SPI_I2S_TDM_ERR_NONE );
+    return true;
+}
+
+
+bool nora_spi_i2s_tdm_inst_block_irq_is_enabled( const nora_spi_i2s_tdm_inst_t* inst )
+{
+    if( inst == NULL )
+    {
+        return false;
+    }
+    return nora_dma_irq_is_enabled( inst->rx_dma_ch );
+}
+
+
 
 
 /*
@@ -1932,6 +1997,59 @@ bool nora_spi_i2s_tdm_get_load( nora_spi_i2s_tdm_load_t* monitor, bool clear_pea
     return nora_spi_i2s_tdm_inst_get_load( &s_stream.legs[s_stream.primary_leg_index], monitor, clear_peak );
 }
 
+/*
+ * Rate-monotonic leg priorities. See the header for what this is for and what it implies.
+ *
+ * Every configured leg is put back on the base priority first, so the result does not depend
+ * on what a previous call did, and only then is the long-deadline leg lowered. The base is
+ * PRIO_TDM_DMA, which is also what hw.c programs at configure() time -- one definition.
+ */
+bool nora_spi_i2s_tdm_set_rate_monotonic_priorities( nora_spi_i2s_tdm_inst_t* shorter_deadline,
+                                                     nora_spi_i2s_tdm_inst_t* longer_deadline )
+{
+    uint8_t i;
+
+    if( shorter_deadline == NULL )
+    {
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_BAD_INSTANCE );
+        return false;
+    }
+    /* base-1 must still be a real interrupt priority (0 means disabled). */
+    if( (uint8_t)PRIO_TDM_DMA < 2u )
+    {
+        tdm_set_error( NORA_SPI_I2S_TDM_ERR_BAD_ARGUMENT );
+        return false;
+    }
+
+    /* Record the intent on each leg FIRST, then push it to IPCx. tdm_inst_arm() re-applies
+     * leg->irq_priority on every start, so the map survives a whole-transport restart -- which
+     * it did NOT before 2026-08-26 (the channel config carried the PRIO_TDM_DMA constant, so
+     * arming reverted every leg to the base and only the non-arming fast rate-change path kept
+     * the asymmetry). Task level is still the only writer of both the field and IPCx. */
+    for( i = 0u; i < s_stream.leg_count; i++ )
+    {
+        s_stream.legs[i].irq_priority = (uint8_t)PRIO_TDM_DMA;
+        nora_dma_irq_set_priority( s_stream.legs[i].rx_dma_ch, (uint8_t)PRIO_TDM_DMA );
+    }
+
+    if( ( longer_deadline != NULL ) && ( longer_deadline != shorter_deadline ) )
+    {
+        longer_deadline->irq_priority = (uint8_t)( (uint8_t)PRIO_TDM_DMA - 1u );
+        nora_dma_irq_set_priority( longer_deadline->rx_dma_ch,
+                                   longer_deadline->irq_priority );
+    }
+    return true;
+}
+
+uint8_t nora_spi_i2s_tdm_inst_irq_priority( const nora_spi_i2s_tdm_inst_t* inst )
+{
+    if( inst == NULL )
+    {
+        return 0u;
+    }
+    return nora_dma_irq_get_priority( inst->rx_dma_ch );
+}
+
 bool nora_spi_i2s_tdm_get_status( nora_spi_i2s_tdm_status_t* status, bool clear_peak )
 {
     if( s_stream.primary_leg_index >= s_stream.leg_count )
@@ -1942,77 +2060,6 @@ bool nora_spi_i2s_tdm_get_status( nora_spi_i2s_tdm_status_t* status, bool clear_
 }
 
 
-//===========================================================
-// Engine-wide TDMsum (combined TDM-occupancy) profiler: masked public wrappers.
-//
-// The profiler global is written by EVERY TDM RX-block ISR (enter/exit hooks in tdm_rx_block).
-// Those ISRs share PRIO_TDM_DMA and never preempt each other, but a FOREGROUND access is still
-// non-atomic against them on this 16-bit core, so each wrapper masks EVERY configured leg's RX
-// DMA IE around the profiler call (the same bracket the per-leg readers use, generalised to all
-// legs). The raw profiler ops do no masking themselves.
-//
-// The whole group -- wrappers, all-leg masking helpers, and the ISR enter/exit hooks below --
-// is compiled only when NORA_TDM_SUMPROF is 1 (see nora_spi_i2s_tdm_conf.h).
-//===========================================================
-#if NORA_TDM_SUMPROF
-
-// Disable every configured leg's RX DMA IE, saving prior enables into `bak[]` (indexed by leg).
-static inline void tdm_all_rx_ie_disable( bool bak[TDM_SPI_LEG_COUNT] )
-{
-    uint8_t i;
-    for( i = 0u; i < s_stream.leg_count; i++ )
-    {
-        bak[i] = tdm_rx_ie_disable( s_stream.legs[i].rx_dma_ch );
-    }
-}
-
-// Restore every configured leg's RX DMA IE from `bak[]` (re-arms only those previously enabled).
-static inline void tdm_all_rx_ie_restore( const bool bak[TDM_SPI_LEG_COUNT] )
-{
-    uint8_t i;
-    for( i = 0u; i < s_stream.leg_count; i++ )
-    {
-        tdm_rx_ie_restore( s_stream.legs[i].rx_dma_ch, bak[i] );
-    }
-}
-
-void nora_spi_i2s_tdm_tdmsum_configure( uint32_t window_period_ticks )
-{
-    bool bak[TDM_SPI_LEG_COUNT];
-    const uint32_t now = nora_high_res_timer_get_count();
-
-    tdm_all_rx_ie_disable( bak );
-    nora_spi_i2s_tdm_dspic33ak_sumprof_configure( now, window_period_ticks );
-    tdm_all_rx_ie_restore( bak );
-}
-
-void nora_spi_i2s_tdm_tdmsum_reset( void )
-{
-    bool bak[TDM_SPI_LEG_COUNT];
-    const uint32_t now = nora_high_res_timer_get_count();
-
-    tdm_all_rx_ie_disable( bak );
-    nora_spi_i2s_tdm_dspic33ak_sumprof_reset( now );
-    tdm_all_rx_ie_restore( bak );
-}
-
-bool nora_spi_i2s_tdm_tdmsum_get( nora_spi_i2s_tdm_tdmsum_t* out, bool clear_peak )
-{
-    bool bak[TDM_SPI_LEG_COUNT];
-
-    if( out == NULL )
-    {
-        return false;
-    }
-
-    tdm_all_rx_ie_disable( bak );
-    nora_spi_i2s_tdm_dspic33ak_sumprof_snapshot( out, clear_peak );
-    tdm_all_rx_ie_restore( bak );
-
-    return out->initialized;
-}
-
-#endif // NORA_TDM_SUMPROF
 
 
 //===========================================================
@@ -2050,6 +2097,69 @@ bool nora_spi_i2s_tdm_tdmsum_get( nora_spi_i2s_tdm_tdmsum_t* out, bool clear_pea
 // With =0 the integrator owns the vectors and calls nora_spi_i2s_tdm_inst_rx_isr()
 // (below) from their own _DMA<rx>Interrupt instead.
 #if NORA_TDM_DEFINE_DMA_VECTORS
+/*
+ * ISR PROLOGUE PUSHES: WHY EACH VECTOR CALLS A noinline BODY INSTEAD OF INLINING DIRECTLY.
+ *
+ * `context` banks W0-W7 only (DS70005591D: seven alternate W0-W7 arrays plus AccA/AccB/
+ * RCOUNT and the DSP CORCON bits, each inherently tied to an IPL).  W8-W14 are NOT banked,
+ * so when the always_inline tdm_rx_block body needs W8 the compiler must save it -- and it
+ * emitted `mov.l w8,[w15++]` as the vector's VERY FIRST instruction.  Measured on an
+ * AK512 bidirectional ASRC configuration: __DMA0Interrupt and __DMA2Interrupt each
+ * carried 2 such pushes at +0, the only live ISRs besides __QEI2Interrupt (a deliberate
+ * trap-reproduction harness) and __DefaultInterrupt that still did.
+ *
+ * That is the exact shape the A1 silicon STACK ERROR keys on -- see the DO-NOT-REVERT note
+ * in the application-level ASRC clock control, where a controlled A/B
+ * showed 6 prologue pushes trapping at stress cycle 16 and zero pushes surviving 70.
+ * `context` cannot remove these ones: the registers really are outside the bank.
+ *
+ * So move them one call deep instead.  The vector becomes `rcall <body> / retfie` with no
+ * prologue push, and the unavoidable W8 save happens inside an ordinary function where it
+ * is not an ISR prologue.  Precedent: the load-profiler hook on the CCP vectors had to
+ * become an out-of-line real function for the same reason.
+ *
+ * THE FOLDING IS PRESERVED, WHICH IS THE WHOLE POINT.  The body is per-vector and its
+ * channel numbers and half size are still literals, so tdm_rx_block still folds them into
+ * the register access with no runtime channel->leg lookup.  This is NOT the regression the
+ * always_inline note above warns about: that one was ONE SHARED out-of-line _tdm_rx_block
+ * reached by every vector, which is what loses the folding.  Cost here is one rcall+return
+ * per RX block -- 3 kHz per leg at 48 kHz/block-16, so under 0.05% of the CPU -- and the
+ * ~1.1 KB of per-vector body duplication that always_inline was already paying for.
+ *
+ * Verify after touching this: the vectors must show ZERO `mov.l wN,[w15++]`.
+ *   xc-dsc-objdump -d --mdfp=<DFP>/xc16 <elf> | grep -A4 '<__DMA0Interrupt>:'
+ * tools/asrc/hotpath_invariance.py still guards the folding itself.
+ */
+/*
+ * A1-SILICON GATE for the ISR-prologue workaround below.
+ *
+ * `context` is NOT gated and must not be: the alternate W0-W7 array is inherently tied to
+ * the IPL on this core (DS70005591D), so declaring it is a statement of hardware fact that
+ * is correct on every revision. What IS revision-specific is the extra indirection that
+ * moves the W8+ saves OUT of the vector prologue, because its only purpose is to avoid the
+ * A1 STACK ERROR trigger and it costs one rcall + return per interrupt.
+ *
+ * Default 1 = keep the workaround. Set to 0 (-D APP_A1_ISR_STACK_WORKAROUND=0) to build the
+ * direct form and A/B it -- which is how this should be re-evaluated on A2 silicon, where
+ * the exit condition for the whole A1 STACK ERROR investigation already lives. The die
+ * revision is a RUNTIME fact (app_silicon.c prints it in the boot banner), so this cannot
+ * key off it automatically; it is a deliberate build choice.
+ *
+ * Rationale and measurements: the ISR W15 prologue-push audit, and the DO-NOT-REVERT
+ * note in the application-level ASRC clock control.
+ */
+#ifndef APP_A1_ISR_STACK_WORKAROUND
+#define APP_A1_ISR_STACK_WORKAROUND (1)
+#endif
+
+#if APP_A1_ISR_STACK_WORKAROUND
+#define TDM_DEFINE_RX_VECTOR( vec, leg, rxdma, txdma )                                static void __attribute__((noinline)) vec##_body( void )                          {                                                                                     tdm_rx_block( &s_spi_legs[leg], rxdma, txdma,                                                   TDM_LEG_HALF_WORDS(NORA_TDM_SLOTS_PER_FS,                                                            NORA_TDM_BLOCK_FRAMES) );                    }                                                                                 void __attribute__((interrupt, context)) vec( void ) { vec##_body(); }
+#else
+/* Direct form: body inlined into the vector. Fewer instructions and no rcall, but the
+ * W8 save lands in the vector prologue -- the A1 trigger. For A2 comparison only. */
+#define TDM_DEFINE_RX_VECTOR( vec, leg, rxdma, txdma )                                void __attribute__((interrupt, context)) vec( void )                              {                                                                                     tdm_rx_block( &s_spi_legs[leg], rxdma, txdma,                                                   TDM_LEG_HALF_WORDS(NORA_TDM_SLOTS_PER_FS,                                                            NORA_TDM_BLOCK_FRAMES) );                    }
+#endif
+
 // Explicit HAL-owned RX vectors (was X-macro-generated). tdm_rx_block is same-TU static inline, so
 // the literal channel numbers + half size fold into the register access -- NO runtime channel->leg
 // lookup. The vector NAME encodes the DMA channel number, so bind each name to its conf.h channel
@@ -2058,57 +2168,33 @@ bool nora_spi_i2s_tdm_tdmsum_get( nora_spi_i2s_tdm_tdmsum_t* out, bool clear_pea
 // half; the TX channel raises no interrupt.
 #if NORA_TDM_BASE_ON_SPI34
 TDM_COMPILEASSERT( NORA_TDM_SPI3_RX_DMA == 4 );   /* logical A -> _DMA4Interrupt */
-void __attribute__((interrupt, context)) _DMA4Interrupt(void)
-{
-    tdm_rx_block( &s_spi_legs[TDM_SPI_LEG_SPI1],
-                  NORA_TDM_SPI3_RX_DMA, NORA_TDM_SPI3_TX_DMA,
-                  TDM_LEG_HALF_WORDS(NORA_TDM_SLOTS_PER_FS, NORA_TDM_BLOCK_FRAMES) );
-}
+TDM_DEFINE_RX_VECTOR( _DMA4Interrupt, TDM_SPI_LEG_SPI1,
+                       NORA_TDM_SPI3_RX_DMA, NORA_TDM_SPI3_TX_DMA )
 #else
 TDM_COMPILEASSERT( NORA_TDM_SPI1_RX_DMA == 0 );   /* _DMA0Interrupt binding */
-void __attribute__((interrupt, context)) _DMA0Interrupt(void)
-{
-    tdm_rx_block( &s_spi_legs[TDM_SPI_LEG_SPI1],
-                  NORA_TDM_SPI1_RX_DMA, NORA_TDM_SPI1_TX_DMA,
-                  TDM_LEG_HALF_WORDS(NORA_TDM_SLOTS_PER_FS, NORA_TDM_BLOCK_FRAMES) );
-}
+TDM_DEFINE_RX_VECTOR( _DMA0Interrupt, TDM_SPI_LEG_SPI1,
+                       NORA_TDM_SPI1_RX_DMA, NORA_TDM_SPI1_TX_DMA )
 #endif
 #if NORA_TDM_USE_SPI2
 #if NORA_TDM_BASE_ON_SPI34
 TDM_COMPILEASSERT( NORA_TDM_SPI4_RX_DMA == 6 );   /* logical B -> _DMA6Interrupt */
-void __attribute__((interrupt, context)) _DMA6Interrupt(void)
-{
-    tdm_rx_block( &s_spi_legs[TDM_SPI_LEG_SPI2],
-                  NORA_TDM_SPI4_RX_DMA, NORA_TDM_SPI4_TX_DMA,
-                  TDM_LEG_HALF_WORDS(NORA_TDM_SLOTS_PER_FS, NORA_TDM_BLOCK_FRAMES) );
-}
+TDM_DEFINE_RX_VECTOR( _DMA6Interrupt, TDM_SPI_LEG_SPI2,
+                       NORA_TDM_SPI4_RX_DMA, NORA_TDM_SPI4_TX_DMA )
 #else
 TDM_COMPILEASSERT( NORA_TDM_SPI2_RX_DMA == 2 );   /* _DMA2Interrupt binding */
-void __attribute__((interrupt, context)) _DMA2Interrupt(void)
-{
-    tdm_rx_block( &s_spi_legs[TDM_SPI_LEG_SPI2],
-                  NORA_TDM_SPI2_RX_DMA, NORA_TDM_SPI2_TX_DMA,
-                  TDM_LEG_HALF_WORDS(NORA_TDM_SLOTS_PER_FS, NORA_TDM_BLOCK_FRAMES) );
-}
+TDM_DEFINE_RX_VECTOR( _DMA2Interrupt, TDM_SPI_LEG_SPI2,
+                       NORA_TDM_SPI2_RX_DMA, NORA_TDM_SPI2_TX_DMA )
 #endif
 #endif // NORA_TDM_USE_SPI2
 #if NORA_TDM_USE_SPI3 && !NORA_TDM_BASE_ON_SPI34
 TDM_COMPILEASSERT( NORA_TDM_SPI3_RX_DMA == 4 );   /* _DMA4Interrupt binding */
-void __attribute__((interrupt, context)) _DMA4Interrupt(void)
-{
-    tdm_rx_block( &s_spi_legs[TDM_SPI_LEG_SPI3],
-                  NORA_TDM_SPI3_RX_DMA, NORA_TDM_SPI3_TX_DMA,
-                  TDM_LEG_HALF_WORDS(NORA_TDM_SLOTS_PER_FS, NORA_TDM_BLOCK_FRAMES) );
-}
+TDM_DEFINE_RX_VECTOR( _DMA4Interrupt, TDM_SPI_LEG_SPI3,
+                       NORA_TDM_SPI3_RX_DMA, NORA_TDM_SPI3_TX_DMA )
 #endif // NORA_TDM_USE_SPI3
 #if NORA_TDM_USE_SPI4 && !NORA_TDM_BASE_ON_SPI34
 TDM_COMPILEASSERT( NORA_TDM_SPI4_RX_DMA == 6 );   /* _DMA6Interrupt binding */
-void __attribute__((interrupt, context)) _DMA6Interrupt(void)
-{
-    tdm_rx_block( &s_spi_legs[TDM_SPI_LEG_SPI4],
-                  NORA_TDM_SPI4_RX_DMA, NORA_TDM_SPI4_TX_DMA,
-                  TDM_LEG_HALF_WORDS(NORA_TDM_SLOTS_PER_FS, NORA_TDM_BLOCK_FRAMES) );
-}
+TDM_DEFINE_RX_VECTOR( _DMA6Interrupt, TDM_SPI_LEG_SPI4,
+                       NORA_TDM_SPI4_RX_DMA, NORA_TDM_SPI4_TX_DMA )
 #endif // NORA_TDM_USE_SPI4
 #endif // NORA_TDM_DEFINE_DMA_VECTORS
 
@@ -2566,19 +2652,17 @@ static inline __attribute__((always_inline)) void tdm_rx_block(
     const int32_t*  src_ptr = NULL;
           int32_t*  dst_ptr = NULL;
 
-    // Engine-wide TDMsum union hook. Measured over the SAME wall-time as the per-leg monitor
-    // below (bracketing it), so TDM1 and TDM2 add into one common-window occupancy. Gated on
-    // the same high-res-timer availability as the per-leg monitor; sum_meas is stable across
-    // this ISR so enter/exit stay balanced on every return path. Compiled out entirely (hook,
-    // timer read and all) when NORA_TDM_SUMPROF is 0 -- the hooks cost ISR cycles on every
-    // block whether or not anyone ever calls _tdmsum_get().
-#if NORA_TDM_SUMPROF
-    const bool sum_meas = nora_high_res_timer_is_initialized();
-    if( sum_meas )
-    {
-        nora_spi_i2s_tdm_dspic33ak_sumprof_enter( nora_high_res_timer_get_count() );
-    }
-#endif
+    // Fixed-window CPU-load hook. Takes ownership of the CPU for THIS leg, and returns the token
+    // that hands it back at every exit below. Unlike the TDMsum union hook it replaced, this
+    // measures EXCLUSIVE time: a higher-priority vector that preempts this block moves that time
+    // out of this leg's total and into its own, so the reading no longer depends on whether the
+    // rate-monotonic priority map has demoted this leg below the other one.
+    //
+    // The token is a plain local, so it lives in this ISR's own frame/register and the nesting
+    // record cannot be corrupted by a preemption. It must reach _exit on EVERY return path --
+    // the two early returns below carry it. No availability test is needed: the profiler is
+    // inert until configured, and its hooks are empty when NORA_CPU_LOAD_PROF is 0.
+    nora_cpu_load_prof_enter( inst->prof_owner );
 
     nora_spi_i2s_tdm_diag_isr_begin( &inst->diag );
 
@@ -2607,12 +2691,7 @@ static inline __attribute__((always_inline)) void tdm_rx_block(
     if( src_ptr == NULL )
     {
         nora_spi_i2s_tdm_diag_isr_end( &inst->diag );
-#if NORA_TDM_SUMPROF
-        if( sum_meas )
-        {
-            nora_spi_i2s_tdm_dspic33ak_sumprof_exit( nora_high_res_timer_get_count() );
-        }
-#endif
+        nora_cpu_load_prof_exit();
         return;
     }
     tdm_get_dest_ptr( nora_dma_read_src_hot( (nora_dma_channel_t)tx_ch ), inst->tx_buffer, half_pos, &dst_ptr );
@@ -2623,12 +2702,7 @@ static inline __attribute__((always_inline)) void tdm_rx_block(
         // hand the callback a NULL dst -- the public contract is that dst is always valid
         // when block_cb runs. (Mirrors the src_ptr guard above.)
         nora_spi_i2s_tdm_diag_isr_end( &inst->diag );
-#if NORA_TDM_SUMPROF
-        if( sum_meas )
-        {
-            nora_spi_i2s_tdm_dspic33ak_sumprof_exit( nora_high_res_timer_get_count() );
-        }
-#endif
+        nora_cpu_load_prof_exit();
         return;
     }
 
@@ -2645,12 +2719,7 @@ static inline __attribute__((always_inline)) void tdm_rx_block(
     }
 
     nora_spi_i2s_tdm_diag_isr_end( &inst->diag );
-#if NORA_TDM_SUMPROF
-    if( sum_meas )
-    {
-        nora_spi_i2s_tdm_dspic33ak_sumprof_exit( nora_high_res_timer_get_count() );
-    }
-#endif
+    nora_cpu_load_prof_exit();
 }
 
 

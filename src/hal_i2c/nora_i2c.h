@@ -28,6 +28,11 @@ extern "C" {
  * This header intentionally does not expose XC-DSC/DFP bitfield types.
  */
 
+/* NORA_I2C_HW_INST_MAX is the enum below as a preprocessor literal -- an
+ * enumerator is invisible to #if, which would evaluate it as 0, so the range
+ * check further down needs a macro. The _Static_assert keeps them in step. */
+#define NORA_I2C_HW_INST_MAX   4
+
 typedef enum {
     NORA_I2C_INST_1 = 0,
     NORA_I2C_INST_2,
@@ -35,6 +40,37 @@ typedef enum {
     NORA_I2C_INST_4,
     NORA_I2C_INST_COUNT
 } nora_i2c_instance_t;
+
+/*
+ * Per-instance state width (project-configurable, optional).
+ *
+ * The enum above, the API and every prototype are unchanged; what narrows is the
+ * SIZE of the driver's per-instance arrays. An instance at or above the count
+ * reports itself absent (nora_i2c_get_device() returns 0, so
+ * nora_i2c_inst_is_valid() is false and init fails with NOT_PRESENT) rather than
+ * being accepted into an array that no longer covers it. The HAL ships no
+ * conf.h, so vendoring hal_i2c without one keeps the previous behaviour.
+ * See board/i2c/nora_i2c_conf.h for this product's value.
+ */
+#if !defined( NORA_I2C_INST_SUPPORTED_COUNT )
+#  if defined( __has_include )
+#    if __has_include( "nora_i2c_conf.h" )
+#      include "nora_i2c_conf.h"
+#    endif
+#  endif
+#endif
+
+#ifndef NORA_I2C_INST_SUPPORTED_COUNT
+#define NORA_I2C_INST_SUPPORTED_COUNT   NORA_I2C_HW_INST_MAX
+#endif
+
+#if (NORA_I2C_INST_SUPPORTED_COUNT < 1) || \
+    (NORA_I2C_INST_SUPPORTED_COUNT > NORA_I2C_HW_INST_MAX)
+#error "NORA_I2C_INST_SUPPORTED_COUNT must be 1..NORA_I2C_HW_INST_MAX."
+#endif
+
+_Static_assert( (int)NORA_I2C_INST_COUNT == NORA_I2C_HW_INST_MAX,
+                "NORA_I2C_HW_INST_MAX must match nora_i2c_instance_t" );
 
 typedef enum {
     NORA_I2C_OK = 0,

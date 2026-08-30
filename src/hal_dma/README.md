@@ -9,8 +9,11 @@ NORA-supported dsPIC33AK and dsPIC33CK ports. It is not a universal DMA HAL:
 each port provides the backend-specific channel inventory, trigger mapping,
 addressing rules, and register access implementation.
 
-The current NORA DMA consumer is the SPI/I2S/TDM transport. PWM-audio still
-configures its own DMA registers directly and is not a NORA DMA consumer yet.
+The current NORA DMA consumers are the SPI/I2S/TDM transport and the Classic
+app's PWM audio-DAC output (`apps/classic/classic_audio_pwm.c`, DMA4-7 via the
+`NORA_DMA_TRIGGER_PWM_GEN5..8` triggers). Both configure through
+`nora_dma_channel_config()`; ping-pong half-tracking and the DMA ISR vectors
+stay in each consumer (see the design-boundaries note in `nora_dma.h`).
 
 The current dsPIC33AK backend files are named `nora_dma_dspic33ak.*`. Code that
 uses DMA includes only `nora_dma.h`; it contains portable types and function
