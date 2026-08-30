@@ -63,7 +63,7 @@ rather than hidden.
 | knob | what a sweep of it looks like | a sensitivity lever? |
 |---|---|---|
 | `CVDCAP` (internal CVD capacitor code, 0–7) | count monotonic and saturating; **noise tail flat across the whole range**. No peak. | **No** |
-| charge time `TMRA` (500–5000 ns) | count monotonic, saturating, 0.55 % total span; tail flat. | **No** |
+| charge time `TMRA` (500–5000 ns) | count monotonic, saturating, 0.55 % total span; **the noise tail is not flat** — peak-to-trough over matched 16 s windows fell 1268 → 974 from 1,000 to 5,000 ns, and touch magnitude rose with it. | **Yes, modestly** |
 | balance time `TMRB` (250–4000 ns) | tail flat within the measurement's own scatter; 250 ns marginally worst. **A floor, not an optimum.** | **No** |
 | accumulation depth `ACCCNT` (2^n) | tail ÷ count 0.163 % at 2^4 → 0.054 % at 2^8 | **Yes — but only ~3×** |
 
@@ -84,9 +84,20 @@ before believing that. The point is not that the numbers transfer; it is that
 The shipped defaults, which are the outcome of that procedure:
 
 ```
-CVDCAP 4 · charge 2000 ns · balance 1000 ns · accumulation 2^8
-→ ~146 scans/s over 3 electrodes, ~5 ms per scan
+CVDCAP 4 · charge 5000 ns · balance 1000 ns · accumulation 2^8
+→ ~110 scans/s over 3 electrodes, ~9 ms per scan
 ```
+
+**The charge time changed on 2026-08-30, and the "not a lever" verdict above is a
+correction, not a new measurement of the same thing.** The original sweep was taken
+with the touch shield held statically High and the idle electrodes floating — a
+condition the data sheet rules out — so "the knobs are flat" was a statement about
+that condition. Re-swept with the shield grounded and the idle electrodes tied,
+5,000 ns lowers the idle tail *and* raises touch magnitude, which is why it is now
+the shipped default. It costs scan rate: on the upstream board 199 → 110 scans/s,
+because each of the 2 samples charges 3 us longer, 2^8 times. The 4-scan magnitude
+window is then 36 ms and a 2-scan debounce 18 ms, both still well inside a tap.
+5,000 ns is near the ceiling: `TMRA` is 8-bit in TAD and 5,000 ns is already 250 TAD.
 
 ### 1.1 Prove the chain before you sweep it
 
@@ -161,7 +172,7 @@ judged by the tail-tracked peak/trough figure rather than by six samples.
 ```
 *ka08          accumulation 2^8   (first: it sets the floor everything else is measured against)
 *kc04          CVDCAP code 4
-*kg07D0        charge  2000 ns    (16-bit ns as hex: 07D0 = 2000)
+*kg1388        charge  5000 ns    (16-bit ns as hex: 1388 = 5000)
 *kb03E8        balance 1000 ns
 ```
 
@@ -339,6 +350,20 @@ the fixed press threshold kept firing events perfectly — **so the log looked
 healthy and the learner was starved.** If you modify this layer, that is the
 failure mode to test for.
 
+**And "quiet" is counted in seconds, not milliseconds** (fixed 2026-08-30). A pad's
+magnitude only feeds `idle_ref` after it has stayed below the candidate for
+`NORA_TOUCH_IDLE_QUIET_RUN` = 400 scans — about 2 s. The previous 8 scans (40 ms)
+was chosen to flush the touch out of the 4-scan averaging window, which it does, but
+a hand is still millimetres from the pad 40 ms after a release and couples in a
+large fraction of a real touch. Measured on a pad tapped 0.3–0.7 s apart, `idle_ref`
+walked to 129–202 (resting value minutes later: 90–110) and the floor multiplied it
+into thresholds of 774–900 against real presses of 870–1151 — the threshold landed
+*inside* the tap distribution, so the same press worked or did not depending on what
+the previous release had left behind. This is per-pad and it, not the all-pads-quiet
+gate, is what protects the pad being tapped: while one pad is tapped the other two
+are quiet, so that gate stays open for the whole burst. Cost: `idle_ref` follows a
+genuine rise in noise up to 2 s late, and it feeds only the floor.
+
 ### 3.2 The rule, and the two limits that bound it
 
 ```
@@ -509,7 +534,7 @@ the sonora board.
 
 **If a pad misses taps, do not reach for the thresholds first.** Run `*kv` to arm
 the scan-rate trace, tap, and `?kv` to see whether the signal was there at all —
-the polled `?ko` view samples a few times a second against ~146 scans a second, so
+the polled `?ko` view samples a few times a second against ~110 scans a second, so
 it can show that a pad exceeded the threshold and still not show whether it did so
 on the *consecutive* scans the debounce requires. A threshold moved on a guess is a
 threshold that has to be moved again on the next board.

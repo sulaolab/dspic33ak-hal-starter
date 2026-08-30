@@ -32,9 +32,17 @@ is kept identical.
 
 ## Deliberate divergences
 
-1. **`touch_console.c` include path** — `#include "nora_touch.h"` here,
-   `#include "hal_touch/nora_touch.h"` upstream. This starter puts every HAL folder
-   on the include path; sonora includes through the folder name.
+1. **`touch_console.c`'s internal-document citation is stripped here.** Upstream
+   marks a citation of its non-public tuning notes as `[internal] <file>`; a reader
+   of this repository cannot open that document, so the marker is dropped and the
+   file name left as prose. One line, and it is the only difference *inside* a
+   vendored file.
+
+   (There used to be an include-path divergence here -- `nora_touch.h` against
+   upstream's `hal_touch/nora_touch.h`. There is none: `src` is on this project's
+   include path as well as `src/hal_touch`, so upstream's spelling resolves and the
+   line is vendored verbatim.)
+
 2. **`app_console_line.c` is local.** sonora parses `<kind><module><name><hex>`
    lines in `app_console.c` and dispatches by module letter; this starter has a
    line-based `strcmp` chain in `fw_command.c`. Rather than translate the command
@@ -77,6 +85,14 @@ adapter, ~10 lines:
 #endif
 ```
 
+`ENA_TOUCH_SHIELD_PHASE` is a second upstream switch, and it is deliberately left
+undefined here. It makes the ITC drive the shield electrode in phase with each CVD
+sample (`CVDTX23` on the upstream board) instead of holding it statically Low. That
+is a board fact -- it needs a shield electrode wired to a CVDTX pin -- and this
+starter's board layer does not claim one, so the vendored code takes its
+statically-shielded path. Nothing has to be defined for that; the file compiles the
+`#else` branch.
+
 So there is one switch here and not two, and `HAL_STARTER_ENABLE_TOUCH 0` now does
 what `docs/touch-addon.md` has always said it does: the console body compiles out,
 the header answers `APP_CONSOLE_ERR_NOT_FOUND`, and `--gc-sections` drops both
@@ -90,7 +106,7 @@ that is its build, counting what its `case 'k'` was holding.)
 ## Checking
 
 All seven vendored files at once, against a sonora clone (`origin/main`), with the
-one include-path divergence normalised away:
+one citation-marker divergence normalised away:
 
 ```sh
 python - <<'PY'
@@ -104,16 +120,22 @@ pairs += [('src/app/uart_app/' + f, 'src/console/' + f) for f in (
 for up, here in pairs:
     a = subprocess.run(['git', '-C', S, 'show', 'origin/main:' + up],
                        capture_output=True, check=True).stdout.decode('utf-8')
-    a = a.replace('\r\n', '\n').replace('hal_touch/nora_touch.h', 'nora_touch.h')
+    a = a.replace('\r\n', '\n').replace('[internal] ', '')
     b = io.open(here, encoding='utf-8', newline='').read().replace('\r\n', '\n')
     print(('identical' if a == b else 'DIVERGED '), here)
 PY
 ```
 
-Last run: **7 of 7 identical** against sonora `main` = `2653def` (2026-08-15).
-The two commits that made the published comments self-contained (`ab970a0`,
-`2653def`) were developed on a branch, rebased onto `main` = `40baee2`, and landed
-there; they change comments only, so the vendored bytes here did not move.
+Last run: **7 of 7 identical** against sonora `7e9afd9` (2026-08-30) -- the
+`research/touch-shield-cvdtx23` branch head: the CVD-phase shield, the seconds-long
+`idle_ref` quiet run and the 5,000 ns charge time, soak-tested on the upstream board
+(2 h 32 m idle, no false press). Substitute `origin/main` in the snippet above once
+that branch has landed there.
+
+Before that, sonora `main` = `2653def` (2026-08-15). The two commits that made the
+published comments self-contained (`ab970a0`, `2653def`) were developed on a branch,
+rebased onto `main` = `40baee2`, and landed there; they changed comments only, so the
+vendored bytes here did not move.
 
 Those comments no longer cite anything a reader of this repository cannot open:
 no `docs_internal/` paths, and no section numbers from the *internal* tuning
