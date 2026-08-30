@@ -66,8 +66,8 @@ needs.
   count, optional SPI3/4 rows or explicit SPI34 bank selection, per-instance DMA channels, and
   per-leg `SYNC_DOMAIN` defaults. `*.h_example` is never compiled.
 - The template is self-contained (no app-config dependency). A project MAY instead derive
-  the `NORA_TDM_*` macros from its own app config (Sonora does this in
-  `src/board/audio/nora_spi_i2s_tdm_conf.h`); that is the integrator's choice and does not make
+  the `NORA_TDM_*` macros from its own app config (Sonora does this in its own board-level
+  `nora_spi_i2s_tdm_conf.h`); that is the integrator's choice and does not make
   the HAL core app-dependent (dependency is app → conf.h → HAL, never HAL → app).
 
 ## 4. Required sibling HALs

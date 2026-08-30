@@ -172,7 +172,7 @@ nora_clock_status_t dspic33ak_clock_reg_system_switch(
  * The general CLKGEN sequence drops ON first, which is right for a generator
  * nothing is executing from and fatal for this one.  That is measured, not
  * inferred: a live CLKGEN1 re-source through the general macro was verified to hang
- * the CPU (the Q27C note in src/board/clock/sonora_clock.c), and the resident
+ * the CPU (the Q27C note in the board clock bring-up), and the resident
  * engine's boot platform hand-rolled exactly this order rather than call this HAL,
  * for the same reason.
  *
