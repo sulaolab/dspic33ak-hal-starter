@@ -79,7 +79,11 @@ needs.
   not initialized, `get_load()` / `inst_get_load()` returns `false` and zeroes the supplied
   load struct. Standalone repo:
   [nora-hal-dspic33ak-timer](https://github.com/sulaolab/nora-hal-dspic33ak-timer) (the
-  Timer2 high-resolution counter).
+  high-resolution counter, Timer2 or an SCCP on parts without Timer2).
+- `nora_cpu_load_prof` -- compile/link sibling dependency, in the same timer HAL. The RX-block
+  ISR calls the profiler's enter/exit hooks unconditionally (`nora_cpu_load_prof_fast.h`), so
+  the include path must reach it and `nora_cpu_load_prof_dspic33ak.c` must be in the build.
+  Build with `-D NORA_CPU_LOAD_PROF=0` and the hooks compile to nothing.
 - The SPI register-mask helper (`nora_spi_i2s_tdm_dspic33ak_reg.h`) ships inside this HAL folder.
 
 ## 5. Supported devices
