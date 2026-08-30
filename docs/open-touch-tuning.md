@@ -466,8 +466,17 @@ this command measures nothing, it only forgets.
 A pad that has never reported a press has no evidence that a human is near it, and
 the learner cannot supply any — learning consumes presses, so before the first one
 there is nothing to consume. Until then each pad runs on a second, **stricter** pair:
-`cold_press_threshold` (900) and `cold_debounce_scans`, and `?kl` reports it as
+`cold_press_threshold` (800) and `cold_debounce_scans`, and `?kl` reports it as
 `COLD (strict until the first press)` rather than `learned`.
+
+**800, lowered from 900 on 2026-08-30, and the reason is the charge time.** 900 was
+set when an untouched pad reached 705 at charge 2,000 ns; at the 5,000 ns default the
+idle magnitude is 81–119 and a 2 h 32 m idle soak fired nothing at press 700 /
+debounce 2 — a weaker configuration than this gate — while real taps read 994–1408.
+900 had ended up inside the bottom of the tap distribution, so it was costing first
+presses without buying anything. The gate is still here rather than removed: what it
+exists for is the minutes between power-on and the first learned press, and that
+window has not been soaked (the soak above began 40 minutes after a power-on).
 
 Why an event and not a quiet interval decides it: idle noise cannot tell you a finger
 is present, so no amount of quiet is evidence. One event is trusted to say "a human

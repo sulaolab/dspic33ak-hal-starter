@@ -503,12 +503,33 @@ void nora_touch_default_config( nora_touch_config_t *cfg )
      * This replaces the idle-noise calibration of A.6, which was measured wrong:
      * the pad with the smallest noise tail needed the highest threshold. */
     cfg->learn_presses     = NORA_TOUCH_LEARN_PRESSES;
-    /* Cold gate -- see nora_touch_config_t for the measurement it comes from. 900
-     * clears the 705 an untouched pad reached on 2026-08-15 and sits under the
-     * 826..1,520 the same board's real taps fired at; 4 scans (~27 ms) is the
-     * longest press debounce that a short tap's ~5-scan plateau still survives,
-     * and is well inside the ~50 ms a human reads as instant. */
-    cfg->cold_press_threshold   = 900;
+    /* Cold gate -- see nora_touch_config_t for what it decides. 800, lowered from
+     * 900 on 2026-08-30.
+     *
+     * 900 was measured on 2026-08-15 with charge 2,000 ns, where an untouched pad
+     * reached 705 and idle_ref sat at 110..190. At the 5,000 ns charge that is now
+     * the default (NORA_TOUCH_CHARGE_NS) the idle side is a different quantity:
+     * idle_ref rests at 90..97 and a 2 h 32 m soak with nobody in the room produced
+     * **no press event on any pad**, with each pad's peak and trough unmoved from
+     * the tap that set them 40 minutes earlier. That soak ran at press 700 /
+     * debounce 2 -- the cold gate had been lifted on all three pads -- so it
+     * measured a *weaker* configuration than this gate and still saw nothing.
+     *
+     * 900 is therefore no longer where a cold pad's noise is; it is where light taps
+     * are. On the same board real presses read 870..1,151 while idle_ref was being
+     * corrupted, and 994..1,408 once it was not, so 900 sat inside the bottom of the
+     * tap distribution and cost first presses for nothing. 800 keeps ~8x over the
+     * measured idle magnitude (81..119 raw) and clears the taps.
+     *
+     * Not zero, and the gate is not removed: its purpose is the minutes between
+     * power-on and the first learned press, and that window is still unmeasured --
+     * the soak above started 40 minutes after POR. Removing it needs a soak from POR
+     * with nothing learned.
+     *
+     * 4 scans is ~36 ms at 110 scans/s (it was ~27 ms at the old charge time), still
+     * the longest press debounce a short tap's ~5-scan plateau survives and still
+     * inside the ~50 ms a human reads as instant. */
+    cfg->cold_press_threshold   = 800;
     cfg->cold_debounce_scans    = 4u;
     cfg->verbose           = true;
     /* No clock: the board states it. See nora_touch_config_t.clock_hz -- a default

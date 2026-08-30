@@ -159,14 +159,17 @@ typedef struct {
      *
      * It can, because there is a gap. The same board's real taps fired at
      * magnitudes 826..1,520 and its lightest measured touch was 780, against the
-     * 705 the noise reached: 900 sits above every idle excursion seen and below
-     * every press but the very lightest.
+     * 705 the noise reached: the shipped value sits above every idle excursion seen
+     * and below every press but the very lightest. It was 900 while that was
+     * measured at charge 2,000 ns; at the 5,000 ns default the idle side dropped and
+     * the taps rose, so it is now 800 -- the measurement and the reasoning for the
+     * move are beside the default in the .c.
      *
      * This costs the learner nothing, which is the reason it is worth doing. The
      * candidate gate (NORA_TOUCH_LEARN_CAND_MIN in the .c) is what records press
      * amplitudes, it is separate from detection, and it never fires an event -- so
      * a pad still gathering evidence there while refusing to report anything under
-     * 900 calibrates at exactly the speed it always did. The whole price is paid by
+     * the cold threshold calibrates at exactly the speed it always did. The whole price is paid by
      * the first touch, which may not register: already the accepted trade for
      * self-calibration (operator, 2026-08-14).
      *

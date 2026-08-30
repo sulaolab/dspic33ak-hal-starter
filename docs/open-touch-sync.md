@@ -126,11 +126,10 @@ for up, here in pairs:
 PY
 ```
 
-Last run: **7 of 7 identical** against sonora `7e9afd9` (2026-08-30) -- the
-`research/touch-shield-cvdtx23` branch head: the CVD-phase shield, the seconds-long
-`idle_ref` quiet run and the 5,000 ns charge time, soak-tested on the upstream board
-(2 h 32 m idle, no false press). Substitute `origin/main` in the snippet above once
-that branch has landed there.
+Last run: **7 of 7 identical** against sonora `cf56f58` (2026-08-30) -- the
+`touch/cold-gate-800` branch (PR #11), which is `origin/main` = `5464222` plus the
+cold gate lowered from 900 to 800. Everything else in these files is on `origin/main`;
+substitute it in the snippet above once that PR has landed.
 
 Before that, sonora `main` = `2653def` (2026-08-15). The two commits that made the
 published comments self-contained (`ab970a0`, `2653def`) were developed on a branch,
