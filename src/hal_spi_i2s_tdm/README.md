@@ -218,9 +218,10 @@ CK is aligned **to** this contract rather than the two targets meeting in the mi
   its own buffer ownership, and a common envelope smaller than the native one) was implemented
   on AK and then removed before it reached `main`. Reason: it added a second public API for the
   same peripheral, its common envelope could only ever be the intersection of both targets, and
-  it had no callers on either target. See `docs_public/nora_hal_public_api.md` and, for the full
-  history including the earlier decision to keep it, the consuming project's HAL merge
-  review record.
+  it had no callers on either target. See
+  https://github.com/sulaolab/dspic33ak-audio-dsp-sonora/blob/main/docs_public/nora_hal_public_api.md
+  and, for the full history including the earlier decision to keep it, the consuming project's
+  HAL merge review record.
 - **Do not re-add a portability facade here.** If AK and CK genuinely cannot share a call,
   express that as a capability query or an unsupported return in this API.
 
