@@ -4,20 +4,15 @@
 /*
  * app_specific_config_defs.h
  * --------------------------
- * Build-specific switches that vendored code asks about by name.
+ * Build-specific switches used by the touch console.
  *
- * src/console/touch_console.{c,h} is vendored from the sonora audio-board
- * project byte-for-byte (the only local change is the flat include path,
- * "nora_touch.h" instead of "hal_touch/nora_touch.h"), and it asks whether this
- * build has touch at all:
+ * src/console/touch_console.{c,h} asks whether this build has touch at all:
  *
  *     #if defined(ENA_OPEN_TOUCH_EXCLUSIVE)
  *
- * There the answer is a device fact -- that project also builds for a part with
- * no ITC and no ADC 5 (dsPIC33AK128MC106), where every console verb would print
- * zeros from a peripheral that is not there. Here it is this starter's own
- * HAL_STARTER_ENABLE_TOUCH switch, so there is one switch and not two: the file
- * below is the adapter between the upstream name and the local one.
+ * HAL_STARTER_ENABLE_TOUCH is this starter's build switch. It maps to the
+ * console's ENA_OPEN_TOUCH_EXCLUSIVE name so the touch console and HAL are both
+ * omitted when capacitive touch is disabled.
  *
  * It is also what makes "drop the touch code from the image" true.
  * touch_console.c is compiled in every configuration, so the unconditional
@@ -29,7 +24,7 @@
  * --gc-sections drops both files.
  *
  * Not to be confused with app_build_config.h, which selects one APP_BUILD demo
- * variation. This header states build facts that vendored code reads.
+ * variation. This header states build facts used by the touch console.
  */
 
 #include "app_config.h"     /* HAL_STARTER_ENABLE_TOUCH */

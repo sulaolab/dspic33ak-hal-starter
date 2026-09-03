@@ -47,7 +47,7 @@ For the I2C master/slave loopback demo, I2C2 and I2C3 are used as a shared-bus
 loopback on the starter board setup.
 
 The starter application target is intentionally board- and device-specific:
-EV74H48A + EV80L65A with a dsPIC33AK512MPS512 DIM. Some vendored HAL candidate
+EV74H48A + EV80L65A with a dsPIC33AK512MPS512 DIM. Some reusable HAL candidate
 folders also contain dsPIC33AK512 / dsPIC33AK128 silicon facts so the HAL code
 can remain reusable, but the starter board path shown here is the AK512 setup.
 
@@ -154,18 +154,17 @@ This pairs with the standalone HALs:
 - [dspic33ak-hal-dma](https://github.com/sulaolab/dspic33ak-hal-dma)
 - [dspic33ak-hal-spi-i2s-tdm](https://github.com/sulaolab/dspic33ak-hal-spi-i2s-tdm)
 
-This starter also currently vendors integration HAL folders such as `hal_clock`,
+This starter also includes integration HAL folders such as `hal_clock`,
 `hal_dma`, and the `hal_gpio_event` change-notification layer inside
 `hal_gpio`. The starter's active HAL surface therefore includes Clock,
-GPIO/PPS/CN events, UART, SPI, I2C, CAN FD, Timer, DMA, SPI framed-mode I2S/TDM,
-NVM/RTSP, and the local UDID helper. `docs/source_layout.md` classifies these:
+GPIO/PPS/CN events, UART, SPI, I2C, CAN FD, Timer, capacitive touch, DMA, SPI
+framed-mode I2S/TDM, NVM/RTSP, and the local UDID helper.
+`docs/source_layout.md` classifies these:
 NVM is a reusable HAL used by the firmware updater; UDID is a local helper used by
 the boot banner, not a standalone public HAL.
 
-Reusable HAL implementations are vendored as validated snapshots under matching
-`src/hal_xxx/` directories so the complete project builds without external
-source dependencies. Where present, `src/hal_xxx/UPSTREAM.md` records the exact
-standalone revision used by the snapshot. Starter-only glue intentionally stays outside those HAL
+Reusable HAL implementations live under matching `src/hal_xxx/` directories so
+the complete project builds without external source dependencies. Starter-only glue intentionally stays outside those HAL
 folders: clock policy lives in `src/clock/`, board pin/PPS wiring lives in
 `src/board.*` and `src/board_pins.h`, board component helpers live in
 `src/board_components/`, and starter UART glue (`printf()` retargeting plus
@@ -407,24 +406,26 @@ src/
                         command processor and wrong-file-send guard
   fw_update/            DBFW + XMODEM-CRC receive, inactive-partition programming/
                         read-back, per-partition UCA validation, and BTSEQ commit/reset
-  hal_clock/            vendored generic dsPIC33AK Clock HAL:
+  hal_clock/            generic dsPIC33AK Clock HAL:
                         logical PLL / CLKGEN programming through core,
                         device, and register-adaptation layers
-  hal_gpio/             vendored GPIO+PPS HAL family:
+  hal_gpio/             GPIO+PPS HAL family:
                         nora_gpio.*    GPIO electrical attributes
                         nora_pps.*     peripheral signal routing (PPS)
                         nora_gpio_event.*  CN change-notification events
-  hal_uart/             vendored UART HAL
-  hal_spi/              vendored SPI HAL (blocking master; SST26 flash on SPI4)
-  hal_i2c/              vendored I2C HAL
+  hal_uart/             UART HAL
+  hal_spi/              SPI HAL (blocking master; SST26 flash on SPI4)
+  hal_i2c/              I2C HAL
   hal_nvm/              dsPIC33AK RTSP Flash erase/program/read primitives
-  hal_can/              vendored CAN FD HAL: dspic33ak_canfd_* (node + optional ISR layer)
-  hal_timer/            vendored Timer HAL
+  hal_can/              CAN FD HAL: dspic33ak_canfd_* (node + optional ISR layer)
+  hal_timer/            Timer HAL
                         (Timer1 1 ms tick, default IRQ priority macro,
                         and Timer2 high-resolution counter)
+  hal_touch/            capacitive-touch HAL for the onboard pads
+                        (Integrated Touch Controller acquisition + key detection)
   hal_udid/             local UDID helper used by the boot banner
-  hal_dma/              vendored DMA HAL (low-level channel config; used by the TDM HAL)
-  hal_spi_i2s_tdm/      vendored SPI framed-mode I2S/TDM transport HAL
+  hal_dma/              DMA HAL (low-level channel config; used by the TDM HAL)
+  hal_spi_i2s_tdm/      SPI framed-mode I2S/TDM transport HAL
                         (DMA ping-pong + per-instance block callback; board-free
                         via a port hook). See its own README.md.
   nora_spi_i2s_tdm_conf.h  project-supplied (self-contained) config for the
@@ -440,19 +441,18 @@ docs/
   images/
     serial-console.png        live full startup serial-console screenshot
     tdm8-scope-mikrobus-a.png oscilloscope capture of the MikroBUS-A TDM8 smoke demo
-  source_layout.md       source-tree ownership and vendored-HAL layout notes
+  source_layout.md       source-tree layout and HAL boundaries
   hal_gpio_event_design.md
                          GPIO CN event usage and current limitations
   hal_udid.md           UDID helper notes
   touch-addon.md        capacitive touch: what the open implementation is
   open-touch.md         using and tuning the touch pads (console module 'k')
   open-touch-tuning.md  full tuning manual: sweeps, thresholds, learning, acceptance
-  open-touch-sync.md    keeping the vendored touch files in sync with sonora
 ```
 
-Design split: **Clock / GPIO / UART / SPI / I2C / CAN FD / Timer are the HALs**.
-Validated snapshots are vendored into matching `src/hal_xxx/` folders for
-hardware integration and regression testing. Generic clock mechanics live in
+Design split: **Clock / GPIO / UART / SPI / I2C / CAN FD / Timer / Touch are the HALs**.
+HAL implementations live in matching `src/hal_xxx/` folders for hardware
+integration and regression testing. Generic clock mechanics live in
 `src/hal_clock/`; Starter clock policy lives in `src/clock/`. Board pin/PPS
 wiring, board-specific component helpers, console retargeting, and the bus
 validation demos remain starter-specific code, kept deliberately small and
@@ -474,11 +474,11 @@ single identifier for both GPIO config and PPS routing on PPS-capable pins.
 ## Capacitive touch
 
 The Curiosity board's three touch pads work out of the box, with an open
-implementation written from the family reference manual and bench measurement --
-not Microchip's QTM library, which is proprietary and tool-generated and is not
-part of this MIT-0 starter. `src/hal_touch/` reads the Integrated
-Touch Controller and turns its counts into press/release, letting each pad learn
-its own threshold in use.
+implementation written from the family reference manual and bench measurement —
+not Microchip's proprietary, tool-generated QTouch Modular Library (QTM), which
+is not part of this MIT-0 starter. The HAL reads the Integrated Touch Controller
+and turns its counts into press/release events, letting each pad learn its own
+threshold in use.
 
 Touch a pad and the console prints the event; `?ko` shows what detection is
 working with. See [docs/open-touch.md](docs/open-touch.md) for the command set and

@@ -10,7 +10,7 @@ code above the GPIO core, not a full production-grade GPIO event framework.
   GPIO core. They handle ANSEL, TRIS, LAT, PORT, ODC, CNPU, and CNPD.
 - `src/hal_gpio/nora_gpio_event.h` and
   `src/hal_gpio/nora_gpio_event_dspic33ak.c` provide the CN event layer above the
-  existing GPIO pin representation in the same vendored GPIO HAL snapshot. The
+  existing GPIO pin representation in the same GPIO HAL. The
   `_dspic33ak` suffix on the `.c` is the NORA rule at work: the public header is
   portable, the implementation names its silicon (see `nora_hal_public_api.md`).
 - `src/board_components/led_sw.c` owns the validation example and the

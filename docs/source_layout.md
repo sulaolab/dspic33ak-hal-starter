@@ -1,13 +1,12 @@
 # Source Layout
 
 This starter keeps reusable HAL code and board-specific integration code in
-separate folders. The goal is that each public HAL can be compared with, copied
-from, or updated from its source repository without rediscovering which files
-are part of the HAL and which files are starter glue.
+separate folders so it is clear which files belong to a HAL and which files are
+starter glue.
 
-## Vendored HAL folders
+## Reusable HAL folders
 
-Reusable HAL snapshots live in module-specific `src/hal_xxx/` folders:
+Reusable HAL code lives in module-specific `src/hal_xxx/` folders:
 
 | Path | Ownership |
 |---|---|
@@ -49,7 +48,7 @@ Code that binds the HALs to this board stays outside the HAL folders:
 |---|---|
 | `src/board.c`, `src/board.h`, `src/board_pins.h` | Curiosity board pin names, PPS wiring, and board bring-up entry points. |
 | `src/board_components/` | Board-specific component helpers built on HALs or minimal device-level code, such as `led_sw.*`, `rgb_pot.*`, and `sst26_min.*`. |
-| `src/console/` | Starter UART integration glue: `printf()` retargeting, UART1 interrupt forwarding, the minimal `*fua5` / `*fca5` command state machine, and the vendored touch bring-up console (`touch_console.c`, module `k`) with the line-to-module-message adapter it needs (`app_console_line.c`). |
+| `src/console/` | Starter UART integration glue: `printf()` retargeting, UART1 interrupt forwarding, the minimal `*fua5` / `*fca5` command state machine, and the touch bring-up console (`touch_console.c`, module `k`) with the line-to-module-message adapter it needs (`app_console_line.c`). |
 | `src/fw_update/` | Dual-partition policy above the NVM HAL: DBFW package + XMODEM-CRC receive, inactive-partition programming/read-back, UCA validation, and BTSEQ commit/reset. |
 | `src/clock/` | Starter-specific clock policy: FRC 8 MHz -> PLL1 200 MHz, application CLKGEN routing, and CLKGEN10 /10 for 20 MHz CAN FD FCAN. |
 | `src/app/` | Bus validation demos and application-level orchestration. |

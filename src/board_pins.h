@@ -8,7 +8,7 @@
  * a dsPIC33AK512MPS512 DIM, in its standard (unmodified) configuration.
  *
  * This is the ONE place that names the board's physical pins and the RP
- * (remappable-pin) numbers used for PPS. The vendored HALs under src/hal_xxx
+ * (remappable-pin) numbers used for PPS. The HALs under src/hal_xxx
  * know nothing about pins or PPS; the board layer (board.c) wires peripherals to
  * these pins using the GPIO HAL plus the PPS HAL (nora_pps_route_*).
  *
@@ -35,8 +35,7 @@
 
 /* ---- UART2 (PKOB4 "USB Serial Device" -- console output mirror only) ----
  *   U2TX = RH0 (RP113)
- * Same Curiosity motherboard + dsPIC33AK512 DIM as the upstream audio firmware; this is
- * the PKOB4 back-channel UART. TX mirrors console output. RX is intentionally
+ * This is the PKOB4 back-channel UART. TX mirrors console output. RX is intentionally
  * not routed or enabled so commands/XMODEM have one beginner-facing input port.
  */
 #define BOARD_UART2_TX_RP         (113u)   /* U2TX output  -> RP113 (RH0), idle high */
@@ -114,9 +113,8 @@
 /* ---- Capacitive touch electrodes (ITC / CVD) ----
  * The Curiosity Platform motherboard's three touch pads, named by their CVDANx
  * analog-input number -- which is what the ITC selects, so it is the only pin
- * identity the touch HAL can use. Board fact, stated here, exactly as the audio
- * firmware states it at its own integration point: the HAL knows electrode
- * numbers only as data passed to nora_touch_init().
+ * identity the touch HAL can use. The HAL knows electrode numbers only as data
+ * passed to nora_touch_init().
  *
  * Order defines the key index the application sees: key 0 = TOUCH1, and so on.
  * Verified on this board; there is no hardware guard electrode available because

@@ -11,16 +11,17 @@ support for this board is tool-generated code plus prebuilt QTouch Modular Libra
 objects (`qtm_*.X.a`), the demo's own notes call it pre-release and
 not-for-production, and its terms do not fit an MIT-0 starter. None of that says
 anything about *touch*; it says something about *that library*. So the touch pads
-are supported here by code this project owns outright.
+are supported by the touch HAL included with this starter.
 
 - **What it is:** `src/hal_touch/`, in two layers behind one header: the
   Integrated Touch Controller driver (pins, timing, accumulation, raw counts) and
   the detection above it (baseline tracking, hysteresis and debounce, and per-pad
   threshold learning).
-- **Where it came from:** written for the `dspic33ak-audio-dsp-sonora` firmware
-  from DS70005591 ch.18 (ITC), the DFP SFR header, and measurements on this same
-  board. No vendor touch-library source, header or binary was consulted, and no
-  vendor detection algorithm was inspected. The file headers state this per file.
+- **Implementation:** a clean-room implementation based on the family reference
+  manual (DS70005591, chapter 18), the DFP SFR header, and measurements on this
+  board. No Microchip touch-library source, header, binary, or detection
+  algorithm was consulted. Each touch HAL file carries this declaration. It does
+  not use Microchip's proprietary, tool-generated QTouch Modular Library (QTM).
 - **What it does not do:** drift compensation over temperature and humidity,
   wet-finger rejection, frequency hopping, scrollers. Those are the integrator's,
   and the header says so rather than implying coverage it does not have.
@@ -48,7 +49,7 @@ Its touch files live under `dspic33ak512mps512_dim/dspic33ak512mps512_dim.X/mcc_
 **Those files were not used to write this, and should not be used to modify it.**
 Comparing the two firmwares' behaviour from the console — does a light tap
 register, how many taps in ten are missed — is legitimate and is how this
-implementation was scored. Reading the vendor headers or disassembling the
+implementation was scored. Reading the QTouch headers or disassembling the
 prebuilt objects is not: it would put provenance the starter cannot license into
 a repository that is MIT-0 precisely so anyone can take it.
 
@@ -59,9 +60,8 @@ drops out of the image and the three CVDAN inputs are free — measured on the
 `dsPIC33AK512` configuration: 111,128 bytes of program region with touch on,
 94,844 with it off.
 
-That one switch reaches the bring-up console too, through
-`src/app/app_specific_config_defs.h`: the console is vendored from sonora and asks
-its own project's question (`ENA_OPEN_TOUCH_EXCLUSIVE`), which that file answers
-from `HAL_STARTER_ENABLE_TOUCH`. Without it the dispatcher's `case 'k'` would keep
-`touch_console.c` — and through it `nora_touch.c` — linked in a build that cannot
-use either. See [open-touch-sync.md](open-touch-sync.md).
+That switch also controls the bring-up console through
+`src/app/app_specific_config_defs.h`, which derives
+`ENA_OPEN_TOUCH_EXCLUSIVE` from `HAL_STARTER_ENABLE_TOUCH`. Without it the
+dispatcher would keep `touch_console.c` — and through it `nora_touch.c` — linked
+in a build that cannot use either.
