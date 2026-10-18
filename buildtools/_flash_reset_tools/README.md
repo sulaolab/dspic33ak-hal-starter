@@ -252,6 +252,26 @@ but the reset step failed.
 
 ---
 
+### Two or more boards at once (per-serial Boost port)
+
+Each PKOB4 now gets its **own** IPECMDBoost server: with `--serial`, the Boost
+port is derived from the serial (2100..2899, stable per board; `--dry-run` prints
+it as `BoostPort:`). Two boards can therefore be flashed and reset concurrently.
+Previously every reset shared port 2012; two concurrent resets collided, the
+loser's recovery killed the shared server and the other board's PKOB4 wedged
+(USB replug needed). Recovery now touches only its own port's server and
+`<port>.ini|lock`, never another board's Java.
+
+- `--boost-port <p>` overrides the port (`--boost-port 2012` = old behaviour).
+- `--check-java` / `--shutdown-boost` act on 2012 unless you add
+  `--serial <sn>` (then they act on that board's port). Mentions of "port 2012"
+  and `2012.ini|lock` below mean "this board's port" when `--serial` is given.
+- `--clean-java` (no serial) is still the emergency sweep of all MPLAB X Boost
+  Java — it will interrupt another board's operation, so use it only when no
+  other board is busy.
+- Measured on two Curiosity boards (dsPIC33AK512 + dsPIC33AK128): concurrent flash + reset
+  OK; a forced failure on one board left the other's server warm.
+
 ## Troubleshooting
 
 - **MPLAB X IDE / IPE is open**: close it first. The IDE can hold the PKOB4.
